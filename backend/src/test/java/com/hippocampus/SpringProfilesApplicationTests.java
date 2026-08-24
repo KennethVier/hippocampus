@@ -45,9 +45,14 @@ class SpringProfilesApplicationTests {
 
     private static Stream<ProfileScenario> profileScenarios() {
         return Stream.of(
-                new ProfileScenario("local", "127.0.0.1", List.of("--SERVER_PORT=0")),
-                new ProfileScenario("test", "127.0.0.1", List.of()),
-                new ProfileScenario("pilot", "0.0.0.0", List.of("--PORT=0")));
+                new ProfileScenario("local", "127.0.0.1", List.of(
+                        "--SERVER_PORT=0",
+                        "--spring.flyway.enabled=false")),
+                new ProfileScenario("test", "127.0.0.1", List.of(
+                        "--spring.flyway.enabled=false")),
+                new ProfileScenario("pilot", "0.0.0.0", List.of(
+                        "--PORT=0",
+                        "--spring.flyway.enabled=false")));
     }
 
     private record ProfileScenario(String profile, String expectedAddress, List<String> arguments) {

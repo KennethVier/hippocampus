@@ -1,6 +1,13 @@
 spring:
   application:
     name: hippocampus-backend
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
+  flyway:
+    enabled: false
+    locations: classpath:db/migration
+    clean-disabled: true
 
 server:
   address: 127.0.0.1
