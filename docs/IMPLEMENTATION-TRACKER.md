@@ -174,7 +174,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Frontend
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Provide consistent app frame without feature sprawl.
 - **Build:** Implement router, auth-placeholder layout, compact navigation shell, route-level error boundary.
 - **How it works:** Feature routes render inside app shell.
