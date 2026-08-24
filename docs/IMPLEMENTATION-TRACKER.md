@@ -142,7 +142,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Backend
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Standardize API failures before features expand.
 - **Build:** Implement ProblemDetail/error-code mapper, correlation ID filter, common domain/application exception hierarchy.
 - **How it works:** Controllers throw typed errors; central handler maps stable code/message/correlationId.
@@ -151,8 +151,8 @@ A phase may be marked **PASS** only when:
 - **Expected result:** Errors are consistent and do not leak internals.
 - **Definition of Done:** Stable error JSON verified.
 - **Authority:** Documents 19,22,24
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Java 25.0.4; Maven Wrapper 3.9.16 on Java 25.0.4; Spring Boot-managed `spring-boot-starter-validation` 4.1.1 and `spring-boot-starter-webmvc-test` 4.1.1 resolved; centralized `ProblemDetail` mappings verified for validation 400, application not-found 404, domain conflict 409, typed semantic failure 422, and sanitized internal failure 500; correlation filter verified for caller UUID canonicalization/reuse and generated UUIDs for missing, blank, or invalid values, with matching `X-Correlation-ID` response header and error-body property; validation details expose only field names and generic messages, not rejected values/payloads/binding internals; malformed JSON returns sanitized `MALFORMED_REQUEST` 400 without parser details or content reflection; targeted error-contract suite passed (8 tests); architecture suite passed (8 tests); `backend\\mvnw.cmd test` passed (22 tests); `backend\\mvnw.cmd clean verify` passed (22 tests and executable JAR); dependency/scope audit found no Security, Actuator, MDC/structured logging, JPA, migration, Testcontainers, frontend, or P0-08 implementation.
+- **Notes / blockers:** P0-08 owns Actuator, Micrometer, structured logging, and correlation propagation into logs. No unresolved P0-07 blockers.
 
 ## P0-08 — Add Actuator and structured logging
 
