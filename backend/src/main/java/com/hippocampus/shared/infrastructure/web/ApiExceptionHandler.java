@@ -83,7 +83,11 @@ final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(Exception.class)
     ResponseEntity<Object> handleUnexpectedException(Exception exception, HttpServletRequest request) {
         var correlationId = CorrelationIdFilter.currentCorrelationId(request);
-        LOG.error("Unhandled exception; correlationId={}", correlationId, exception);
+        LOG.atError()
+                .addKeyValue("event", "unhandled_exception")
+                .addKeyValue("errorCode", "INTERNAL_ERROR")
+                .setCause(exception)
+                .log("Unhandled exception");
         return problem(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",
@@ -138,7 +142,11 @@ final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         var servletRequest = servletRequest(request);
         if (status.is5xxServerError()) {
             var correlationId = CorrelationIdFilter.currentCorrelationId(servletRequest);
-            LOG.error("Unhandled framework exception; correlationId={}", correlationId, exception);
+            LOG.atError()
+                    .addKeyValue("event", "unhandled_framework_exception")
+                    .addKeyValue("errorCode", "INTERNAL_ERROR")
+                    .setCause(exception)
+                    .log("Unhandled framework exception");
             return problem(
                     status,
                     "INTERNAL_ERROR",

@@ -11,3 +11,39 @@ spring:
 
 server:
   address: 127.0.0.1
+
+management:
+  endpoints:
+    access:
+      default: none
+    web:
+      discovery:
+        enabled: false
+      exposure:
+        include: health
+    jmx:
+      exposure:
+        exclude: "*"
+  endpoint:
+    health:
+      access: unrestricted
+      show-details: never
+      show-components: never
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState
+
+logging:
+  level:
+    root: INFO
+    org.springframework.web: INFO
+  structured:
+    format:
+      console: ecs
+    ecs:
+      service:
+        environment: base

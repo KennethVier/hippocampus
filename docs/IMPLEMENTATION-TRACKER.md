@@ -158,7 +158,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Observability
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Make foundation observable immediately.
 - **Build:** Enable safe health endpoints, Micrometer baseline, JSON/structured log fields, correlation IDs.
 - **How it works:** Every request receives opaque correlation ID propagated to logs.
@@ -167,8 +167,8 @@ A phase may be marked **PASS** only when:
 - **Expected result:** Health works and logs contain no secrets.
 - **Definition of Done:** Liveness/readiness and correlation verified.
 - **Authority:** Documents 17,24
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Java 25.0.4; Maven Wrapper 3.9.16; Spring Boot-managed `spring-boot-starter-actuator` 4.1.1 with built-in Micrometer 1.17.1 meters; temporary `/health` controller removed; general `/actuator/health` and dedicated liveness/readiness groups verified with safe status-limited responses and correct 200/503 availability transitions; Actuator discovery, metrics, sensitive HTTP endpoints, and JMX exposure verified inaccessible; ECS console JSON verified with service name/environment, fluent structured request-completion and unexpected-error events, propagated `correlationId`, safe request path without query, and guaranteed MDC cleanup; synthetic authorization, cookie, query, and body secret markers absent from captured logs and Surefire reports; targeted database-free observability suite passed (10 tests) without an application datasource; existing PostgreSQL-backed Flyway regressions passed with local PostgreSQL healthy; P0-07 error contract and P0-06 architecture rules passed; `backend\mvnw.cmd test` passed (32 tests); `backend\mvnw.cmd clean verify` passed (32 tests and executable JAR); packaged pilot-profile JAR smoke verified expected 200/404 health and exposure behavior with valid ECS JSON; `backend\mvnw.cmd dependency:tree` reviewed with no exporter, APM, tracing, Security, or new persistence dependency; `git diff --check` and final scope audit passed.
+- **Notes / blockers:** `/actuator/health` is general application health, not readiness. Deployment probes must use `/actuator/health/liveness` and `/actuator/health/readiness`. Database readiness remains deferred until the owning task introduces the application datasource. No unresolved P0-08 blockers.
 
 ## P0-09 — Create application shell and routing
 
