@@ -190,7 +190,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Frontend
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Prevent ad hoc fetch usage.
 - **Build:** Implement base URL, credentials, JSON/problem parsing, AbortSignal and multipart helpers.
 - **How it works:** All feature API modules depend on this client.
@@ -199,7 +199,7 @@ A phase may be marked **PASS** only when:
 - **Expected result:** Errors normalize consistently.
 - **Definition of Done:** No direct fetch calls outside approved client/streaming abstraction.
 - **Authority:** Documents 20,22
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Node 24.16.0; npm 11.13.0; dependency-free native-fetch client under `frontend/src/api` owns `VITE_API_BASE_URL` validation with same-origin fallback, fixed `credentials: include`, relative backend paths, client-controlled `Accept`/JSON `Content-Type`, blocked caller `Authorization`, JSON/204/multipart handling, caller `AbortSignal`, strict P0-07 ProblemDetail normalization, safe correlation-ID extraction, and normalized request/network/abort/invalid-response failures without raw response/body/parser/network exception or `Error.cause` retention; `.env.example` contains only the public loopback API origin; targeted Vitest API/config suite passed (48 tests) including controlled-header rejection, safe custom headers, browser-owned multipart boundary, invalid deployment configuration, required ProblemDetail fields, correlation precedence, safe fallbacks, aborts, and raw-error non-retention; full Vitest/React Testing Library suite passed (66 tests); `npm.cmd run typecheck`, `npm.cmd run lint`, and `npm.cmd run build` passed; `npm.cmd audit --audit-level=high` reported 0 vulnerabilities; `npm.cmd ls --depth=0` confirmed zero new direct dependencies; production source audit found the sole `fetch` call in `frontend/src/api/apiClient.ts`; secret/browser-storage, package, backend, route, auth, state, retry/cache/timeout, UI, P0-11+, scope, and diff audits passed; required read-only review confirmed header ownership, ApiError sanitization, and scope compliance, and its two minor configuration/test-coverage findings were corrected before final validation; `git diff --check` passed.
 - **Notes / blockers:** _None_
 
 ## P0-11 — Create core UI states/components

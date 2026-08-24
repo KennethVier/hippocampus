@@ -1,0 +1,459 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { ApiError, apiClient } from './apiClient'
+
+const CORRELATION_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301'
+const BODY_CORRELATION_ID = '8f14e45f-ea3d-4b7e-8bb2-f1b9785f6f75'
+const ACCEPT_HEADER_VALUE = 'application/json, application/problem+json'
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
+  vi.restoreAllMocks()
+})
+
+describe('apiClient success handling', () => {
+  it('returns a successful JSON response with owned headers and credentials', async () => {
+    const controller = new AbortController()
+    const fetchMock = stubFetch(
+      new Response(JSON.stringify({ id: 'subject-1' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      }),
+    )
+
+    const result = await apiClient.requestJson<{ id: string }>('/subjects', {
+      method: 'POST',
+      signal: controller.signal,
+      body: { name: 'Anatomy' },
+    })
+
+    expect(result).toEqual({ id: 'subject-1' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchMock.mock.calls[0] ?? []
+    const headers = new Headers(init?.headers)
+    expect(url).toBe('/subjects')
+    expect(init?.credentials).toBe('include')
+    expect(init?.signal).toBe(controller.signal)
+    expect(init?.body).toBe(JSON.stringify({ name: 'Anatomy' }))
+    expect(headers.get('Accept')).toBe(ACCEPT_HEADER_VALUE)
+    expect(headers.get('Content-Type')).toBe('application/json')
+  })
+
+  it('returns undefined for 204 and empty successful responses', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+    fetchMock
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response('', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(apiClient.requestJson('/first')).resolves.toBeUndefined()
+    await expect(apiClient.requestJson('/second')).resolves.toBeUndefined()
+  })
+
+  it('does not set Content-Type when a JSON request has no body', async () => {
+    const fetchMock = stubFetch(new Response(null, { status: 204 }))
+
+    await apiClient.requestJson('/subjects')
+
+    const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers)
+    expect(headers.get('Accept')).toBe(ACCEPT_HEADER_VALUE)
+    expect(headers.has('Content-Type')).toBe(false)
+  })
+
+  it('passes FormData unchanged and leaves multipart Content-Type to the browser', async () => {
+    const formData = new FormData()
+    formData.append('file', new Blob(['synthetic']), 'notes.txt')
+    const fetchMock = stubFetch(
+      new Response(JSON.stringify({ materialId: 'material-1' }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    const result = await apiClient.requestMultipart<{ materialId: string }>(
+      '/materials',
+      formData,
+    )
+
+    expect(result).toEqual({ materialId: 'material-1' })
+    const init = fetchMock.mock.calls[0]?.[1]
+    const headers = new Headers(init?.headers)
+    expect(init?.method).toBe('POST')
+    expect(init?.body).toBe(formData)
+    expect(init?.credentials).toBe('include')
+    expect(headers.get('Accept')).toBe(ACCEPT_HEADER_VALUE)
+    expect(headers.has('Content-Type')).toBe(false)
+  })
+
+  it('allows safe custom headers without surrendering transport ownership', async () => {
+    const fetchMock = stubFetch(new Response(null, { status: 204 }))
+
+    await apiClient.requestJson('/subjects', {
+      headers: {
+        'X-CSRF-TOKEN': 'synthetic-csrf-token',
+        'Idempotency-Key': 'synthetic-idempotency-key',
+      },
+    })
+
+    const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers)
+    expect(headers.get('X-CSRF-TOKEN')).toBe('synthetic-csrf-token')
+    expect(headers.get('Idempotency-Key')).toBe('synthetic-idempotency-key')
+    expect(headers.get('Accept')).toBe(ACCEPT_HEADER_VALUE)
+  })
+})
+
+describe('apiClient header ownership', () => {
+  it.each([
+    ['Accept', 'text/plain'],
+    ['Content-Type', 'application/xml'],
+    ['Authorization', 'Bearer private-token'],
+  ])('rejects caller-controlled JSON header %s', async (header, value) => {
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const error = await captureApiError(
+      apiClient.requestJson('/subjects', {
+        method: 'POST',
+        body: { name: 'Anatomy' },
+        headers: { [header]: value },
+      }),
+    )
+
+    expect(error.kind).toBe('request')
+    expect(error.code).toBe('REQUEST_HEADER_NOT_ALLOWED')
+    expect(error.message).not.toContain(value)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects caller-controlled multipart Content-Type', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const error = await captureApiError(
+      apiClient.requestMultipart('/materials', new FormData(), {
+        headers: { 'Content-Type': 'multipart/form-data; boundary=caller-owned' },
+      }),
+    )
+
+    expect(error.code).toBe('REQUEST_HEADER_NOT_ALLOWED')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('apiClient failure normalization', () => {
+  it('normalizes ProblemDetail and prefers the response correlation header', async () => {
+    stubFetch(
+      problemResponse({
+        status: 409,
+        code: 'MISSION_STATE_CONFLICT',
+        message: 'The mission state changed.',
+        correlationId: BODY_CORRELATION_ID,
+        details: { retryable: false },
+      }),
+    )
+
+    const error = await captureApiError(apiClient.requestJson('/missions/mission-1'))
+
+    expect(error).toMatchObject({
+      kind: 'http',
+      status: 409,
+      code: 'MISSION_STATE_CONFLICT',
+      message: 'The mission state changed.',
+      correlationId: CORRELATION_ID,
+      details: { retryable: false },
+    })
+  })
+
+  it('uses the ProblemDetail correlation ID when the header is absent', async () => {
+    stubFetch(
+      problemResponse(
+        {
+          status: 404,
+          code: 'MATERIAL_NOT_FOUND',
+          message: 'The material was not found.',
+          correlationId: BODY_CORRELATION_ID.toUpperCase(),
+          details: {},
+        },
+        false,
+      ),
+    )
+
+    const error = await captureApiError(apiClient.requestJson('/materials/missing'))
+
+    expect(error.correlationId).toBe(BODY_CORRELATION_ID)
+  })
+
+  it('omits an invalid correlation ID', async () => {
+    stubFetch(
+      problemResponse(
+        {
+          status: 400,
+          code: 'VALIDATION_FAILED',
+          message: 'Request validation failed.',
+          correlationId: 'private invalid correlation value',
+          details: {},
+        },
+        false,
+      ),
+    )
+
+    const error = await captureApiError(apiClient.requestJson('/subjects'))
+
+    expect(error.correlationId).toBeNull()
+  })
+
+  it.each([
+    ['non-Problem JSON', '{"private":"PRIVATE_JSON_BODY"}', 'application/json'],
+    ['plain text', 'PRIVATE_TEXT_BODY', 'text/plain'],
+    ['empty body', '', 'application/problem+json'],
+    ['malformed problem', '{PRIVATE_MALFORMED_BODY', 'application/problem+json'],
+  ])('uses a safe fallback for %s', async (_name, body, contentType) => {
+    stubFetch(
+      new Response(body, {
+        status: 500,
+        headers: {
+          'Content-Type': contentType,
+          'X-Correlation-ID': CORRELATION_ID,
+        },
+      }),
+    )
+
+    const error = await captureApiError(apiClient.requestJson('/failure'))
+
+    expect(error).toMatchObject({
+      kind: 'http',
+      status: 500,
+      code: 'HTTP_ERROR',
+      message: 'The request could not be completed.',
+      correlationId: CORRELATION_ID,
+      details: {},
+    })
+    expect(JSON.stringify(error)).not.toContain('PRIVATE_')
+    expect(Object.prototype.hasOwnProperty.call(error, 'cause')).toBe(false)
+  })
+
+  it('rejects a ProblemDetail whose body status does not match HTTP status', async () => {
+    stubFetch(
+      problemResponse({
+        status: 400,
+        code: 'VALIDATION_FAILED',
+        message: 'Private mismatched message.',
+        correlationId: BODY_CORRELATION_ID,
+        details: { private: 'PRIVATE_DETAILS' },
+      }, true, 409),
+    )
+
+    const error = await captureApiError(apiClient.requestJson('/failure'))
+
+    expect(error.code).toBe('HTTP_ERROR')
+    expect(error.status).toBe(409)
+    expect(JSON.stringify(error)).not.toContain('PRIVATE_')
+  })
+
+  it.each([
+    [
+      'missing code',
+      {
+        status: 422,
+        message: 'PRIVATE_MISSING_CODE_MESSAGE',
+        correlationId: BODY_CORRELATION_ID,
+        details: { private: 'PRIVATE_MISSING_CODE_DETAILS' },
+      },
+    ],
+    [
+      'invalid code',
+      {
+        status: 422,
+        code: 'private-invalid-code',
+        message: 'PRIVATE_INVALID_CODE_MESSAGE',
+        correlationId: BODY_CORRELATION_ID,
+        details: { private: 'PRIVATE_INVALID_CODE_DETAILS' },
+      },
+    ],
+    [
+      'missing message',
+      {
+        status: 422,
+        code: 'VALIDATION_FAILED',
+        correlationId: BODY_CORRELATION_ID,
+        details: { private: 'PRIVATE_MISSING_MESSAGE_DETAILS' },
+      },
+    ],
+    [
+      'blank message',
+      {
+        status: 422,
+        code: 'VALIDATION_FAILED',
+        message: '   ',
+        correlationId: BODY_CORRELATION_ID,
+        details: { private: 'PRIVATE_BLANK_MESSAGE_DETAILS' },
+      },
+    ],
+  ])('discards a ProblemDetail with %s', async (_name, body) => {
+    stubFetch(problemResponse(body))
+
+    const error = await captureApiError(apiClient.requestJson('/failure'))
+
+    expect(error).toMatchObject({
+      kind: 'http',
+      status: 422,
+      code: 'HTTP_ERROR',
+      message: 'The request could not be completed.',
+      correlationId: CORRELATION_ID,
+      details: {},
+    })
+    expect(JSON.stringify(error)).not.toContain('PRIVATE_')
+  })
+
+  it.each([
+    ['malformed JSON', '{PRIVATE_PARSER_MARKER', 'application/json'],
+    ['non-JSON success', 'PRIVATE_RESPONSE_TEXT', 'text/plain'],
+  ])('normalizes a %s success without retaining parser or response data', async (
+    _name,
+    body,
+    contentType,
+  ) => {
+    stubFetch(new Response(body, { status: 200, headers: { 'Content-Type': contentType } }))
+
+    const error = await captureApiError(apiClient.requestJson('/invalid-success'))
+
+    expect(error).toMatchObject({
+      kind: 'invalid-response',
+      status: 200,
+      code: 'INVALID_RESPONSE',
+      message: 'The server returned an invalid response.',
+    })
+    expect(JSON.stringify(error)).not.toContain('PRIVATE_')
+    expect(Object.prototype.hasOwnProperty.call(error, 'cause')).toBe(false)
+  })
+
+  it('normalizes network failure without retaining the original error', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(
+      new Error('PRIVATE_NETWORK_EXCEPTION'),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const error = await captureApiError(apiClient.requestJson('/subjects'))
+
+    expect(error).toMatchObject({
+      kind: 'network',
+      status: null,
+      code: 'NETWORK_ERROR',
+      message: 'Unable to reach the server.',
+      correlationId: null,
+      details: {},
+    })
+    expect(JSON.stringify(error)).not.toContain('PRIVATE_NETWORK_EXCEPTION')
+    expect(Object.prototype.hasOwnProperty.call(error, 'cause')).toBe(false)
+  })
+
+  it('distinguishes caller cancellation and passes the signal to fetch', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new DOMException('PRIVATE_ABORT_EXCEPTION', 'AbortError'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const error = await captureApiError(
+      apiClient.requestJson('/subjects', { signal: controller.signal }),
+    )
+
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBe(controller.signal)
+    expect(error).toMatchObject({
+      kind: 'aborted',
+      status: null,
+      code: 'REQUEST_ABORTED',
+      message: 'The request was canceled.',
+    })
+    expect(JSON.stringify(error)).not.toContain('PRIVATE_ABORT_EXCEPTION')
+    expect(Object.prototype.hasOwnProperty.call(error, 'cause')).toBe(false)
+  })
+
+  it('normalizes JSON serialization failure without retaining the source value', async () => {
+    const body: { private: string; self?: unknown } = { private: 'PRIVATE_REQUEST_VALUE' }
+    body.self = body
+
+    const error = await captureApiError(
+      apiClient.requestJson('/subjects', { method: 'POST', body }),
+    )
+
+    expect(error).toMatchObject({
+      kind: 'request',
+      status: null,
+      code: 'REQUEST_SERIALIZATION_FAILED',
+      message: 'The request body could not be serialized.',
+    })
+    expect(JSON.stringify(error)).not.toContain('PRIVATE_REQUEST_VALUE')
+    expect(Object.prototype.hasOwnProperty.call(error, 'cause')).toBe(false)
+  })
+
+  it('normalizes an invalid request path before fetch', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const error = await captureApiError(
+      apiClient.requestJson('https://other.example.test/private'),
+    )
+
+    expect(error).toMatchObject({
+      kind: 'request',
+      status: null,
+      code: 'INVALID_REQUEST_PATH',
+      message: 'The API request path is invalid.',
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('normalizes invalid API configuration without exposing the configured value', async () => {
+    const privateConfiguration = 'https://student:PRIVATE_CONFIGURATION@api.example.test'
+    vi.stubEnv('VITE_API_BASE_URL', privateConfiguration)
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const error = await captureApiError(apiClient.requestJson('/subjects'))
+
+    expect(error).toMatchObject({
+      kind: 'request',
+      status: null,
+      code: 'INVALID_API_CONFIGURATION',
+      message: 'The API client configuration is invalid.',
+      correlationId: null,
+      details: {},
+    })
+    expect(JSON.stringify(error)).not.toContain('PRIVATE_CONFIGURATION')
+    expect(Object.prototype.hasOwnProperty.call(error, 'cause')).toBe(false)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+function stubFetch(response: Response): ReturnType<typeof vi.fn<typeof fetch>> {
+  const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(response)
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
+function problemResponse(
+  body: Record<string, unknown>,
+  includeCorrelationHeader = true,
+  responseStatus = Number(body.status),
+): Response {
+  const headers = new Headers({ 'Content-Type': 'application/problem+json; charset=utf-8' })
+  if (includeCorrelationHeader) {
+    headers.set('X-Correlation-ID', CORRELATION_ID)
+  }
+
+  return new Response(JSON.stringify(body), { status: responseStatus, headers })
+}
+
+async function captureApiError(promise: Promise<unknown>): Promise<ApiError> {
+  try {
+    await promise
+  } catch (error: unknown) {
+    expect(error).toBeInstanceOf(ApiError)
+    return error as ApiError
+  }
+
+  throw new Error('Expected the API request to reject.')
+}
