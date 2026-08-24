@@ -94,7 +94,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Database
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Provide reproducible local relational/vector infrastructure.
 - **Build:** Create Docker Compose PostgreSQL 18 with vector and pg_trgm extensions.
 - **How it works:** Developers start DB locally; Spring connects through env config.
@@ -103,7 +103,7 @@ A phase may be marked **PASS** only when:
 - **Expected result:** Local DB is reproducible from one command.
 - **Definition of Done:** Compose file works and extension tests pass.
 - **Authority:** Documents 17,18,23
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Docker 29.5.2 / Docker Desktop 4.75.0 and Docker Compose v5.1.3 verified; `docker compose config` passed; `postgres` service using pinned `pgvector/pgvector:0.8.6-pg18` started healthy; PostgreSQL `18.6` verified; `vector` extversion `0.8.6` and `pg_trgm` extversion `1.6` verified; named persistent volume `hippocampus-postgres-data` exists; stop/start restart kept both extensions enabled; `backend\mvnw.cmd test` passed (4 tests, 0 failures); scope/security audit confirmed no application schema, Flyway, datasource integration, Java persistence code, Maven dependency, pilot/Neon provisioning, or real credentials; `git diff --check` passed; commit/PR pending.
 - **Notes / blockers:** _None_
 
 ## P0-05 — Initialize Flyway

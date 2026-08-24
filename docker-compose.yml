@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.6-pg18
+    environment:
+      POSTGRES_DB: hippocampus
+      POSTGRES_USER: hippocampus
+      POSTGRES_PASSWORD: hippocampus
+    ports:
+      - "${HIPPOCAMPUS_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - hippocampus-postgres-data:/var/lib/postgresql
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hippocampus -d hippocampus"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  hippocampus-postgres-data:
+    name: hippocampus-postgres-data
