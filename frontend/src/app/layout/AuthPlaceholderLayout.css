@@ -1,0 +1,97 @@
+body {
+  margin: 0;
+}
+
+.app-shell {
+  min-height: 100vh;
+  color: CanvasText;
+  background: Canvas;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border-bottom: 1px solid currentColor;
+}
+
+.product-link {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.app-body {
+  display: grid;
+  grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr);
+}
+
+.primary-navigation {
+  padding: 1rem;
+}
+
+.primary-navigation ul {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.navigation-link {
+  display: block;
+  padding: 0.5rem;
+}
+
+.navigation-link-active {
+  font-weight: 700;
+  text-decoration-thickness: 0.125rem;
+}
+
+.main-content {
+  width: min(100%, 72rem);
+  box-sizing: border-box;
+  padding: 1.5rem;
+}
+
+.app-shell a {
+  color: inherit;
+}
+
+.app-shell a:focus-visible,
+.main-content:focus-visible {
+  outline: 0.1875rem solid currentColor;
+  outline-offset: 0.1875rem;
+}
+
+.skip-link {
+  position: absolute;
+  z-index: 1;
+  padding: 0.5rem;
+  transform: translateY(-200%);
+  background: Canvas;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+@media (max-width: 48rem) {
+  .app-header {
+    justify-content: flex-start;
+  }
+
+  .app-body {
+    display: block;
+  }
+
+  .primary-navigation ul {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .main-content {
+    padding: 1rem;
+  }
+}
