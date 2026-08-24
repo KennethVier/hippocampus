@@ -1,8 +1,12 @@
 package com.hippocampus.shared.infrastructure.web;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -15,6 +19,8 @@ import jakarta.servlet.http.HttpServletResponse;
 final class CorrelationIdFilter extends OncePerRequestFilter {
 
     static final String HEADER_NAME = "X-Correlation-ID";
+    static final String MDC_KEY = "correlationId";
+    private static final Logger LOG = LoggerFactory.getLogger(CorrelationIdFilter.class);
     private static final String REQUEST_ATTRIBUTE = CorrelationIdFilter.class.getName() + ".correlationId";
 
     @Override
@@ -25,7 +31,26 @@ final class CorrelationIdFilter extends OncePerRequestFilter {
         var correlationId = resolveCorrelationId(request);
         request.setAttribute(REQUEST_ATTRIBUTE, correlationId);
         response.setHeader(HEADER_NAME, correlationId);
-        filterChain.doFilter(request, response);
+        var startedAt = System.nanoTime();
+
+        MDC.put(MDC_KEY, correlationId);
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            try {
+                LOG.atInfo()
+                        .addKeyValue("event", "http_request_completed")
+                        .addKeyValue("method", request.getMethod())
+                        .addKeyValue("requestPath", request.getRequestURI())
+                        .addKeyValue("status", response.getStatus())
+                        .addKeyValue(
+                                "durationMs",
+                                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt))
+                        .log("HTTP request completed");
+            } finally {
+                MDC.remove(MDC_KEY);
+            }
+        }
     }
 
     static String currentCorrelationId(HttpServletRequest request) {

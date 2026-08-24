@@ -12,7 +12,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.env.Environment;
-import org.springframework.http.MediaType;
+
+import com.jayway.jsonpath.JsonPath;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class HippocampusApplicationTests {
@@ -26,7 +27,7 @@ class HippocampusApplicationTests {
     @Test
     void applicationStartsAndHealthEndpointResponds() throws Exception {
         var request = HttpRequest.newBuilder()
-                .uri(URI.create("http://127.0.0.1:" + port + "/health"))
+                .uri(URI.create("http://127.0.0.1:" + port + "/actuator/health/liveness"))
                 .GET()
                 .build();
 
@@ -36,8 +37,8 @@ class HippocampusApplicationTests {
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.headers().firstValue("Content-Type"))
                 .hasValueSatisfying(contentType -> assertThat(contentType)
-                        .startsWith(MediaType.APPLICATION_JSON_VALUE));
-        assertThat(response.body()).isEqualTo("{\"status\":\"UP\"}");
+                        .startsWith("application/vnd.spring-boot.actuator"));
+        assertThat((String) JsonPath.read(response.body(), "$.status")).isEqualTo("UP");
         assertThat(environment.getActiveProfiles()).isEmpty();
         assertThat(environment.getProperty("spring.application.name"))
                 .isEqualTo("hippocampus-backend");

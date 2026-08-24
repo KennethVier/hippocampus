@@ -31,9 +31,13 @@ class SpringProfilesApplicationTests {
                     .isEqualTo(scenario.expectedAddress());
             assertThat(environment.getRequiredProperty("server.port", Integer.class)).isZero();
             assertThat(assignedPort).isPositive();
+            assertThat(environment.getRequiredProperty(
+                    "logging.structured.ecs.service.environment"))
+                    .isEqualTo(scenario.profile());
 
             var request = HttpRequest.newBuilder()
-                    .uri(URI.create("http://127.0.0.1:" + assignedPort + "/health"))
+                    .uri(URI.create("http://127.0.0.1:" + assignedPort
+                            + "/actuator/health/readiness"))
                     .GET()
                     .build();
             var response = HttpClient.newHttpClient()
