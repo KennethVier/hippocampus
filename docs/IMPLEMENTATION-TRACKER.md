@@ -78,7 +78,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Backend
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Separate local/test/pilot configuration safely.
 - **Build:** Create application.yml plus local/test/pilot profiles; externalize secrets and resource limits.
 - **How it works:** Runtime selects profile; secrets are injected via environment.
@@ -87,7 +87,7 @@ A phase may be marked **PASS** only when:
 - **Expected result:** App boots in local and test profiles with correct overrides.
 - **Definition of Done:** Profiles documented and no secret values committed.
 - **Authority:** Documents 17,19,22,23
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Java 25.0.4; Maven Wrapper 3.9.16 running on Java 25.0.4; base/local/test/pilot profile configuration and concise backend documentation added; `mvnw.cmd test` and `mvnw.cmd clean verify` passed (4 tests, 0 failures); packaged JAR local `SERVER_PORT` and pilot `PORT` smoke tests returned the exact `/health` contract over HTTP 200; archive contains base/local/pilot configuration and excludes test configuration; secret/later-task configuration scans, dependency/scope audit, and `git diff --check` passed; commit/PR pending.
 - **Notes / blockers:** _None_
 
 ## P0-04 — Provision local PostgreSQL + pgvector

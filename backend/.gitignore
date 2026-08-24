@@ -4,3 +4,6 @@ target/
 .classpath
 .project
 .settings/
+.env
+.env.*
+!.env.example
