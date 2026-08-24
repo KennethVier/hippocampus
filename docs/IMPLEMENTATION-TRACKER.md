@@ -110,7 +110,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Database
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Make schema evolution version-controlled from day one.
 - **Build:** Configure Flyway and create baseline migration for extension/bootstrap objects only.
 - **How it works:** App startup validates/applies migrations; Hibernate uses validate.
@@ -119,8 +119,8 @@ A phase may be marked **PASS** only when:
 - **Expected result:** Schema builds from zero consistently.
 - **Definition of Done:** CI migration-from-zero test passes.
 - **Authority:** Documents 17,18,25
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Java 25.0.4; Maven Wrapper 3.9.16 on Java 25.0.4; PostgreSQL 18.6 via local Docker `pgvector/pgvector:0.8.6-pg18`; Docker PostgreSQL healthy on host port 5432 with host/JDBC auth verified for `hippocampus` / `hippocampus`; resolved Flyway/JDBC dependencies: `spring-boot-starter-flyway` 4.1.1, `flyway-database-postgresql` 12.4.0, `postgresql` 42.7.13; fresh temporary DB migration from zero passed; V1 `bootstrap extensions` history successful; second startup idempotency passed; existing P0-04 `hippocampus` DB onboarding passed; `vector` 0.8.6 and `pg_trgm` 1.6 verified; no application/domain tables found; `backend\mvnw.cmd test` passed; `backend\mvnw.cmd clean verify` passed; `backend\mvnw.cmd dependency:tree` reviewed; dependency/scope audit found no JPA, Hibernate config, Spring Data JPA, Testcontainers, Flyway Maven plugin, pilot datasource config, domain schema, indexes, or seed data.
+- **Notes / blockers:** P0-05 intentionally does not add Hibernate/JPA configuration. When Hibernate/JPA is introduced by its owning task, schema mutation must remain disabled and Hibernate must validate rather than create/update.
 
 ## P0-06 — Add architecture enforcement tests
 
