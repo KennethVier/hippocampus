@@ -126,7 +126,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Architecture
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Prevent module drift early.
 - **Build:** Configure ArchUnit rules for API→application→domain/ports and infrastructure isolation.
 - **How it works:** CI fails if forbidden dependencies appear.
@@ -135,8 +135,8 @@ A phase may be marked **PASS** only when:
 - **Expected result:** Forbidden layer dependencies are automatically detected.
 - **Definition of Done:** Architecture tests run on every PR.
 - **Authority:** Documents 19,25
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Java 25.0.4; Maven Wrapper 3.9.16 on Java 25.0.4; ArchUnit 1.5.0 test-scoped; eight permanent production-bytecode architecture-rule categories enforce approved module roots, domain independence, application inward dependencies, API-to-application boundaries, feature infrastructure encapsulation, shared independence, bootstrap direction, and top-level module cycle freedom; targeted architecture suite passed (8 tests); temporary negative proofs for domain-to-infrastructure, shared-to-feature, and unapproved root-package placement each failed the targeted Maven test with the expected offending dependency/class, then all fixtures/probes were removed; `backend\\mvnw.cmd test` passed (14 tests); `backend\\mvnw.cmd clean verify` passed (14 tests and executable JAR); `backend\\mvnw.cmd dependency:tree` reviewed; final source/status audit found no temporary fixtures, production placeholders, CI workflow, Spring Modulith, Testcontainers, persistence work, or P0-07 implementation.
+- **Notes / blockers:** Architecture tests run in the ordinary Maven test/verify lifecycle. P0-12 owns GitHub Actions workflow integration required to execute them on every PR.
 
 ## P0-07 — Create error contract foundation
 
