@@ -8,8 +8,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.core.env.Environment;
 import org.springframework.http.MediaType;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -17,6 +19,9 @@ class HippocampusApplicationTests {
 
     @LocalServerPort
     private int port;
+
+    @Autowired
+    private Environment environment;
 
     @Test
     void applicationStartsAndHealthEndpointResponds() throws Exception {
@@ -33,5 +38,8 @@ class HippocampusApplicationTests {
                 .hasValueSatisfying(contentType -> assertThat(contentType)
                         .startsWith(MediaType.APPLICATION_JSON_VALUE));
         assertThat(response.body()).isEqualTo("{\"status\":\"UP\"}");
+        assertThat(environment.getActiveProfiles()).isEmpty();
+        assertThat(environment.getProperty("spring.application.name"))
+                .isEqualTo("hippocampus-backend");
     }
 }
