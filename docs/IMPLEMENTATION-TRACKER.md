@@ -46,7 +46,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Repository
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Donegit add backend docs/IMPLEMENTATION-TRACKER.md
 - **Goal:** Establish a clean Spring Boot codebase aligned with the modular-monolith architecture.
 - **Build:** Create Maven Spring Boot project, Java 25 toolchain, base packages: identity, learning, progress, review, materials, rag, ai, shared, bootstrap.
 - **How it works:** Only bootstrap wiring may depend broadly; feature modules must start with explicit boundaries.
@@ -55,7 +55,7 @@ A phase may be marked **PASS** only when:
 - **Expected result:** Backend starts locally with no architecture violations.
 - **Definition of Done:** Build passes, health endpoint responds, repository structure matches Doc 19.
 - **Authority:** Documents 17,19,26
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Java 25.0.4; Maven Wrapper 3.9.16; `mvnw.cmd test` and `mvnw.cmd clean verify` passed (1 test, 0 failures); executable JAR `backend/target/hippocampus-backend-0.0.1-SNAPSHOT.jar`; packaged runtime `GET /health` returned 200, `application/json`, and `{"status":"UP"}`; dependency tree and Doc 19 source structure reviewed; commit/PR pending.
 - **Notes / blockers:** _None_
 
 ## P0-02 — Create frontend repository structure
