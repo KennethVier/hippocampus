@@ -78,7 +78,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Backend
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Separate local/test/pilot configuration safely.
 - **Build:** Create application.yml plus local/test/pilot profiles; externalize secrets and resource limits.
 - **How it works:** Runtime selects profile; secrets are injected via environment.
