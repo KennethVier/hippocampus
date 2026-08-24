@@ -174,7 +174,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Frontend
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Provide consistent app frame without feature sprawl.
 - **Build:** Implement router, auth-placeholder layout, compact navigation shell, route-level error boundary.
 - **How it works:** Feature routes render inside app shell.
@@ -183,7 +183,7 @@ A phase may be marked **PASS** only when:
 - **Expected result:** Core routes render and unknown routes fail gracefully.
 - **Definition of Done:** Navigation shell works responsively.
 - **Authority:** Documents 20
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Node 24.16.0; npm 11.13.0; `react-router` 7.18.2 is the only new direct dependency and `npm.cmd audit --audit-level=high` reported 0 vulnerabilities; app-owned data-router tree implements `/` redirecting to `/home`, all documented static/dynamic route contracts, compact primary navigation, secondary Settings navigation, persistent semantic shell landmarks, sanitized route-level fallback, and safe not-found handling using one generic app-owned placeholder; Vitest/React Testing Library route/navigation suite passed (18 tests) including direct entries, active navigation, shell persistence, route failure, unknown route, and desktop/mobile semantic smoke; headless production-preview visual smoke passed at 1440x900 and 390x844; production preview returned 200 SPA entry HTML for `/`, `/home`, `/subjects/example-subject`, `/missions/example-mission`, and `/unknown-route`; `npm.cmd run typecheck`, `npm.cmd run lint`, and `npm.cmd run build` passed; `npm.cmd ls --depth=0` and source/diff audit confirmed no additional test dependency, P0-10 API client, P0-11 UI system, auth/provider/state/form/Tailwind/Playwright dependency or behavior, speculative feature subtree, backend change, or undocumented architectural deviation; `git diff --check` passed.
 - **Notes / blockers:** _None_
 
 ## P0-10 — Create centralized API client

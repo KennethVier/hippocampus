@@ -1,8 +1,8 @@
+import { RouterProvider } from 'react-router'
+
+import { browserRouter } from './router/browserRouter'
+
 export function App() {
-  return (
-    <main>
-      <h1>Hippocampus</h1>
-    </main>
-  )
+  return <RouterProvider router={browserRouter} />
 }
 
