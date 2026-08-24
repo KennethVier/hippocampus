@@ -46,7 +46,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Repository
 - **Priority:** Must
-- **Status:** Donegit add backend docs/IMPLEMENTATION-TRACKER.md
+- **Status:** Done
 - **Goal:** Establish a clean Spring Boot codebase aligned with the modular-monolith architecture.
 - **Build:** Create Maven Spring Boot project, Java 25 toolchain, base packages: identity, learning, progress, review, materials, rag, ai, shared, bootstrap.
 - **How it works:** Only bootstrap wiring may depend broadly; feature modules must start with explicit boundaries.
@@ -62,7 +62,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Repository
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Establish React application baseline.
 - **Build:** Create React 19 + TypeScript + Vite project with app, features, components, api, hooks, state, schemas, types, test folders.
 - **How it works:** App shell owns providers/router; feature folders own feature UI.
@@ -71,7 +71,7 @@ A phase may be marked **PASS** only when:
 - **Expected result:** Frontend loads base route without runtime/type errors.
 - **Definition of Done:** Build/test/typecheck pass; folders match Doc 20.
 - **Authority:** Documents 17,20,26
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Node 24.16.0; npm 11.13.0; React/React DOM 19.2.8, TypeScript 6.0.3, Vite 8.1.5; `npm.cmd test` passed (1 test, 0 failures); typecheck, lint, and production build passed; built preview `GET /` returned 200 HTML with the application root/module entry; direct dependencies and Doc 20 source structure reviewed; commit/PR pending.
 - **Notes / blockers:** _None_
 
 ## P0-03 — Configure Spring profiles
