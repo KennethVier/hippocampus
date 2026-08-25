@@ -255,7 +255,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Security
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Prevent credential leaks and known vulnerable dependencies.
 - **Build:** Configure Gitleaks and Dependabot/security alerts where available; add ignore process documentation.
 - **How it works:** Scans run on PR/schedule; findings are triaged.
@@ -265,15 +265,23 @@ A phase may be marked **PASS** only when:
 - **Definition of Done:** Security checks documented and active.
 - **Authority:** Documents 22,24,25
 - **Evidence / link:**
-  - Implementation prepared on local branch `feat/p0-13-security-monitoring`; no commit or push performed.
-  - Added `.github/dependabot.yml` with weekly UTC version-update checks for Maven (`/backend`), npm (`/frontend`), GitHub Actions (`/`), and Docker Compose (`/`); patch/minor Maven, npm, and GitHub Actions updates are grouped per ecosystem, major updates remain individual, and open version-update PRs are limited to three per ecosystem.
-  - Added `.github/workflows/security-monitoring.yml` with Monday 04:17 UTC and manual triggers, `contents: read`, immutable checkout and Gitleaks pins, a runtime-only isolated synthetic-secret detector self-test, redacted output, cleanup, and a full fetched-history Gitleaks scan.
-  - Added `docs/security/DEPENDENCY-AND-SECRET-TRIAGE.md` covering evidence safety, real-secret rotation, false-positive and fingerprint-only suppression, historical findings, dependency severity/classification, scheduled-failure response, external settings, and completion evidence. A Dependabot-generated PR is explicitly optional additional evidence rather than a completion requirement.
-  - No `.gitleaks.toml`, `.gitleaksignore`, committed secret-shaped fixture, new Action, application dependency, service, or repository secret was added; the existing `.github/workflows/quality.yml` required jobs and behavior remain unchanged.
-  - Both new YAML files parsed successfully with the locally available SnakeYAML 2.5 parser; static validation confirmed the workflow source contains no complete synthetic GitHub-token pattern; new-file whitespace/final-newline checks and `git diff --check` passed.
-  - Frontend validation passed: lint, typecheck, 85 Vitest tests, production build, and `npm audit --audit-level=high` with 0 vulnerabilities.
-  - Backend `clean verify` compiled successfully and passed 30 of 32 tests; the two existing Flyway integration cases could not complete because the required local PostgreSQL service was unavailable/misconfigured on port 5432. CI PostgreSQL validation remains required.
-- **Notes / blockers:** Before Done, obtain external review, push/open the implementation PR, preserve green `backend-quality`, `frontend-quality`, and `security` checks, verify all four Dependabot ecosystems are recognized and update checks succeed, validate required GitHub security settings, and run `security-monitoring` manually on `main` to prove the isolated detector and full-history scan. Local Docker-backed Gitleaks validation was unavailable because the Docker daemon was not running. No Dependabot-generated PR is required.
+  - P0-13 implementation merged through PR #15 from `feat/p0-13-security-monitoring` into `main`.
+  - Added `.github/dependabot.yml` with weekly UTC version-update checks for Maven (`/backend`), npm (`/frontend`), GitHub Actions (`/`), and Docker Compose (`/`); patch/minor Maven, npm, and GitHub Actions updates are grouped per ecosystem, major updates remain individual, open version-update PRs are limited to three per ecosystem, and no dependency update is auto-merged.
+  - GitHub recognized the configured Dependabot ecosystems and began performing update checks. Generated Dependabot PRs demonstrated active npm and GitHub Actions monitoring; Maven and Docker Compose recognition/update checks were also verified.
+  - Added `.github/workflows/security-monitoring.yml` with Monday 04:17 UTC and manual triggers, `contents: read`, immutable checkout and Gitleaks pins, a runtime-only isolated synthetic-secret detector self-test, redacted output, cleanup, and full fetched-history Gitleaks scanning.
+  - The isolated synthetic-secret self-test successfully proved that Gitleaks detects the runtime-generated fixture without committing that fixture to repository history.
+  - The first full-history Gitleaks run detected one historical `generic-api-key` finding in `CorrelationIdObservabilityTests.java`.
+  - The finding was investigated and confirmed to be a false positive originating from a deliberately synthetic test marker used to verify that sensitive request values are not emitted to logs; it was not an actual credential.
+  - The false positive was suppressed using only its exact historical Gitleaks fingerprint in `.gitleaksignore`; no broad path, regex, rule, or commit suppression was introduced.
+  - Correction PRs #22 and #23 were merged to `main`, resulting in the exact fingerprint-only suppression and explicit `--gitleaks-ignore-path` use for the full-history scan.
+  - Post-remediation manual `security-monitoring` run on `main` completed successfully. Both the isolated detector self-test and full-history Gitleaks scan passed.
+  - Existing `backend-quality`, `frontend-quality`, and `security` checks remained active and passed on `main`; backend CI successfully executed the PostgreSQL/Flyway migration integration that had been unavailable in the local environment.
+  - Frontend validation passed lint, typecheck, 85 Vitest tests, production build, and `npm audit --audit-level=high` with 0 vulnerabilities.
+  - Added `docs/security/DEPENDENCY-AND-SECRET-TRIAGE.md` covering evidence safety, real-secret rotation, false-positive and fingerprint-only suppression, historical findings, dependency severity/classification, scheduled-failure response, external settings, and completion evidence.
+  - No `.gitleaks.toml`, broad Gitleaks suppression, committed secret-shaped fixture, auto-merge behavior, OWASP/NVD scanner, application dependency, service, repository secret, application-code change, database change, or later-task scope was introduced; the existing `.github/workflows/quality.yml` required jobs and behavior remain unchanged.
+  - Applicable GitHub repository security settings, including Dependabot alerts/security updates were reviewed and verified active.
+
+- **Notes / blockers:** _None_
 
 ## P0-14 — Create Testcontainers foundation
 
