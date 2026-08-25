@@ -62,4 +62,5 @@ jobs:
             --user "$(id -u):$(id -g)" \
             ghcr.io/gitleaks/gitleaks:v8.28.0@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
             git --redact --no-banner --exit-code 1 \
+            --gitleaks-ignore-path="/repo/.gitleaksignore" \
             --log-opts="--all --no-merges" /repo
