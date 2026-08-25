@@ -16,9 +16,22 @@ Use this order whenever requirements appear ambiguous:
 4. `docs/27-decision-log-and-adr-index.md` — decision governance.
 5. Accepted ADRs under `docs/adr/`.
 6. `docs/IMPLEMENTATION-TRACKER.md` — exact implementation work and completion evidence.
-7. Code.
+7. `docs/design/DESIGN.md` — visual authority for approved frontend UI.
+8. `docs/design/references/` — visual intent references; not pixel-perfect specifications.
+9. Code.
 
 Code never silently overrides a higher authority.
+
+## Visual Design Authority
+
+For frontend UI work:
+
+- Product behavior, educational rules, security, domain rules, and architecture remain governed by the numbered Source-of-Truth documents, accepted ADRs, and the Implementation Tracker.
+- `docs/design/DESIGN.md` governs visual language where those higher authorities do not define appearance.
+- `docs/design/references/` demonstrates intended layout, density, hierarchy, and visual character.
+- Reference screenshots contain illustrative mock content and must not create new product requirements.
+- If a screenshot or DESIGN.md example conflicts with product behavior, the product Source of Truth wins.
+- Do not independently redesign Hippocampus unless the owning tracker task explicitly requires a design change.
 
 ## Core Product Boundaries
 
