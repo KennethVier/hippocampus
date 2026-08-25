@@ -222,7 +222,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** CI/CD
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Make quality gates automatic.
 - **Build:** Add backend tests, frontend lint/typecheck/test, architecture tests, migration integration tests, secret/dependency scans, builds.
 - **How it works:** PR must pass deterministic checks before merge.
