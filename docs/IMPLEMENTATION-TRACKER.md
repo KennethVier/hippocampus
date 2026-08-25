@@ -206,7 +206,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Frontend
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Standardize basic UX.
 - **Build:** Implement Button, Input, Textarea, Select, Card, Dialog/Drawer, Badge, Progress, Skeleton, EmptyState, ErrorState.
 - **How it works:** Features compose these without creating a huge UI library.
@@ -215,8 +215,8 @@ A phase may be marked **PASS** only when:
 - **Expected result:** Reusable states render consistently.
 - **Definition of Done:** Core component suite passes accessibility smoke tests.
 - **Authority:** Documents 20,25
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Core UI primitives added under `frontend/src/components/ui` with centralized Contemporary Clinical tokens in `frontend/src/styles/tokens.css`; native semantic Button, Input, Textarea, Select, Card, Dialog, Drawer, Badge, quantitative Progress, decorative Skeleton, EmptyState and safe ErrorState implemented; Dialog/Drawer share the native `<dialog>` lifecycle with test-only JSDOM `showModal`/`close` mocks, native `cancel` handling, accessible title/description associations, initial-focus support, controlled close, backdrop behavior, focus restoration, and a shared explicit sequential Tab/Shift+Tab boundary that wraps eligible descendants and safely focuses the dialog container when none are eligible; the initial Chrome smoke found focus escaping to `body`, the correction was added without replacing native `<dialog>`/`showModal()` behavior, and the focused regression suite plus full Vitest/React Testing Library suite passed (85 tests across 4 files); `npm.cmd run typecheck`, `npm.cmd run lint`, `npm.cmd run build`, `npm.cmd audit --audit-level=high` (0 vulnerabilities), `npm.cmd ls --depth=0`, and `git diff --check` passed; fresh Chrome smoke rerun passed the three former failures: Dialog desktop Tab/Shift+Tab containment, Drawer desktop Tab/Shift+Tab containment, and Drawer mobile containment at 390x844 with full-width bottom-sheet layout; `@fontsource/hanken-grotesk@5.3.0` remains the only new direct production dependency; source/scope audit confirmed no forbidden UI framework, state/form/schema dependency, feature screen, backend/API change, P0-12 work, or later-task leakage.
+- **Notes / blockers:** _None.
 
 ## P0-12 — Create GitHub Actions quality pipeline
 
