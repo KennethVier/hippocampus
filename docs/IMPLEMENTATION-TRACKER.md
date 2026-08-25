@@ -222,7 +222,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** CI/CD
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Make quality gates automatic.
 - **Build:** Add backend tests, frontend lint/typecheck/test, architecture tests, migration integration tests, secret/dependency scans, builds.
 - **How it works:** PR must pass deterministic checks before merge.
@@ -231,7 +231,24 @@ A phase may be marked **PASS** only when:
 - **Expected result:** CI blocks broken code and reports failures clearly.
 - **Definition of Done:** Required jobs green on main.
 - **Authority:** Documents 23,25
-- **Evidence / link:** _To be recorded during implementation_
+
+- **Evidence / link:**
+  - GitHub Actions quality workflow implemented in PR #13.
+  - Required checks: `backend-quality`, `frontend-quality`, `security`.
+  - Initial CI configuration issues corrected:
+    - Maven Wrapper executable permission.
+    - Dependency Graph enablement.
+  - Normal PR run passed all required checks.
+  - Intentional CI-gate validation introduced a deterministic failing frontend test; `frontend-quality` failed while `backend-quality` and `security` remained green.
+  - Active `main` ruleset prevented merge while the required check failed.
+  - Temporary failure was removed and PR returned to green.
+  - PR #13 merged to `main`.
+  - Post-merge quality run #5 on `main` completed successfully.
+  - `backend-quality` passed backend tests, ArchUnit architecture tests, Flyway/PostgreSQL migration integration, and backend build.
+  - `frontend-quality` passed lint, typecheck, 85 tests, build, and `npm audit`.
+  - `security` passed Gitleaks scanning; Dependency Review remains PR-only and is intentionally skipped on push-to-main runs.
+  - No deployment behavior or later-task scope was introduced.
+
 - **Notes / blockers:** _None_
 
 ## P0-13 — Add secret scanning and dependency monitoring
