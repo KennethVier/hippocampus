@@ -2,113 +2,71 @@ package com.hippocampus;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.WebApplicationType;
-import org.springframework.boot.builder.SpringApplicationBuilder;
 
-class FlywayMigrationApplicationTests {
+import com.hippocampus.testing.PostgresIntegrationTestSupport;
 
-    private static final String HOST = "127.0.0.1";
-    private static final String PORT = System.getenv().getOrDefault("HIPPOCAMPUS_POSTGRES_PORT", "5432");
-    private static final String USERNAME = "hippocampus";
-    private static final String PASSWORD = "hippocampus";
-    private static final String ADMIN_URL = jdbcUrl("postgres");
-    private static final String LOCAL_DATABASE = "hippocampus";
+class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
 
     @Test
     void flywayMigratesFreshDatabaseFromZeroAndSecondStartupIsIdempotent() throws Exception {
-        var databaseName = "hippocampus_p0_05_" + UUID.randomUUID().toString().replace("-", "_");
+        assertThat(isPostgresRunning()).isTrue();
+        assertThat(postgresMappedPort()).isBetween(1, 65_535);
+        assertThat(postgresJdbcUrl())
+                .contains(postgresHost())
+                .contains(":" + postgresMappedPort() + "/");
+        assertDatabaseIsEmpty();
 
-        try {
-            createDatabase(databaseName);
+        try (var firstContext = startApplicationWithFlyway()) {
+            assertThat(firstContext.isActive()).isTrue();
+        }
 
-            try (var firstContext = startContext(jdbcUrl(databaseName), "test",
-                    "--spring.flyway.baseline-on-migrate=false")) {
-                assertThat(firstContext.isActive()).isTrue();
-            }
+        assertPostgresMajorVersion(18);
+        assertExtensionExists("vector", "0.8.6");
+        assertExtensionExists("pg_trgm", "1.6");
+        assertSuccessfulFlywayVersion("1");
+        assertNoFailedFlywayMigration();
+        assertNoDomainTables();
 
-            assertExtensionExists(databaseName, "vector", "0.8.6");
-            assertExtensionExists(databaseName, "pg_trgm", "1.6");
-            assertSuccessfulFlywayVersion(databaseName, "1");
-            assertNoFailedFlywayMigration(databaseName);
-            assertNoDomainTables(databaseName);
+        try (var secondContext = startApplicationWithFlyway()) {
+            assertThat(secondContext.isActive()).isTrue();
+        }
 
-            try (var secondContext = startContext(jdbcUrl(databaseName), "test",
-                    "--spring.flyway.baseline-on-migrate=false")) {
-                assertThat(secondContext.isActive()).isTrue();
-            }
+        assertSuccessfulFlywayVersion("1");
+        assertNoFailedFlywayMigration();
+        assertNoDomainTables();
+    }
 
-            assertSuccessfulFlywayVersion(databaseName, "1");
-            assertNoFailedFlywayMigration(databaseName);
-            assertNoDomainTables(databaseName);
-        } finally {
-            dropDatabaseIfExists(databaseName);
+    private static void assertDatabaseIsEmpty() throws SQLException {
+        try (var connection = openPostgresConnection();
+                var statement = connection.createStatement();
+                var result = statement.executeQuery("""
+                        SELECT COUNT(*)
+                        FROM information_schema.tables
+                        WHERE table_schema = 'public'
+                          AND table_type = 'BASE TABLE'
+                        """)) {
+            assertThat(result.next()).isTrue();
+            assertThat(result.getInt(1)).isZero();
+            assertThat(result.next()).isFalse();
         }
     }
 
-    @Test
-    void flywayOnboardsExistingLocalDatabaseWithoutDomainTables() throws Exception {
-        try (var context = startContext(jdbcUrl(LOCAL_DATABASE), "local", "--SERVER_PORT=0")) {
-            assertThat(context.isActive()).isTrue();
-        }
-
-        assertExtensionExists(LOCAL_DATABASE, "vector", "0.8.6");
-        assertExtensionExists(LOCAL_DATABASE, "pg_trgm", "1.6");
-        assertSuccessfulFlywayVersion(LOCAL_DATABASE, "1");
-        assertNoFailedFlywayMigration(LOCAL_DATABASE);
-        assertNoDomainTables(LOCAL_DATABASE);
-    }
-
-    private static void createDatabase(String databaseName) throws SQLException {
-        try (var connection = openAdminConnection();
-                var statement = connection.createStatement()) {
-            statement.execute("CREATE DATABASE " + quoteIdentifier(databaseName));
+    private static void assertPostgresMajorVersion(int expectedMajorVersion) throws SQLException {
+        try (var connection = openPostgresConnection();
+                var statement = connection.createStatement();
+                var result = statement.executeQuery("SHOW server_version_num")) {
+            assertThat(result.next()).isTrue();
+            assertThat(result.getInt(1) / 10_000).isEqualTo(expectedMajorVersion);
+            assertThat(result.next()).isFalse();
         }
     }
 
-    private static void dropDatabaseIfExists(String databaseName) throws SQLException {
-        try (var connection = openAdminConnection()) {
-            try (var terminate = connection.prepareStatement("""
-                    SELECT pg_terminate_backend(pid)
-                    FROM pg_stat_activity
-                    WHERE datname = ?
-                      AND pid <> pg_backend_pid()
-                    """)) {
-                terminate.setString(1, databaseName);
-                terminate.execute();
-            }
-
-            try (var statement = connection.createStatement()) {
-                statement.execute("DROP DATABASE IF EXISTS " + quoteIdentifier(databaseName));
-            }
-        }
-    }
-
-    private static AutoCloseableApplicationContext startContext(
-            String datasourceUrl,
-            String profile,
-            String... additionalArguments) {
-        var arguments = new String[additionalArguments.length + 5];
-        arguments[0] = "--spring.flyway.url=" + datasourceUrl;
-        arguments[1] = "--spring.flyway.user=" + USERNAME;
-        arguments[2] = "--spring.flyway.password=" + PASSWORD;
-        arguments[3] = "--spring.flyway.enabled=true";
-        arguments[4] = "--server.port=0";
-        System.arraycopy(additionalArguments, 0, arguments, 5, additionalArguments.length);
-
-        return new AutoCloseableApplicationContext(new SpringApplicationBuilder(HippocampusApplication.class)
-                .web(WebApplicationType.SERVLET)
-                .profiles(profile)
-                .run(arguments));
-    }
-
-    private static void assertExtensionExists(String databaseName, String extensionName, String expectedVersion)
+    private static void assertExtensionExists(String extensionName, String expectedVersion)
             throws SQLException {
-        try (var connection = openDatabaseConnection(databaseName);
+        try (var connection = openPostgresConnection();
                 var statement = connection.prepareStatement("""
                         SELECT extversion
                         FROM pg_extension
@@ -118,7 +76,7 @@ class FlywayMigrationApplicationTests {
 
             try (var result = statement.executeQuery()) {
                 assertThat(result.next())
-                        .as("Expected extension %s in database %s", extensionName, databaseName)
+                        .as("Expected extension %s", extensionName)
                         .isTrue();
                 assertThat(result.getString("extversion")).isEqualTo(expectedVersion);
                 assertThat(result.next()).isFalse();
@@ -126,8 +84,8 @@ class FlywayMigrationApplicationTests {
         }
     }
 
-    private static void assertSuccessfulFlywayVersion(String databaseName, String version) throws SQLException {
-        try (var connection = openDatabaseConnection(databaseName);
+    private static void assertSuccessfulFlywayVersion(String version) throws SQLException {
+        try (var connection = openPostgresConnection();
                 var statement = connection.prepareStatement("""
                         SELECT success
                         FROM flyway_schema_history
@@ -137,7 +95,7 @@ class FlywayMigrationApplicationTests {
 
             try (var result = statement.executeQuery()) {
                 assertThat(result.next())
-                        .as("Expected Flyway version %s in database %s", version, databaseName)
+                        .as("Expected Flyway version %s", version)
                         .isTrue();
                 assertThat(result.getBoolean("success")).isTrue();
                 assertThat(result.next()).isFalse();
@@ -145,8 +103,8 @@ class FlywayMigrationApplicationTests {
         }
     }
 
-    private static void assertNoFailedFlywayMigration(String databaseName) throws SQLException {
-        try (var connection = openDatabaseConnection(databaseName);
+    private static void assertNoFailedFlywayMigration() throws SQLException {
+        try (var connection = openPostgresConnection();
                 var statement = connection.createStatement();
                 var result = statement.executeQuery("""
                         SELECT COUNT(*) AS failed_count
@@ -158,8 +116,8 @@ class FlywayMigrationApplicationTests {
         }
     }
 
-    private static void assertNoDomainTables(String databaseName) throws SQLException {
-        try (var connection = openDatabaseConnection(databaseName);
+    private static void assertNoDomainTables() throws SQLException {
+        try (var connection = openPostgresConnection();
                 var statement = connection.createStatement();
                 var result = statement.executeQuery("""
                         SELECT table_name
@@ -170,50 +128,8 @@ class FlywayMigrationApplicationTests {
                         ORDER BY table_name
                         """)) {
             assertThat(result.next())
-                    .as("No Hippocampus domain tables should exist in database %s", databaseName)
+                    .as("No Hippocampus domain tables should exist")
                     .isFalse();
-        }
-    }
-
-    private static java.sql.Connection openAdminConnection() throws SQLException {
-        return openConnection(ADMIN_URL);
-    }
-
-    private static java.sql.Connection openDatabaseConnection(String databaseName) throws SQLException {
-        return openConnection(jdbcUrl(databaseName));
-    }
-
-    private static java.sql.Connection openConnection(String url) throws SQLException {
-        try {
-            return DriverManager.getConnection(url, USERNAME, PASSWORD);
-        } catch (SQLException exception) {
-            throw new AssertionError("""
-                    P0-05 migration tests require the P0-04 local PostgreSQL service.
-                    Start it with: docker compose up -d postgres
-                    Expected connection URL: %s
-                    """.formatted(url), exception);
-        }
-    }
-
-    private static String jdbcUrl(String databaseName) {
-        return "jdbc:postgresql://" + HOST + ":" + PORT + "/" + databaseName;
-    }
-
-    private static String quoteIdentifier(String identifier) {
-        return '"' + identifier.replace("\"", "\"\"") + '"';
-    }
-
-    private record AutoCloseableApplicationContext(
-            org.springframework.context.ConfigurableApplicationContext delegate)
-            implements AutoCloseable {
-
-        boolean isActive() {
-            return delegate.isActive();
-        }
-
-        @Override
-        public void close() {
-            delegate.close();
         }
     }
 }

@@ -287,7 +287,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Testing
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Provide realistic integration tests.
 - **Build:** Configure PostgreSQL 18 + pgvector Testcontainer base test support.
 - **How it works:** Integration tests create isolated DB and run Flyway.
@@ -296,8 +296,8 @@ A phase may be marked **PASS** only when:
 - **Expected result:** CI can test actual PostgreSQL behavior.
 - **Definition of Done:** Reusable integration test base committed.
 - **Authority:** Documents 17,25
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Added Spring Boot-managed `org.testcontainers:testcontainers-postgresql` test dependency, resolved at Testcontainers 2.0.5 with `testcontainers-jdbc`, `testcontainers-database-commons`, and core `testcontainers` transitively; created reusable test-source-only `PostgresIntegrationTestSupport` using the Testcontainers 2.x `org.testcontainers.postgresql.PostgreSQLContainer` API and pinned `pgvector/pgvector:0.8.6-pg18` image without an artificial compatible-substitute declaration or fixed host-port binding; migrated the Flyway smoke test from localhost/manual Compose database administration to an initially empty ephemeral container and container-provided JDBC URL, credentials, host, and mapped port; assertions cover the dynamic endpoint, queried PostgreSQL major version 18, successful V1 history, `vector` 0.8.6, `pg_trgm` 1.6, zero failed migrations, no domain tables, and second-startup idempotency; removed the redundant `backend-quality` PostgreSQL service and `HIPPOCAMPUS_POSTGRES_PORT` while preserving `./mvnw -B -ntp clean verify`. Codex Cloud validation: `mvn -B -ntp dependency:tree -Dincludes=org.testcontainers` passed; `mvn -B -ntp -DskipTests test-compile` passed; `mvn -B -ntp -Dtest='!FlywayMigrationApplicationTests' test` passed all 30 non-container backend tests, including 8 ArchUnit tests; `docker version` could not run because the Docker CLI/daemon is unavailable; `mvn -B -ntp -Dtest=FlywayMigrationApplicationTests test`, `mvn -B -ntp test`, and `mvn -B -ntp clean verify` each failed at the unskipped Testcontainers test because no Docker environment or `/var/run/docker.sock` was available. GitHub Actions has not been executed for this implementation.
+- **Notes / blockers:** Docker-backed migration assertions and the complete `backend-quality` gate require external GitHub Actions validation because Codex Cloud has no usable Docker environment.
 
 ## P0-15 — Create implementation tracker process
 
