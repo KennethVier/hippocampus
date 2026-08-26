@@ -21,23 +21,6 @@ jobs:
     name: backend-quality
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    services:
-      postgres:
-        image: pgvector/pgvector:0.8.6-pg18
-        env:
-          POSTGRES_DB: hippocampus
-          POSTGRES_USER: hippocampus
-          POSTGRES_PASSWORD: hippocampus
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U hippocampus -d hippocampus"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 12
-          --health-start-period 10s
-    env:
-      HIPPOCAMPUS_POSTGRES_PORT: 5432
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
