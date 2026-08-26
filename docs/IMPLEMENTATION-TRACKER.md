@@ -287,7 +287,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Testing
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Provide realistic integration tests.
 - **Build:** Configure PostgreSQL 18 + pgvector Testcontainer base test support.
 - **How it works:** Integration tests create isolated DB and run Flyway.
@@ -297,7 +297,11 @@ A phase may be marked **PASS** only when:
 - **Definition of Done:** Reusable integration test base committed.
 - **Authority:** Documents 17,25
 - **Evidence / link:** Added Spring Boot-managed `org.testcontainers:testcontainers-postgresql` test dependency, resolved at Testcontainers 2.0.5 with `testcontainers-jdbc`, `testcontainers-database-commons`, and core `testcontainers` transitively; created reusable test-source-only `PostgresIntegrationTestSupport` using the Testcontainers 2.x `org.testcontainers.postgresql.PostgreSQLContainer` API and pinned `pgvector/pgvector:0.8.6-pg18` image without an artificial compatible-substitute declaration or fixed host-port binding; migrated the Flyway smoke test from localhost/manual Compose database administration to an initially empty ephemeral container and container-provided JDBC URL, credentials, host, and mapped port; assertions cover the dynamic endpoint, queried PostgreSQL major version 18, successful V1 history, `vector` 0.8.6, `pg_trgm` 1.6, zero failed migrations, no domain tables, and second-startup idempotency; removed the redundant `backend-quality` PostgreSQL service and `HIPPOCAMPUS_POSTGRES_PORT` while preserving `./mvnw -B -ntp clean verify`. Codex Cloud validation: `mvn -B -ntp dependency:tree -Dincludes=org.testcontainers` passed; `mvn -B -ntp -DskipTests test-compile` passed; `mvn -B -ntp -Dtest='!FlywayMigrationApplicationTests' test` passed all 30 non-container backend tests, including 8 ArchUnit tests; `docker version` could not run because the Docker CLI/daemon is unavailable; `mvn -B -ntp -Dtest=FlywayMigrationApplicationTests test`, `mvn -B -ntp test`, and `mvn -B -ntp clean verify` each failed at the unskipped Testcontainers test because no Docker environment or `/var/run/docker.sock` was available. GitHub Actions has not been executed for this implementation.
-- **Notes / blockers:** Docker-backed migration assertions and the complete `backend-quality` gate require external GitHub Actions validation because Codex Cloud has no usable Docker environment.
+  - PR #25 merged with implementation head `df972fcd3f3aad6ef8d602cffad327bb43c76886` and merge commit `b637e1c6755916196a79906ac5afe80f205e9393`.
+  - PR quality run #26 (run ID `33021748944`) succeeded; `backend-quality`, `frontend-quality`, and `security` all succeeded. The backend job supplied the required Docker/Testcontainers-backed validation.
+  - Post-merge main quality run #27 (run ID `33022026985`) succeeded at `b637e1c6755916196a79906ac5afe80f205e9393`; all required jobs succeeded on `main`.
+  - P0-14 Definition of Done is satisfied.
+- **Notes / blockers:** _None_
 
 ## P0-15 — Create implementation tracker process
 
