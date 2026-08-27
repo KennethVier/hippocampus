@@ -2,13 +2,19 @@ spring:
   config:
     activate:
       on-profile: local
+  autoconfigure:
+    exclude: []
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:${HIPPOCAMPUS_POSTGRES_PORT:5432}/hippocampus
+    username: ${HIPPOCAMPUS_POSTGRES_USER:hippocampus}
+    password: ${HIPPOCAMPUS_POSTGRES_PASSWORD:hippocampus}
   flyway:
     enabled: true
-    url: jdbc:postgresql://127.0.0.1:${HIPPOCAMPUS_POSTGRES_PORT:5432}/hippocampus
-    user: hippocampus
-    password: hippocampus
     baseline-on-migrate: true
     baseline-version: 0
+  jpa:
+    hibernate:
+      ddl-auto: validate
 
 server:
   port: ${SERVER_PORT:8080}

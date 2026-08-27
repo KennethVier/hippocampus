@@ -367,7 +367,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Database
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Persist internal user identity.
 - **Build:** Create users table/entity/repository with UUID, email, display_name, status, timestamps.
 - **How it works:** Internal user ID is ownership root; provider/session details remain separate.
@@ -376,8 +376,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Users persist and unique constraints hold.
 - **Definition of Done:** Migration + entity mapping + repository tests pass.
 - **Authority:** Documents 18
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Added Flyway V2 `users` schema, Hibernate/JPA entity mapping, and minimal Spring Data repository. Added PostgreSQL-backed migration/schema, repository CRUD, timestamp, enum-string, and forced-flush unique-email tests. Maven compile passed; ArchUnit passed (8 tests); database-free profile smoke tests passed (3 tests); applicable non-Docker backend tests passed (19 tests); `git diff --check` passed.
+- **Notes / blockers:** Cloud has no Docker CLI/socket, so Testcontainers migration/repository validation remains for authoritative GitHub Actions.
 
 ## P1-02 — Implement authentication flow
 
