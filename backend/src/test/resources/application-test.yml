@@ -4,6 +4,9 @@ spring:
       on-profile: test
   flyway:
     enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: validate
 
 server:
   port: 0

@@ -51,6 +51,7 @@ class SpringProfilesApplicationTests {
         return Stream.of(
                 new ProfileScenario("local", "127.0.0.1", List.of(
                         "--SERVER_PORT=0",
+                        "--spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration",
                         "--spring.flyway.enabled=false")),
                 new ProfileScenario("test", "127.0.0.1", List.of(
                         "--spring.flyway.enabled=false")),

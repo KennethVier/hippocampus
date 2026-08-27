@@ -49,11 +49,23 @@ public abstract class PostgresIntegrationTestSupport {
                 POSTGRES.getPassword());
     }
 
+    protected static void resetPostgresSchema() throws SQLException {
+        try (var connection = openPostgresConnection();
+                var statement = connection.createStatement()) {
+            statement.execute("DROP SCHEMA public CASCADE");
+            statement.execute("CREATE SCHEMA public");
+        }
+    }
+
     protected static ConfigurableApplicationContext startApplicationWithFlyway() {
         return new SpringApplicationBuilder(HippocampusApplication.class)
                 .web(WebApplicationType.SERVLET)
                 .profiles("test")
                 .run(
+                        "--spring.autoconfigure.exclude=",
+                        "--spring.datasource.url=" + POSTGRES.getJdbcUrl(),
+                        "--spring.datasource.username=" + POSTGRES.getUsername(),
+                        "--spring.datasource.password=" + POSTGRES.getPassword(),
                         "--spring.flyway.enabled=true",
                         "--spring.flyway.url=" + POSTGRES.getJdbcUrl(),
                         "--spring.flyway.user=" + POSTGRES.getUsername(),
