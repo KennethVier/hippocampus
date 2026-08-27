@@ -23,4 +23,6 @@ documentation patches.
 
 ## Index
 
-No post-freeze ADRs have been created yet.
+| ADR | Title | Status | Date |
+| --- | --- | --- | --- |
+| [ADR-0001](ADR-0001-mobile-client-architecture-and-authentication-boundary.md) | Mobile Client Architecture and Authentication Boundary | ACCEPTED | 2026-08-27 |

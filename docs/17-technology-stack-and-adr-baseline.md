@@ -4,7 +4,7 @@ Audience: Solution architecture, backend, frontend, AI, data, DevOps,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 17
-Last Updated: 2026-08-24
+Last Updated: 2026-08-27
 Owner: Project Hippocampus Team
 Prerequisites:
 - 00 - Project Vision
@@ -44,7 +44,7 @@ Scope: Backend, frontend, AI provider integration, database, vector
   version policy, rejected alternatives, and ADR governance.
 Status: Final
 Title: Technology Stack & ADR Baseline
-Version: 1.0.0
+Version: 1.0.1
 ---
 
 # 17 - Technology Stack & ADR Baseline
@@ -921,6 +921,20 @@ It can be revisited for native/mobile/external API clients.
 
 **ACCEPTED**
 
+## Post-Freeze Alignment — ADR-0001
+
+ADR-0001 is the newer authority for future native-client architecture;
+the historical ADR-019 decision and rationale above remain unchanged.
+React/Vite remains the first-class v1 web client, with its secure session
+cookie as the browser transport. Expo/React Native is the preferred
+eventual native direction, and native implementation remains post-v1.
+
+Spring Security + Spring Session JDBC remains the shared server-side
+authentication/session authority. Exact native transport is deferred
+until future iOS and Android security and compatibility validation. If
+validation fails, the transport question returns to ADR review; JWT is
+not implicitly authorized.
+
 ------------------------------------------------------------------------
 
 # 24. ADR-020 --- React 19.2.x
@@ -1787,6 +1801,11 @@ and:
                                                         frontend, and
                                                         intentionally minimal
                                                         MVP infrastructure
+
+  1.0.1             2026-08-27        Project           Added the ADR-0001
+                                      Hippocampus Team  post-freeze native
+                                                        client and session
+                                                        boundary alignment
 
   -----------------------------------------------------------------------------
 

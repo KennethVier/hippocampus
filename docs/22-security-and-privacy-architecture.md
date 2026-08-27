@@ -4,7 +4,7 @@ Audience: Security, architecture, backend, frontend, AI/RAG, DevOps, QA,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 22
-Last Updated: 2026-08-24
+Last Updated: 2026-08-27
 Owner: Project Hippocampus Team
 Prerequisites:
 - 08 - Non-Functional Requirements
@@ -38,7 +38,7 @@ Scope: Authentication, authorization, session security, CSRF/CORS,
   response hooks, and MVP security boundaries.
 Status: Final
 Title: Security & Privacy Architecture
-Version: 1.0.0
+Version: 1.0.1
 ---
 
 # 22 - Security & Privacy Architecture
@@ -136,6 +136,28 @@ The browser authenticates with a secure session cookie.
 
 No bearer access token needs to be stored in localStorage for the v1
 first-party web application.
+
+## Post-Freeze Client Authentication Alignment — ADR-0001
+
+Spring Security + Spring Session JDBC remains the server-side
+authentication/session authority. The v1 browser continues to use the
+approved secure session cookie with the HttpOnly, Secure, and appropriate
+SameSite requirements below. Cookie-authenticated browser state changes
+retain CSRF protection, and credentialed browser CORS remains restricted
+to approved origins. CORS is a browser-origin control, not native
+authorization.
+
+A future native client should preferably reuse the opaque server-side
+session authority, but its transport is unselected and unproven. Before
+future native authentication implementation, that transport requires iOS
+and Android compatibility and security validation. Failed validation
+returns the transport question to ADR review and does not automatically
+authorize JWT.
+
+For every client, the Spring Security principal resolves to internal
+`users.id`, which remains the ownership root. Client-supplied identity is
+never authoritative, and the existing zero-tolerance cross-user isolation
+boundary remains unchanged.
 
 ------------------------------------------------------------------------
 
@@ -1782,6 +1804,9 @@ The following are approved:
     without bypassing trust boundaries.
 48. Security implementation must remain consistent with Documents
     00--21.
+49. ADR-0001 governs the future native authentication boundary while
+    preserving Spring Security + Spring Session JDBC as server-side
+    authority and the secure-cookie, CSRF, and restricted-CORS web model.
 
 ------------------------------------------------------------------------
 
@@ -1861,6 +1886,12 @@ It should preserve:
                                                         limiting, XSS/CSRF/CORS,
                                                         security testing, and MVP
                                                         release gates
+
+  1.0.1             2026-08-27        Project           Aligned future native
+                                      Hippocampus Team  session transport and
+                                                        client authorization
+                                                        boundaries with
+                                                        ADR-0001
 
   -------------------------------------------------------------------------------
 

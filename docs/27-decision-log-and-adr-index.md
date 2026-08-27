@@ -4,7 +4,7 @@ Audience: Product, architecture, backend, frontend, AI/RAG, DevOps,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 27
-Last Updated: 2026-08-24
+Last Updated: 2026-08-27
 Owner: Project Hippocampus Team
 Prerequisites:
 - README
@@ -24,7 +24,7 @@ Scope: Decision authority, decision categories, ADR lifecycle, ADR
   Source-of-Truth freeze procedure.
 Status: Final
 Title: Decision Log / ADR Index
-Version: 1.0.0
+Version: 1.0.1
 ---
 
 # 27 - Decision Log / ADR Index
@@ -1379,12 +1379,21 @@ pre-freeze decisions.
 
 When ADRs exist, add an index:
 
-  ADR        Title              Status     Date         Categories
-  ---------- ------------------ ---------- ------------ --------------
-  ADR-0001   Example Decision   ACCEPTED   YYYY-MM-DD   ARCHITECTURE
+| ADR | Title | Status | Date | Categories |
+| --- | --- | --- | --- | --- |
+| [ADR-0001](adr/ADR-0001-mobile-client-architecture-and-authentication-boundary.md) | Mobile Client Architecture and Authentication Boundary | ACCEPTED | 2026-08-27 | ARCHITECTURE, FRONTEND, SECURITY, BACKEND, TESTING |
 
 This table begins empty at initial v1 freeze unless a real pending
 decision already exists.
+
+## ADR-0001 Decision Summary
+
+Vite/React remains the first-class v1 web client, while Expo/React Native
+is the preferred post-v1 native direction. Both presentation clients use
+one Spring Boot backend and its server-side authorization model. Spring
+Security + Spring Session JDBC remains the server-side session authority;
+future native transport is deferred to compatibility and security
+validation, and JWT is not implicitly approved.
 
 ------------------------------------------------------------------------
 
@@ -1661,6 +1670,10 @@ Phase 0 — Engineering Foundation
                                                         governance, and final
                                                         documentation-freeze
                                                         procedure
+
+  1.0.1             2026-08-27        Project           Indexed ADR-0001 as
+                                      Hippocampus Team  the first accepted
+                                                        post-freeze decision
 
   ----------------------------------------------------------------------------
 
