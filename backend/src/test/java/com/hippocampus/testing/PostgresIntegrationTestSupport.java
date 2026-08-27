@@ -58,7 +58,14 @@ public abstract class PostgresIntegrationTestSupport {
     }
 
     protected static ConfigurableApplicationContext startApplicationWithFlyway() {
-        return new SpringApplicationBuilder(HippocampusApplication.class)
+        return startApplicationWithFlyway(new Class<?>[0]);
+    }
+
+    protected static ConfigurableApplicationContext startApplicationWithFlyway(Class<?>... additionalSources) {
+        var sources = new Class<?>[additionalSources.length + 1];
+        sources[0] = HippocampusApplication.class;
+        System.arraycopy(additionalSources, 0, sources, 1, additionalSources.length);
+        return new SpringApplicationBuilder(sources)
                 .web(WebApplicationType.SERVLET)
                 .profiles("test")
                 .run(
@@ -71,6 +78,7 @@ public abstract class PostgresIntegrationTestSupport {
                         "--spring.flyway.user=" + POSTGRES.getUsername(),
                         "--spring.flyway.password=" + POSTGRES.getPassword(),
                         "--spring.flyway.baseline-on-migrate=false",
+                        "--hippocampus.security.login.max-attempts=2",
                         "--server.port=0");
     }
 }
