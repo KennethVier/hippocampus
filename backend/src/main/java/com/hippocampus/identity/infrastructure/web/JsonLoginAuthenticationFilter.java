@@ -38,7 +38,14 @@ public final class JsonLoginAuthenticationFilter extends AbstractAuthenticationP
                     "Too many authentication attempts. Try again later.");
             return null;
         }
-        if (request.getContentType() == null || !MediaType.APPLICATION_JSON.isCompatibleWith(MediaType.parseMediaType(request.getContentType()))) {
+        MediaType contentType;
+        try {
+            contentType = MediaType.parseMediaType(request.getContentType());
+        } catch (RuntimeException exception) {
+            problems.write(request, response, HttpStatus.BAD_REQUEST, "MALFORMED_REQUEST", "The request body is malformed.");
+            return null;
+        }
+        if (!MediaType.APPLICATION_JSON.isCompatibleWith(contentType)) {
             problems.write(request, response, HttpStatus.BAD_REQUEST, "MALFORMED_REQUEST", "The request body is malformed.");
             return null;
         }

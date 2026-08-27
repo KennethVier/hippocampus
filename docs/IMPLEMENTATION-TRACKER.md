@@ -392,7 +392,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Authenticated user can enter app; invalid credentials reveal no sensitive details.
 - **Definition of Done:** Auth tests pass and flow documented.
 - **Authority:** Documents 22
-- **Evidence / link:** V3 credential migration and Hibernate mapping; Spring Security JSON login with exact-email database authentication, generic failures, server-side context persistence/session rotation, CSRF enforcement, and bounded fixed-window throttling; deterministic limiter tests and the PostgreSQL migration contract update are under `backend/src/test`.
+- **Evidence / link:** V3 credential migration and Hibernate mapping; Spring Security JSON login with exact-email database authentication, generic failures, server-side context persistence/session rotation, CSRF enforcement, and bounded fixed-window throttling; dedicated provider unit tests plus PostgreSQL credential-repository and end-to-end authentication integration tests are under `backend/src/test` alongside deterministic limiter and migration-contract coverage.
 - **Notes / blockers:** Implementation review and authoritative CI/Testcontainers validation remain required before Done.
 
 ## P1-03 — Configure Spring Session JDBC

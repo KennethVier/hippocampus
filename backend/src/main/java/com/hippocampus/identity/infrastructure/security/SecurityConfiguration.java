@@ -60,11 +60,12 @@ public class SecurityConfiguration {
                 HttpStatus.UNAUTHORIZED, "AUTHENTICATION_FAILED", "Authentication failed."));
 
         http.authenticationManager(manager)
+                .securityMatcher("/api/**")
                 .securityContext(context -> context.securityContextRepository(contextRepository))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                         .sessionAuthenticationStrategy(sessionStrategy))
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/api/auth/login", "/actuator/health", "/actuator/health/**", "/error").permitAll()
+                        .requestMatchers("/api/auth/login").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint((request, response, exception) ->
                         problems.write(request, response, HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED",
