@@ -1,7 +1,7 @@
 ---
 ADR: ADR-0002
 Title: V1 Student Credential Mechanism
-Status: PROPOSED
+Status: ACCEPTED
 Date: 2026-08-28
 Decision Owners: Project Hippocampus Team
 Categories:
@@ -9,7 +9,7 @@ Categories:
   - BACKEND
   - DATA
   - ARCHITECTURE
-Affected Documents After Acceptance:
+Affected Documents:
   - "18"
   - "22"
   - "26"
@@ -39,7 +39,7 @@ pilot. It does not reconsider Spring Security, server-side sessions,
 Spring Session JDBC, secure-cookie browser authentication, `users.id`
 ownership, ADR-0001, or web-first v1.
 
-# Proposed Decision
+# Decision
 
 Hippocampus v1 will directly own student email/password credentials for
 the initial pilot. Spring Security will verify a submitted credential and,
@@ -59,7 +59,7 @@ credential verification
 Login returns no session token. This ADR introduces no JWT, bearer token,
 refresh token, local-storage credential, or native authentication work.
 
-Direct password authentication is proposed as the smallest current v1
+Direct password authentication is selected as the smallest current v1
 scope and operational choice, not as a universally superior
 authentication mechanism. It adds neither an external identity provider
 and OAuth/OIDC dependency nor an email-delivery dependency; it is
@@ -187,7 +187,7 @@ success status, test helpers, or test class names.
 
 # Alternatives Considered
 
-## A. Direct Hippocampus Email/Password — Proposed
+## A. Direct Hippocampus Email/Password — Selected
 
 This is the smallest current pilot choice: it avoids new identity and
 email infrastructure, supports local integration testing, fits Spring
@@ -256,7 +256,7 @@ root to a particular login provider.
 
 # Security and Privacy Impact
 
-The proposal adds custody of password hashes but no new ownership or
+The decision adds custody of password hashes but no new ownership or
 session authority. Credential access must be narrowly contained;
 authentication fails closed; disabled and deleted accounts cannot create
 authenticated state; generic responses and equivalent adaptive
@@ -268,19 +268,26 @@ Server-side expiry and revocation, secure browser cookies, CSRF, CORS,
 logout, and private-state clearing remain governed by their existing
 authorities and Phase 1 tasks.
 
-# Documentation Changes After Acceptance
+# Documentation Changes
 
-Because this ADR is **PROPOSED**, it does not patch the frozen Source of
-Truth. If externally accepted, the acceptance work should update:
+The acceptance alignment updates the affected Source-of-Truth documents:
 
-| Document | Expected alignment |
+| Document | Alignment |
 | --- | --- |
-| 18 — Domain Model and Database Design | Record the separate password-credential persistence boundary and relationship to `users.id`. |
-| 22 — Security and Privacy Architecture | Record credential, status, provisioning, enumeration, and abuse-control rules. |
-| 26 — Development Roadmap and Implementation Phases | Record the accepted P1-02 prerequisite and implementation boundary. |
-| 27 — Decision Log / ADR Index | Index the accepted decision and its relationship to the frozen baseline. |
-| `docs/adr/README.md` | Change ADR-0002 status from PROPOSED to ACCEPTED. |
+| 18 — Domain Model and Database Design | Records the separate password-credential persistence boundary and relationship to `users.id`. |
+| 22 — Security and Privacy Architecture | Records credential, status, provisioning, enumeration, and abuse-control rules. |
+| 26 — Development Roadmap and Implementation Phases | Records the accepted P1-02 prerequisite and implementation boundary. |
+| 27 — Decision Log / ADR Index | Indexes the accepted decision and its relationship to the frozen baseline. |
+| `docs/adr/README.md` | Records ADR-0002 as ACCEPTED. |
 
-Those patches occur only after external acceptance. ADR-0001 remains
-ACCEPTED and unchanged. P1-02 and P1-03 remain Not Started, and this
-proposal contains no authentication implementation or migration.
+ADR-0001 remains ACCEPTED and unchanged. P1-02 and P1-03 remain Not
+Started, and this decision contains no authentication implementation or
+migration.
+
+# Approval
+
+**External architecture/security/product review:** ACCEPTED — 2026-08-28
+
+**Proposal:** PR #35
+
+**Proposal merge:** `f3b96244d79c5c39373b344ced4049e92ee73ba0`

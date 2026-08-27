@@ -4,7 +4,7 @@ Audience: Security, architecture, backend, frontend, AI/RAG, DevOps, QA,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 22
-Last Updated: 2026-08-27
+Last Updated: 2026-08-28
 Owner: Project Hippocampus Team
 Prerequisites:
 - 08 - Non-Functional Requirements
@@ -38,7 +38,7 @@ Scope: Authentication, authorization, session security, CSRF/CORS,
   response hooks, and MVP security boundaries.
 Status: Final
 Title: Security & Privacy Architecture
-Version: 1.0.1
+Version: 1.0.2
 ---
 
 # 22 - Security & Privacy Architecture
@@ -163,16 +163,36 @@ boundary remains unchanged.
 
 # 6. Password / Identity Boundary
 
-If Hippocampus directly owns credentials, password storage must use a
-modern adaptive password hash supported by Spring Security.
+Under accepted ADR-0002, Hippocampus directly owns email/password
+credentials for the initial controlled v1 pilot. Password verification
+uses Spring Security's `PasswordEncoder` abstraction and only adaptive
+encoded hashes are persisted. `DelegatingPasswordEncoder` is the
+approved algorithm-agile direction, with adaptive bcrypt as the initial
+encoding direction for newly created v1 hashes. The exact bcrypt cost is
+measurement- and configuration-driven rather than frozen here.
 
-If an external identity provider is introduced later:
+Plaintext storage, `NoOpPasswordEncoder`, fast general-purpose hashes,
+and home-grown password hashing are prohibited. Password credentials are
+persisted separately from `users`. Raw passwords and password hashes must
+never be exposed through API DTOs, an authenticated principal, logs,
+migrations, committed seeds, or source code.
 
--   it must be integrated through Spring Security;
--   user identity remains mapped to the internal `users.id`;
--   authorization remains Hippocampus-owned.
+Only `ACTIVE` users are authentication eligible. `DISABLED` and `DELETED`
+users cannot authenticate even when credential data remains during
+soft/account lifecycle handling. Outward failures must not distinguish
+unknown email, wrong password, a missing credential, `DISABLED`, or
+`DELETED` status. Equivalent adaptive verification work must protect the
+normal invalid-credential path from obvious timing enumeration.
 
-The exact authentication UX/provider is not locked here.
+Initial pilot accounts use controlled operator-only provisioning. P1-02
+adds no public signup, password reset, or admin account-management API.
+It owns minimum bounded and configurable login abuse controls appropriate
+to the pilot, without freezing a threshold or authorizing Redis or other
+new distributed infrastructure.
+
+A future external identity provider remains a governed option. If one is
+introduced later, it must integrate through Spring Security, map identity
+to internal `users.id`, and leave authorization Hippocampus-owned.
 
 ------------------------------------------------------------------------
 
@@ -1814,7 +1834,7 @@ The following are approved:
 
 This document does not define:
 
--   final login UX/provider
+-   final login UX
 -   exact password policy
 -   exact CSP string
 -   exact rate-limit counts
@@ -1892,6 +1912,12 @@ It should preserve:
                                                         client authorization
                                                         boundaries with
                                                         ADR-0001
+
+  1.0.2             2026-08-28        Project           Aligned pilot password
+                                      Hippocampus Team  credential, eligibility,
+                                                        provisioning,
+                                                        enumeration, and abuse
+                                                        controls with ADR-0002
 
   -------------------------------------------------------------------------------
 
