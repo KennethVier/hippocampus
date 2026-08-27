@@ -4,7 +4,7 @@ Audience: Architecture, backend, frontend, AI/RAG, DevOps, security, QA,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 26
-Last Updated: 2026-08-24
+Last Updated: 2026-08-27
 Owner: Project Hippocampus Team
 Prerequisites:
 - README
@@ -25,7 +25,7 @@ Scope: Documentation freeze, implementation authority, phase sequencing,
   governance.
 Status: Final
 Title: Development Roadmap & Implementation Phases
-Version: 1.0.0
+Version: 1.0.1
 ---
 
 # 26 - Development Roadmap & Implementation Phases
@@ -334,6 +334,33 @@ secret scanning
 ## Milestone
 
 **M0 --- Engineering Skeleton**
+
+------------------------------------------------------------------------
+
+## Post-Phase-0 Architecture Checkpoint — ADR-0001
+
+After successful Phase 0 exit and M0, the accepted mobile-client and
+authentication boundary follows this sequencing rule:
+
+``` text
+Phase 0 exit / M0
+↓
+ADR-0001 accepted
+↓
+Required Source-of-Truth alignment completed
+↓
+Documentation consistency confirmed
+↓
+P1-01 planning
+↓
+Web-first Phase 1 implementation
+```
+
+ADR-0001 governs the future mobile-client and authentication boundary.
+Native implementation remains post-v1 and is not added to Phases 1--12.
+Its compatibility gate applies before future native authentication
+implementation; it is not a prerequisite for P1-01. The implementation
+tracker remains the operational source for live phase and task state.
 
 ------------------------------------------------------------------------
 
@@ -1729,6 +1756,9 @@ The following are approved:
 49. Final documentation audit occurs before Phase 0.
 50. This roadmap remains subordinate to the Hippocampus v1 Source of
     Truth.
+51. ADR-0001 is the post-Phase-0 architecture checkpoint before P1-01
+    planning; its native compatibility gate applies only to future
+    native authentication, and native implementation remains post-v1.
 
 ------------------------------------------------------------------------
 
@@ -1792,6 +1822,11 @@ Hippocampus v1.0 Source of Truth
                                                         continuity, and
                                                         controlled-pilot
                                                         transition
+
+  1.0.1             2026-08-27        Project           Added the ADR-0001
+                                      Hippocampus Team  post-Phase-0
+                                                        architecture
+                                                        sequencing checkpoint
 
   ------------------------------------------------------------------------
 

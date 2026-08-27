@@ -1,7 +1,7 @@
 ---
 ADR: ADR-0001
 Title: Mobile Client Architecture and Authentication Boundary
-Status: PROPOSED
+Status: ACCEPTED
 Date: 2026-08-27
 Decision Owners: Project Hippocampus Team
 Categories:
@@ -375,28 +375,26 @@ current web-first Phase 1.
 
 # Documentation Changes Required
 
-No frozen Source-of-Truth or tracker document is patched while this ADR
-remains PROPOSED. Document 27 requires documents actually affected by an
-accepted ADR to be patched; "affected" means a real contradiction or
-authority impact, not every adjacent document.
+The acceptance audit found that only documents with a direct authority
+impact require alignment. Documents left unchanged were audited and are
+already consistent with this decision.
 
-| Document | Classification | Purpose after acceptance |
+| Document | Completed outcome | Reason |
 |---|---|---|
-| 09 — MVP Scope & Roadmap | NO CHANGE | Web-first v1 and post-v1 native preserve its current product boundary. Patch only after a separate product decision. |
-| 16 — System Architecture | MAY PATCH | Clarify client wording only if web-only language creates a real contradiction; preserve the single backend. |
-| 17 — Technology Stack & ADR Baseline | MUST PATCH | Record the future Expo/React Native direction while preserving Vite web and the Spring Session authority. |
-| 19 — Backend Architecture | MAY PATCH | Clarify client-neutral backend ownership only if required. |
-| 20 — Frontend Architecture | MAY PATCH | At most clarify that it remains the Vite web authority and that future native presentation is separate; do not rewrite it as universal. |
-| 22 — Security & Privacy Architecture | MUST PATCH | Distinguish shared server-side session authority from the unproven, validation-gated native transport. |
-| 23 — Deployment & Infrastructure | MAY PATCH | Current v1 topology remains; add no speculative app-store infrastructure. |
-| 25 — Testing Strategy | MAY PATCH | Add only a narrow future compatibility requirement if necessary, not a full post-v1 native program. |
-| 26 — Development Roadmap & Implementation Phases | MUST PATCH | Record ADR resolution as the pre-Phase 1 architecture checkpoint while keeping native implementation post-v1. |
-| 27 — Decision Log / ADR Index | MUST PATCH AFTER ACCEPTANCE | Record ADR-0001 only after external disposition. |
-| `IMPLEMENTATION-TRACKER.md` | MAY PATCH | Clarify existing P1 wording or authority references only where materially necessary; create no competing task series. |
+| 09 — MVP Scope & Roadmap | NO PATCH REQUIRED | Web-first v1 and deferred native mobile remain unchanged. |
+| 16 — System Architecture | NO PATCH REQUIRED | Its web-client boundary is explicitly scoped to v1 and preserves one backend. |
+| 17 — Technology Stack & ADR Baseline | PATCHED | Records the post-freeze future native direction and shared server-side session authority without changing its historical baseline ADRs. |
+| 19 — Backend Architecture | NO PATCH REQUIRED | Backend authority and ownership rules are already client-neutral. |
+| 20 — Frontend Architecture | NO PATCH REQUIRED | It already identifies itself as the v1 web-frontend authority and excludes native architecture. |
+| 22 — Security & Privacy Architecture | PATCHED | Distinguishes shared server-side session authority from unproven, validation-gated native transport. |
+| 23 — Deployment & Infrastructure | NO PATCH REQUIRED | Its Vite web and Spring Boot topology is explicitly the v1 deployment. |
+| 25 — Testing Strategy | NO PATCH REQUIRED | Its v1 testing rules do not conflict with the future native compatibility gate. |
+| 26 — Development Roadmap & Implementation Phases | PATCHED | Records the accepted pre-Phase 1 architecture sequencing checkpoint while keeping native implementation post-v1. |
+| 27 — Decision Log / ADR Index | PATCHED | Indexes this accepted post-freeze decision. |
+| `IMPLEMENTATION-TRACKER.md` | NO PATCH REQUIRED | P1-01 through P1-10 already align and retain their existing status. |
 
-After acceptance, patch actual contradictions and authority impacts only,
-perform a documentation-consistency review, and preserve the prohibition
-on native v1 scope. The intended sequence is:
+`docs/adr/README.md` is also updated as the concise ADR navigation index.
+The accepted sequence remains:
 
 ```text
 Accept ADR
@@ -408,7 +406,25 @@ Accept ADR
 
 # Approval
 
-Status remains **PROPOSED**. External architecture, security, and product
-review is required. This ADR is not self-approved and does not authorize
-implementation until it receives external disposition and the required
-governance steps are complete.
+**Status:** ACCEPTED
+
+**Acceptance Date:** 2026-08-27
+
+**External Disposition:**
+
+- Architecture review — approved
+- Security review — approved
+- Product/MVP review — approved
+
+**Publication Evidence:**
+
+- Publication PR: #30
+- Publication head: `dfb6468b78899cfbebe912efc3f9cbe0681cb8ac`
+- Publication merge/current reviewed main: `174107cc942c504360cc41decff0bd47a5fda55b`
+- PR quality run #36 (ID `33052764258`): SUCCESS
+- Post-merge main quality run #37 (ID `33053320075`, head
+  `174107cc942c504360cc41decff0bd47a5fda55b`): SUCCESS
+- Jobs `backend-quality`, `frontend-quality`, and `security`: SUCCESS
+
+Dependency Review being skipped in the push-to-main run is expected
+because that step is PR-only.
