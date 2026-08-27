@@ -4,7 +4,7 @@ Audience: Backend, architecture, database, AI, QA, security, and DevOps
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 18
-Last Updated: 2026-08-24
+Last Updated: 2026-08-28
 Owner: Project Hippocampus Team
 Prerequisites:
 - 00 - Project Vision
@@ -47,7 +47,7 @@ Scope: Core entities, aggregate boundaries, PostgreSQL schema design,
   versioning, and migration rules.
 Status: Final
 Title: Domain Model & Database Design
-Version: 1.0.0
+Version: 1.0.1
 ---
 
 # 18 - Domain Model & Database Design
@@ -228,6 +228,25 @@ DELETED
 ```
 
 Authentication-provider-specific fields should remain minimal in v1.
+The provider-neutral `users.id` remains the identity and ownership root.
+
+Under accepted ADR-0002, direct password credentials for the controlled
+v1 pilot are persisted separately from `users`; neither `password` nor
+`password_hash` belongs on the `users` table. Credential persistence has
+a one-to-one relationship with `users.id`, enforces at most one direct-
+password credential per user, and stores only an adaptive encoded hash.
+Plaintext passwords are never durable data. Credential data must not
+outlive a physically deleted user.
+
+The exact credential-table name and DDL remain P1-02 implementation work.
+During soft/account lifecycle handling, retained credential data does not
+override account eligibility: `DISABLED` and `DELETED` users cannot
+authenticate.
+
+The existing `email VARCHAR UNIQUE NOT NULL` semantics remain unchanged.
+No `lower(email)`, `citext`, canonicalization, or case-insensitive unique
+index is introduced. Any future normalization or case-insensitivity
+policy requires an explicit data-model change and migration.
 
 ------------------------------------------------------------------------
 
@@ -2372,6 +2391,13 @@ and:
                                                         processing jobs,
                                                         indexes, and
                                                         lifecycle rules
+
+  1.0.1             2026-08-28        Project           Aligned the separate
+                                      Hippocampus Team  one-to-one password
+                                                        credential persistence
+                                                        boundary and existing
+                                                        user/email semantics
+                                                        with ADR-0002
 
   -----------------------------------------------------------------------
 

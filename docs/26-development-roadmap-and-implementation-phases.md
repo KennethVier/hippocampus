@@ -4,7 +4,7 @@ Audience: Architecture, backend, frontend, AI/RAG, DevOps, security, QA,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 26
-Last Updated: 2026-08-27
+Last Updated: 2026-08-28
 Owner: Project Hippocampus Team
 Prerequisites:
 - README
@@ -25,7 +25,7 @@ Scope: Documentation freeze, implementation authority, phase sequencing,
   governance.
 Status: Final
 Title: Development Roadmap & Implementation Phases
-Version: 1.0.1
+Version: 1.0.2
 ---
 
 # 26 - Development Roadmap & Implementation Phases
@@ -365,6 +365,35 @@ tracker remains the operational source for live phase and task state.
 ------------------------------------------------------------------------
 
 # 10. Phase 1 --- Identity + Core Student Workspace
+
+## Credential Decision Alignment — ADR-0002
+
+ADR-0002 is accepted. The initial controlled v1 pilot uses
+Hippocampus-owned email/password credentials, and P1-02 implements that
+credential flow through Spring Security. Identity maps to `users.id`,
+successful authentication establishes the already-approved server-side
+session, and credential persistence remains separate from `users`.
+
+P1-02 includes ADR-0002's minimum bounded and configurable login abuse-
+control boundary. It adds no public signup, password reset, or admin
+account-management API. P1-03 remains Spring Session JDBC; P1-04 remains
+CSRF; P1-05 remains CORS; P1-06 remains `CurrentUser`; P1-07 remains
+`/me`; P1-08 remains frontend authentication UX; and P1-09 remains
+private-state clearing. No JWT, bearer/refresh-token, or native
+authentication work is introduced.
+
+The required sequence is:
+
+``` text
+ADR-0002 accepted
+↓
+Required Source-of-Truth alignment
+↓
+P1-02 implementation planning and implementation may proceed
+```
+
+This alignment does not mark P1-02 as started. The implementation tracker
+remains the operational source for task state.
 
 ## Goal
 
@@ -1827,6 +1856,11 @@ Hippocampus v1.0 Source of Truth
                                       Hippocampus Team  post-Phase-0
                                                         architecture
                                                         sequencing checkpoint
+
+  1.0.2             2026-08-28        Project           Aligned the accepted
+                                      Hippocampus Team  ADR-0002 credential
+                                                        decision and P1-02
+                                                        sequencing boundary
 
   ------------------------------------------------------------------------
 
