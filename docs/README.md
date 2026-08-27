@@ -91,6 +91,7 @@ If documents appear inconsistent, resolve the conflict according to this authori
 - **26 – Development Roadmap & Implementation Phases**
 - **27 – Decision Log / ADR Index**
 - **adr/README.md – ADR usage guide**
+- **IMPLEMENTATION-TRACKER.md – live implementation status and completion evidence**
 
 # Locked v1 Product Boundary
 
@@ -156,6 +157,10 @@ After the v1 freeze:
 - Significant architecture changes require an ADR.
 - Product/MVP or educational-policy changes require the relevant Source-of-Truth documents to be reviewed and patched; an ADR alone cannot silently override them.
 - All accepted ADRs that change existing decisions must identify and patch affected documents.
+
+# Operational Implementation Handoff
+
+Operational implementation status and completion evidence are maintained in `docs/IMPLEMENTATION-TRACKER.md`, below the frozen Source-of-Truth authority. `docs/Hippocampus-v1-Implementation-Tracker.xlsx` is a frozen planning/export/reference artifact and is not the live status source.
 
 # Status
 
