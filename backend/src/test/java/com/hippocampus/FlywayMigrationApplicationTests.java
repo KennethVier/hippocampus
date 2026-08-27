@@ -36,12 +36,14 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertExtensionExists("pg_trgm", "1.6");
         assertSuccessfulFlywayVersion("1");
         assertSuccessfulFlywayVersion("2");
+        assertSuccessfulFlywayVersion("3");
         assertNoFailedFlywayMigration();
-        assertOnlyUsersDomainTableExists();
+        assertDomainTablesExist();
         assertUsersColumnsMatchContract();
         assertUsersPrimaryKey();
         assertUsersEmailUniqueConstraint();
         assertUsersHasNoCheckConstraint();
+        assertPasswordCredentialContract();
 
         try (var secondContext = startApplicationWithFlyway()) {
             assertThat(secondContext.isActive()).isTrue();
@@ -49,8 +51,9 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
 
         assertSuccessfulFlywayVersion("1");
         assertSuccessfulFlywayVersion("2");
+        assertSuccessfulFlywayVersion("3");
         assertNoFailedFlywayMigration();
-        assertOnlyUsersDomainTableExists();
+        assertDomainTablesExist();
     }
 
     private static void assertDatabaseIsEmpty() throws SQLException {
@@ -130,7 +133,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         }
     }
 
-    private static void assertOnlyUsersDomainTableExists() throws SQLException {
+    private static void assertDomainTablesExist() throws SQLException {
         try (var connection = openPostgresConnection();
                 var statement = connection.createStatement();
                 var result = statement.executeQuery("""
@@ -142,7 +145,34 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                         ORDER BY table_name
                         """)) {
             assertThat(result.next()).isTrue();
+            assertThat(result.getString("table_name")).isEqualTo("user_password_credentials");
+            assertThat(result.next()).isTrue();
             assertThat(result.getString("table_name")).isEqualTo("users");
+            assertThat(result.next()).isFalse();
+        }
+    }
+
+    private static void assertPasswordCredentialContract() throws SQLException {
+        try (var connection = openPostgresConnection(); var statement = connection.createStatement();
+                var result = statement.executeQuery("""
+                    SELECT column_name, data_type, is_nullable
+                    FROM information_schema.columns
+                    WHERE table_schema='public' AND table_name='user_password_credentials'
+                    ORDER BY ordinal_position
+                    """)) {
+            var actual = new java.util.LinkedHashMap<String, String>();
+            while (result.next()) actual.put(result.getString(1), result.getString(2) + ":" + result.getString(3));
+            assertThat(actual).containsExactlyInAnyOrderEntriesOf(Map.of(
+                    "user_id", "uuid:NO", "password_hash", "character varying:NO",
+                    "created_at", "timestamp with time zone:NO", "updated_at", "timestamp with time zone:NO"));
+        }
+        try (var connection = openPostgresConnection(); var statement = connection.createStatement();
+                var result = statement.executeQuery("""
+                    SELECT confdeltype FROM pg_constraint
+                    WHERE conrelid='public.user_password_credentials'::regclass AND contype='f'
+                    """)) {
+            assertThat(result.next()).isTrue();
+            assertThat(result.getString(1)).isEqualTo("c");
             assertThat(result.next()).isFalse();
         }
     }
