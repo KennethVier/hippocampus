@@ -14,23 +14,51 @@ Authority: Document 26 defines implementation order; Documents 00–25 define pr
 
 > **A task is not Done because code exists. It is Done only when the required build exists, the listed validation passes, expected behavior is demonstrated, the Definition of Done is satisfied, and evidence is recorded.**
 
-## Status Rules
+## Operational Progress Source
 
-- **Not Started** — no implementation work accepted yet.
-- **In Progress** — implementation or required tests are actively incomplete.
-- **Blocked** — a real dependency/decision prevents progress; blocker must be recorded.
-- **Ready for Review** — implementation and tests are complete, awaiting review/gate verification.
-- **Done** — build + tests + Definition of Done + evidence are all complete.
+This Markdown file is the single live source for implementation task status, blockers, phase outcomes, and completion evidence. Pull requests, commits, CI runs, reviews, and ADRs are evidence referenced here; they are not competing progress sources. `docs/Hippocampus-v1-Implementation-Tracker.xlsx` is a frozen planning/export/reference artifact and is not operational for current status. It is not synchronized with this tracker.
+
+## Status Rules and Task Lifecycle
+
+- **Not Started** — accepted implementation work has not begun. Planning alone does not require a persisted status change.
+- **In Progress** — implementation or required validation has begun and remains incomplete across a durable repository state or handoff. Do not create an `In Progress` commit only for ceremony; an atomic Cloud task may move directly from `Not Started` to `Ready for Review` when implementation and all validation available to that environment complete together.
+- **Blocked** — a real unresolved dependency, required decision, required external capability, or condition prevents responsible progress. Record what is blocked, the affected validation or Definition of Done item, what is needed, and whether reviewer or ADR action is required. After resolution, clear the current blocker, retain concise resolution history, and return to the justified state: `Not Started`, `In Progress`, or `Ready for Review`. Do not move directly from `Blocked` to `Done` without satisfying completion requirements.
+- **Ready for Review** — the intended implementation and tracker build requirements form a complete review candidate; available required validation has actually run; applicable behavior, Definition of Done, authority, architecture, and security assessments are recorded; limitations are explicit; and no known undocumented architecture deviation remains. An implementation agent may declare this state, but it is neither approval nor completion. Review may return the task to `In Progress` or `Blocked` when justified.
+- **Done** — applicable final facts establish that the implementation is merged into the reviewed target branch, task-required validation and GitHub Actions checks are green, external implementation review is accepted, expected behavior and Definition of Done are satisfied, final evidence is recorded, current blockers are cleared, limitations are accurate, and any required ADR/document approval is accepted and referenced. An implementation agent must not mark its own work `Done` before required external completion facts exist.
+
+An unavailable tool or service is an **environment limitation**, not automatically a blocker, when responsible implementation can continue and the task can be prepared for authoritative external validation. It becomes a blocker only when it prevents responsible progress or the criteria for the proposed task state. Never turn an environment failure into a pass.
+
+## Evidence Rules
+
+Evidence must be factual and applicable to the owning task. It may include exact local or Cloud validation commands and results, manual behavior verification, PR numbers/links, implementation or merge commit SHAs, workflow run numbers/IDs/links, relevant stable job names and actual conclusions, security/architecture review, accepted ADRs, environment limitations, blockers, and later resolution evidence.
+
+At `Ready for Review`, record implementation completion, available validation results, applicable behavior evidence, factual limitations, scope/authority and security/architecture/ADR assessments, unresolved blockers, and a Definition of Done assessment. Add PR or commit information only once factual; merge evidence is not required merely to enter `Ready for Review`.
+
+At `Done`, additionally record applicable accepted-PR and merge evidence, required GitHub Actions results, external review acceptance, final Definition of Done satisfaction, blocker resolution, and required accepted ADR/document updates. Prefer relevant stable job names such as `backend-quality`, `frontend-quality`, and `security` over a vague "CI passed"; `security-monitoring` is task-specific, not universal.
+
+Do not record speculative "will pass" claims, claim CI passed before it completes, fabricate PRs, URLs, SHAs, or workflow/run IDs, backfill unsupported history, call skipped jobs passed, or suppress required failed/unavailable validation to reach `Done`.
+
+## PR, Review, and Completion Flow
+
+Each implementation PR identifies its tracker task and proposed state, summarizes scope and authorities, reports actual validation and Definition of Done assessment, links factual evidence, assesses security/architecture/ADR impact, and records current blockers. The PR is an evidence and review surface; this file remains the progress source.
+
+Final completion evidence must be committed here after it becomes factual. A small tracker-only completion PR is useful when review acceptance, merge, or required post-merge evidence did not exist during implementation, but it is not mandatory when another already-required, properly scoped update records all final evidence.
+
+A Cloud/environment limitation requires the missing validation in an authoritative environment before `Done`; it does not automatically require post-merge CI. PR CI is sufficient when it validates the complete merge candidate, the task does not require integrated-main evidence, and no merge-only, deployment, or scheduled behavior remains. Post-merge CI is required only for a concrete task, workflow, environment, or phase/release-gate reason.
+
+Begin authority review with the task's `Authority` field and add only sources or accepted ADRs actually implicated. If implementation would change an approved significant architecture, product, or security decision, stop and follow Document 27. A task cannot be `Done` with an undocumented significant deviation.
 
 ## Phase Gate Rule
 
 A phase may be marked **PASS** only when:
 1. All **Must** tasks in the phase are Done.
-2. The explicit phase **Gate** task is Done.
+2. Where the phase defines an explicit **Gate** task, that task is Done.
 3. Required automated suites pass.
 4. No undocumented architecture deviation exists.
-5. Security/observability requirements introduced in that phase are working.
-6. Evidence links/notes are recorded.
+5. Applicable security/observability requirements introduced in that phase are working.
+6. Document 26 phase-completion criteria are satisfied and factual phase evidence is recorded.
+
+Phase outcome is separate from task status. Record it under the phase as **Phase Gate State: Not Evaluated** or **Phase Gate State: PASS**, with **Phase Gate Evidence** supporting `PASS`. Never infer `PASS` merely because code exists. Phase 0 has no explicit Gate task; P0-15 is a Documentation task, not a Phase 0 Gate, and Phase 0 cannot be evaluated as `PASS` until P0-15 is `Done` and the full Phase 0 criteria have been externally verified.
 
 
 # Phase 0 — Engineering Foundation
@@ -40,6 +68,10 @@ A phase may be marked **PASS** only when:
 **Milestone:** M0 — Engineering Skeleton
 
 **Implementation items:** 15
+
+**Phase Gate State:** Not Evaluated
+
+**Phase Gate Evidence:** _To be recorded after all Phase 0 completion criteria are externally verified._
 
 
 ## P0-01 — Create backend repository structure
@@ -55,7 +87,7 @@ A phase may be marked **PASS** only when:
 - **Expected result:** Backend starts locally with no architecture violations.
 - **Definition of Done:** Build passes, health endpoint responds, repository structure matches Doc 19.
 - **Authority:** Documents 17,19,26
-- **Evidence / link:** Java 25.0.4; Maven Wrapper 3.9.16; `mvnw.cmd test` and `mvnw.cmd clean verify` passed (1 test, 0 failures); executable JAR `backend/target/hippocampus-backend-0.0.1-SNAPSHOT.jar`; packaged runtime `GET /health` returned 200, `application/json`, and `{"status":"UP"}`; dependency tree and Doc 19 source structure reviewed; commit/PR pending.
+- **Evidence / link:** Java 25.0.4; Maven Wrapper 3.9.16; `mvnw.cmd test` and `mvnw.cmd clean verify` passed (1 test, 0 failures); executable JAR `backend/target/hippocampus-backend-0.0.1-SNAPSHOT.jar`; packaged runtime `GET /health` returned 200, `application/json`, and `{"status":"UP"}`; dependency tree and Doc 19 source structure reviewed.
 - **Notes / blockers:** _None_
 
 ## P0-02 — Create frontend repository structure
@@ -71,7 +103,7 @@ A phase may be marked **PASS** only when:
 - **Expected result:** Frontend loads base route without runtime/type errors.
 - **Definition of Done:** Build/test/typecheck pass; folders match Doc 20.
 - **Authority:** Documents 17,20,26
-- **Evidence / link:** Node 24.16.0; npm 11.13.0; React/React DOM 19.2.8, TypeScript 6.0.3, Vite 8.1.5; `npm.cmd test` passed (1 test, 0 failures); typecheck, lint, and production build passed; built preview `GET /` returned 200 HTML with the application root/module entry; direct dependencies and Doc 20 source structure reviewed; commit/PR pending.
+- **Evidence / link:** Node 24.16.0; npm 11.13.0; React/React DOM 19.2.8, TypeScript 6.0.3, Vite 8.1.5; `npm.cmd test` passed (1 test, 0 failures); typecheck, lint, and production build passed; built preview `GET /` returned 200 HTML with the application root/module entry; direct dependencies and Doc 20 source structure reviewed.
 - **Notes / blockers:** _None_
 
 ## P0-03 — Configure Spring profiles
@@ -87,7 +119,7 @@ A phase may be marked **PASS** only when:
 - **Expected result:** App boots in local and test profiles with correct overrides.
 - **Definition of Done:** Profiles documented and no secret values committed.
 - **Authority:** Documents 17,19,22,23
-- **Evidence / link:** Java 25.0.4; Maven Wrapper 3.9.16 running on Java 25.0.4; base/local/test/pilot profile configuration and concise backend documentation added; `mvnw.cmd test` and `mvnw.cmd clean verify` passed (4 tests, 0 failures); packaged JAR local `SERVER_PORT` and pilot `PORT` smoke tests returned the exact `/health` contract over HTTP 200; archive contains base/local/pilot configuration and excludes test configuration; secret/later-task configuration scans, dependency/scope audit, and `git diff --check` passed; commit/PR pending.
+- **Evidence / link:** Java 25.0.4; Maven Wrapper 3.9.16 running on Java 25.0.4; base/local/test/pilot profile configuration and concise backend documentation added; `mvnw.cmd test` and `mvnw.cmd clean verify` passed (4 tests, 0 failures); packaged JAR local `SERVER_PORT` and pilot `PORT` smoke tests returned the exact `/health` contract over HTTP 200; archive contains base/local/pilot configuration and excludes test configuration; secret/later-task configuration scans, dependency/scope audit, and `git diff --check` passed.
 - **Notes / blockers:** _None_
 
 ## P0-04 — Provision local PostgreSQL + pgvector
@@ -103,7 +135,7 @@ A phase may be marked **PASS** only when:
 - **Expected result:** Local DB is reproducible from one command.
 - **Definition of Done:** Compose file works and extension tests pass.
 - **Authority:** Documents 17,18,23
-- **Evidence / link:** Docker 29.5.2 / Docker Desktop 4.75.0 and Docker Compose v5.1.3 verified; `docker compose config` passed; `postgres` service using pinned `pgvector/pgvector:0.8.6-pg18` started healthy; PostgreSQL `18.6` verified; `vector` extversion `0.8.6` and `pg_trgm` extversion `1.6` verified; named persistent volume `hippocampus-postgres-data` exists; stop/start restart kept both extensions enabled; `backend\mvnw.cmd test` passed (4 tests, 0 failures); scope/security audit confirmed no application schema, Flyway, datasource integration, Java persistence code, Maven dependency, pilot/Neon provisioning, or real credentials; `git diff --check` passed; commit/PR pending.
+- **Evidence / link:** Docker 29.5.2 / Docker Desktop 4.75.0 and Docker Compose v5.1.3 verified; `docker compose config` passed; `postgres` service using pinned `pgvector/pgvector:0.8.6-pg18` started healthy; PostgreSQL `18.6` verified; `vector` extversion `0.8.6` and `pg_trgm` extversion `1.6` verified; named persistent volume `hippocampus-postgres-data` exists; stop/start restart kept both extensions enabled; `backend\mvnw.cmd test` passed (4 tests, 0 failures); scope/security audit confirmed no application schema, Flyway, datasource integration, Java persistence code, Maven dependency, pilot/Neon provisioning, or real credentials; `git diff --check` passed.
 - **Notes / blockers:** _None_
 
 ## P0-05 — Initialize Flyway
@@ -307,7 +339,7 @@ A phase may be marked **PASS** only when:
 
 - **Workstream:** Documentation
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Make completion evidence mandatory.
 - **Build:** Add tracker workflow, statuses, phase-gate rules, authority references, evidence links.
 - **How it works:** Task may only move to Done when DoD and tests pass.
@@ -316,7 +348,7 @@ A phase may be marked **PASS** only when:
 - **Expected result:** Implementation work has a single progress source.
 - **Definition of Done:** Tracker committed and used in PR workflow.
 - **Authority:** Documents 26,27
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Added the canonical Markdown tracker lifecycle, factual evidence policy, blocker/environment-limitation distinction, PR/review/completion flow, authority/ADR rule, separate phase-level PASS convention, and Phase 0 Gate clarification; declared the XLSX a frozen non-operational planning/export/reference artifact; created a lightweight PR template; updated the documentation handoff; audited P0-01 through P0-14 and removed only the stale `commit/PR pending` suffixes from P0-01 through P0-04. Documentation validation and scope audit passed; `git diff --check` passed. ADR assessment: no ADR required because this implements Documents 26 and 27 without changing approved architecture, product, or security decisions. External review, implementation PR/required CI, merge, proof of normal template use after it reaches `main`, and final factual completion evidence remain required before `Done`.
 - **Notes / blockers:** _None_
 
 # Phase 1 — Identity + Core Student Workspace
