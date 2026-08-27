@@ -185,10 +185,9 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 var statement = connection.createStatement();
                 var result = statement.executeQuery("""
                         SELECT COUNT(*)
-                        FROM information_schema.table_constraints
-                        WHERE table_schema = 'public'
-                          AND table_name = 'users'
-                          AND constraint_type = 'CHECK'
+                        FROM pg_constraint
+                        WHERE conrelid = 'public.users'::regclass
+                          AND contype = 'c'
                         """)) {
             assertThat(result.next()).isTrue();
             assertThat(result.getInt(1)).isZero();
