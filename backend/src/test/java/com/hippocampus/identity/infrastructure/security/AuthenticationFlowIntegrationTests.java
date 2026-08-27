@@ -20,6 +20,7 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -55,7 +56,7 @@ class AuthenticationFlowIntegrationTests extends PostgresIntegrationTestSupport 
             assertThat(context.getAuthentication().getCredentials()).isNull();
             assertThat(context.getAuthentication().getAuthorities()).isEmpty();
 
-            fixture.mvc.perform(get("/api/test/authenticated").session(session))
+            fixture.mvc.perform(apiGet("/api/test/authenticated").session(session))
                     .andExpect(status().isOk())
                     .andExpect(content().string(id.toString()));
         }
@@ -83,13 +84,13 @@ class AuthenticationFlowIntegrationTests extends PostgresIntegrationTestSupport 
             var invalidBodies = new String[] {"{", "{}", "{\"email\":\"\",\"password\":\"x\"}",
                     "{\"email\":\"a@example.test\"}", "{\"email\":\"a@example.test\",\"password\":\"\"}"};
             for (var body : invalidBodies) {
-                fixture.mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
+                fixture.mvc.perform(apiPost("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
                         .andExpect(status().isBadRequest())
                         .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
             }
-            fixture.mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.TEXT_PLAIN).content("secret"))
+            fixture.mvc.perform(apiPost("/api/auth/login").with(csrf()).contentType(MediaType.TEXT_PLAIN).content("secret"))
                     .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
-            fixture.mvc.perform(post("/api/auth/login").with(csrf()).header("Content-Type", "application/json; broken")
+            fixture.mvc.perform(apiPost("/api/auth/login").with(csrf()).header("Content-Type", "application/json; broken")
                             .content("{\"email\":\"a@example.test\",\"password\":\"secret\"}"))
                     .andExpect(status().isBadRequest()).andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
@@ -108,7 +109,7 @@ class AuthenticationFlowIntegrationTests extends PostgresIntegrationTestSupport 
                     .andExpect(status().isForbidden()).andReturn();
             assertThat(rejected.getRequest().getUserPrincipal()).isNull();
 
-            fixture.mvc.perform(get("/api/test/authenticated"))
+            fixture.mvc.perform(apiGet("/api/test/authenticated"))
                     .andExpect(status().isUnauthorized())
                     .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
@@ -123,9 +124,17 @@ class AuthenticationFlowIntegrationTests extends PostgresIntegrationTestSupport 
         }
     }
 
-    private static org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder login(String email, String password) {
-        return post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+    private static MockHttpServletRequestBuilder login(String email, String password) {
+        return apiPost("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}");
+    }
+
+    private static MockHttpServletRequestBuilder apiPost(String path) {
+        return post(path).servletPath(path);
+    }
+
+    private static MockHttpServletRequestBuilder apiGet(String path) {
+        return get(path).servletPath(path);
     }
 
     private static Fixture fixture() throws Exception {
