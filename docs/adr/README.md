@@ -26,3 +26,4 @@ documentation patches.
 | ADR | Title | Status | Date |
 | --- | --- | --- | --- |
 | [ADR-0001](ADR-0001-mobile-client-architecture-and-authentication-boundary.md) | Mobile Client Architecture and Authentication Boundary | ACCEPTED | 2026-08-27 |
+| [ADR-0002](ADR-0002-v1-student-credential-mechanism.md) | V1 Student Credential Mechanism | PROPOSED | 2026-08-28 |
