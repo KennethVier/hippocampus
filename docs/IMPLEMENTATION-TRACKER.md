@@ -399,7 +399,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Security
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Persist sessions server-side.
 - **Build:** Enable Spring Session JDBC and required schema; configure idle timeout.
 - **How it works:** Browser stores only secure session cookie.
