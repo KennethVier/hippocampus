@@ -38,7 +38,7 @@ describe('apiClient success handling', () => {
     const [url, init] = fetchMock.mock.calls[1] ?? []
     const csrfHeaders = new Headers(csrfInit?.headers)
     const headers = new Headers(init?.headers)
-    expect(csrfUrl).toBe('/auth/csrf')
+    expect(csrfUrl).toBe('/api/auth/csrf')
     expect(csrfInit?.method).toBe('GET')
     expect(csrfInit?.credentials).toBe('include')
     expect(csrfInit?.signal).toBe(controller.signal)
@@ -105,6 +105,19 @@ describe('apiClient success handling', () => {
     expect(headers.get('Accept')).toBe(ACCEPT_HEADER_VALUE)
     expect(headers.has('Content-Type')).toBe(false)
     expect(headers.get('X-CSRF-TOKEN')).toBe('synthetic-csrf-token')
+  })
+
+  it('resolves CSRF acquisition against the configured origin with the API path prefix', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.test')
+    const fetchMock = vi.fn<typeof fetch>()
+    fetchMock
+      .mockResolvedValueOnce(csrfResponse('synthetic-csrf-token'))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await apiClient.requestJson('/subjects', { method: 'POST', body: { name: 'Anatomy' } })
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.example.test/api/auth/csrf')
   })
 
   it('allows safe custom headers without surrendering transport ownership', async () => {
@@ -196,7 +209,7 @@ describe('apiClient header ownership', () => {
     await apiClient.requestJson('/subjects', { method })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('/auth/csrf')
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/auth/csrf')
     expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('X-CSRF-TOKEN'))
       .toBe('synthetic-csrf-token')
   })

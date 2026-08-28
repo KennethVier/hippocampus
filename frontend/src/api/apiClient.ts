@@ -112,7 +112,7 @@ async function addCsrfHeaderIfUnsafe(
 }
 
 async function acquireCsrfToken(signal: AbortSignal | undefined): Promise<string> {
-  const response = await executeRequest<unknown>('/auth/csrf', {
+  const response = await executeRequest<unknown>('/api/auth/csrf', {
     method: 'GET',
     headers: createHeaders(undefined, false),
     signal,
