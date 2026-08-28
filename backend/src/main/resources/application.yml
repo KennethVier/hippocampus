@@ -9,6 +9,13 @@ spring:
     locations: classpath:db/migration
     clean-disabled: true
 
+hippocampus:
+  security:
+    login:
+      max-attempts: 60
+      window: PT1M
+      maximum-tracked-addresses: 1024
+
 server:
   address: 127.0.0.1
 

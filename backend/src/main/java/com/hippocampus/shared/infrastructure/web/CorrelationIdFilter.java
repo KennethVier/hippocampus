@@ -16,9 +16,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 @Component
-final class CorrelationIdFilter extends OncePerRequestFilter {
+public final class CorrelationIdFilter extends OncePerRequestFilter {
 
-    static final String HEADER_NAME = "X-Correlation-ID";
+    public static final String HEADER_NAME = "X-Correlation-ID";
     static final String MDC_KEY = "correlationId";
     private static final Logger LOG = LoggerFactory.getLogger(CorrelationIdFilter.class);
     private static final String REQUEST_ATTRIBUTE = CorrelationIdFilter.class.getName() + ".correlationId";
@@ -53,7 +53,7 @@ final class CorrelationIdFilter extends OncePerRequestFilter {
         }
     }
 
-    static String currentCorrelationId(HttpServletRequest request) {
+    public static String currentCorrelationId(HttpServletRequest request) {
         var correlationId = request.getAttribute(REQUEST_ATTRIBUTE);
         if (correlationId instanceof String value) {
             return value;
