@@ -1,15 +1,17 @@
 ---
 name: hippocampus-java-spring-engineering
-description: Use for Java 25 and Spring Boot 4.1.x backend planning, implementation, refactoring, or review in Hippocampus. Applies SRP/SOLID, deliberate design-pattern selection, modern Java 25 idioms, modular-monolith boundaries, transaction discipline, persistence, API design, testability, and secure maintainable engineering without adding unapproved architecture.
+description: Use for Java 25 backend planning, implementation, refactoring, or review in Hippocampus. Applies SRP/SOLID, deliberate design-pattern selection, modern Java 25 idioms, modular-monolith boundaries, application/domain/port discipline, transaction awareness, persistence boundaries, testability, and secure maintainable engineering. Apply hippocampus-spring-boot-engineering alongside this skill for Spring Boot framework details.
 ---
 
-# Java / Spring Engineering for Hippocampus
+# Java Engineering for Hippocampus
 
 ## First Rule
 
 Read the tracker task and relevant Source-of-Truth documents before selecting an abstraction or pattern. Use the simplest design that preserves approved boundaries, correctness, security, and domain intent.
 
 Do not optimize for the number of patterns, newest syntax, or fewest lines of code.
+
+For Spring Boot 4.1.x framework concerns, also apply `hippocampus-spring-boot-engineering`. This skill is the Java 25 language/backend engineering baseline; the Spring Boot skill is the detailed framework authority.
 
 ## Engineering Priority
 
@@ -211,67 +213,65 @@ Do not use parallel streams without a measured workload and explicit concurrency
 - Comments should explain non-obvious reasoning or constraints, not restate code.
 - Avoid premature generic frameworks, reflection-heavy abstractions, and deep inheritance.
 
-## Spring Practices
+## Spring Boot Handoff
 
-- Constructor injection only for required dependencies.
-- Thin controllers: HTTP translation, validation, delegation, response mapping.
-- Validate transport shape at the API boundary.
-- Validate authorization, ownership, state, and business invariants in application/domain boundaries where they cannot be bypassed by another transport.
-- Centralize exception → `ProblemDetail` mapping.
-- Never return JPA entities directly.
-- Prefer explicit configuration when behavior affects security or architecture.
-- Keep framework annotations out of domain code where possible.
+Apply `hippocampus-spring-boot-engineering` for detailed rules governing:
+
+- dependency injection and bean design;
+- stereotypes and configuration;
+- MVC/controller boundaries and validation;
+- transaction proxy semantics;
+- Spring Data/JPA behavior;
+- Spring Security/session/CSRF/CORS configuration;
+- exception-to-`ProblemDetail` mapping;
+- HTTP clients/external adapters;
+- async/scheduling/concurrency;
+- observability and Actuator;
+- dependency management/BOM discipline;
+- Spring test slices and integration testing.
+
+Java/domain design must remain understandable and testable without Spring wherever framework behavior is not part of the problem.
 
 ## Transactions
 
-Transactions belong primarily at application-use-case boundaries and should be short.
+At the Java/application-design level, treat transactions as explicit units of work and keep them short. The Spring Boot skill defines the framework-specific `@Transactional`/proxy rules.
 
-Never hold a DB transaction open while waiting for Gemini/Ollama or another remote network dependency unless an approved requirement makes it unavoidable.
+Never design a database unit of work that unnecessarily spans Gemini/Ollama or another remote network dependency.
 
-Preferred flow where applicable:
+## Persistence Boundaries
 
-```text
-read state
-→ external call
-→ validate result
-→ short write transaction
-→ optimistic concurrency check
-```
+At the Java/application-design level:
 
-## Persistence / JPA
+- PostgreSQL is authoritative;
+- Flyway owns schema evolution;
+- Spring Data types remain infrastructure concerns;
+- separate persistence entities from domain objects when JPA would distort the domain;
+- enforce critical integrity in both application logic and database constraints where appropriate;
+- do not solve domain modeling with arbitrary JSON/untyped maps when relational/domain structure is known.
 
-- PostgreSQL is authoritative.
-- Flyway owns schema evolution.
-- Hibernate production schema mode validates rather than auto-updates.
-- Prefer lazy associations unless a deliberate query requires otherwise.
-- Avoid unnecessary bidirectional relationships.
-- Prevent N+1 with deliberate fetch/projection/query design.
-- Spring Data types remain infrastructure concerns.
-- Separate persistence entities from domain objects when JPA would distort the domain.
-- Enforce critical integrity in both application logic and database constraints where appropriate.
-- Do not solve domain modeling with arbitrary JSON/untyped maps when relational/domain structure is known.
+Detailed JPA/Spring Data standards live in `hippocampus-spring-boot-engineering`.
 
 ## DTO Boundaries
 
-Keep API DTOs, application commands/results, domain models, JPA entities, and provider DTOs conceptually separate.
+Keep API DTOs, application commands/results, domain models, persistence entities, and provider DTOs conceptually separate.
 
 Prefer explicit/manual mapping until volume and repeated mapping complexity justify a mapper.
 
 ## Concurrency / Idempotency
 
-Use optimistic locking when stale writes matter. Make retryable jobs/commands idempotent. Never overwrite immutable attempt/evidence history.
+Use optimistic concurrency when stale writes matter. Make retryable jobs/commands idempotent. Never overwrite immutable attempt/evidence history.
 
 Do not add concurrency mechanisms without identifying the race being prevented.
 
 ## Testing
 
-Apply `hippocampus-testing-security`.
+Apply `hippocampus-testing-security` and, for Spring-specific tests, `hippocampus-spring-boot-engineering`.
 
 Use the cheapest meaningful test:
 
 1. pure unit/domain test;
 2. application test with fake ports;
-3. Spring integration when framework behavior matters;
+3. focused Spring integration when framework behavior matters;
 4. Testcontainers when PostgreSQL behavior matters;
 5. E2E for critical cross-layer journeys.
 
@@ -286,7 +286,7 @@ Do not start Spring for pure domain rules.
 - Record/sealed hierarchy/value object appropriate?
 - Explicit types reveal important contracts?
 - Invalid states and failures modeled explicitly?
-- Transaction too broad?
+- Framework-specific decisions delegated to and compliant with `hippocampus-spring-boot-engineering`?
 - JPA/provider details leaking inward?
 - Authorization/ownership enforced below transport?
 - Tests at the correct layer?
