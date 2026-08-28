@@ -3,8 +3,9 @@ package com.hippocampus;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,6 +45,8 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertUsersEmailUniqueConstraint();
         assertUsersHasNoCheckConstraint();
         assertPasswordCredentialContract();
+        assertPasswordCredentialPrimaryKey();
+        assertPasswordCredentialForeignKey();
 
         try (var secondContext = startApplicationWithFlyway()) {
             assertThat(secondContext.isActive()).isTrue();
@@ -166,14 +169,48 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                     "user_id", "uuid:NO", "password_hash", "character varying:NO",
                     "created_at", "timestamp with time zone:NO", "updated_at", "timestamp with time zone:NO"));
         }
-        try (var connection = openPostgresConnection(); var statement = connection.createStatement();
+    }
+
+    private static void assertPasswordCredentialPrimaryKey() throws SQLException {
+        assertConstraintColumns("user_password_credentials", "PRIMARY KEY", List.of("user_id"));
+    }
+
+    private static void assertPasswordCredentialForeignKey() throws SQLException {
+        try (var connection = openPostgresConnection();
+                var statement = connection.createStatement();
                 var result = statement.executeQuery("""
-                    SELECT confdeltype FROM pg_constraint
-                    WHERE conrelid='public.user_password_credentials'::regclass AND contype='f'
+                    SELECT kcu.column_name AS child_column,
+                           ccu.table_name AS parent_table,
+                           ccu.column_name AS parent_column,
+                           rc.delete_rule
+                    FROM information_schema.table_constraints tc
+                    JOIN information_schema.key_column_usage kcu
+                      ON tc.constraint_catalog = kcu.constraint_catalog
+                     AND tc.constraint_schema = kcu.constraint_schema
+                     AND tc.constraint_name = kcu.constraint_name
+                    JOIN information_schema.constraint_column_usage ccu
+                      ON tc.constraint_catalog = ccu.constraint_catalog
+                     AND tc.constraint_schema = ccu.constraint_schema
+                     AND tc.constraint_name = ccu.constraint_name
+                    JOIN information_schema.referential_constraints rc
+                      ON tc.constraint_catalog = rc.constraint_catalog
+                     AND tc.constraint_schema = rc.constraint_schema
+                     AND tc.constraint_name = rc.constraint_name
+                    WHERE tc.table_schema = 'public'
+                      AND tc.table_name = 'user_password_credentials'
+                      AND tc.constraint_type = 'FOREIGN KEY'
+                    ORDER BY kcu.ordinal_position
                     """)) {
-            assertThat(result.next()).isTrue();
-            assertThat(result.getString(1)).isEqualTo("c");
-            assertThat(result.next()).isFalse();
+            var actual = new ArrayList<ForeignKeyMetadata>();
+            while (result.next()) {
+                actual.add(new ForeignKeyMetadata(
+                        result.getString("child_column"),
+                        result.getString("parent_table"),
+                        result.getString("parent_column"),
+                        result.getString("delete_rule")));
+            }
+            assertThat(actual).containsExactly(
+                    new ForeignKeyMetadata("user_id", "users", "id", "CASCADE"));
         }
     }
 
@@ -203,11 +240,11 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
     }
 
     private static void assertUsersPrimaryKey() throws SQLException {
-        assertConstraintColumns("PRIMARY KEY", Set.of("id"));
+        assertConstraintColumns("users", "PRIMARY KEY", List.of("id"));
     }
 
     private static void assertUsersEmailUniqueConstraint() throws SQLException {
-        assertConstraintColumns("UNIQUE", Set.of("email"));
+        assertConstraintColumns("users", "UNIQUE", List.of("email"));
     }
 
     private static void assertUsersHasNoCheckConstraint() throws SQLException {
@@ -224,28 +261,38 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         }
     }
 
-    private static void assertConstraintColumns(String constraintType, Set<String> expectedColumns)
+    private static void assertConstraintColumns(
+            String tableName, String constraintType, List<String> expectedColumns)
             throws SQLException {
         try (var connection = openPostgresConnection();
                 var statement = connection.prepareStatement("""
-                        SELECT kcu.column_name
+                        SELECT tc.constraint_name, kcu.column_name
                         FROM information_schema.table_constraints tc
                         JOIN information_schema.key_column_usage kcu
                           ON tc.constraint_catalog = kcu.constraint_catalog
                          AND tc.constraint_schema = kcu.constraint_schema
                          AND tc.constraint_name = kcu.constraint_name
                         WHERE tc.table_schema = 'public'
-                          AND tc.table_name = 'users'
+                          AND tc.table_name = ?
                           AND tc.constraint_type = ?
+                        ORDER BY tc.constraint_name, kcu.ordinal_position
                         """)) {
-            statement.setString(1, constraintType);
+            statement.setString(1, tableName);
+            statement.setString(2, constraintType);
             try (var result = statement.executeQuery()) {
-                var actual = new java.util.HashSet<String>();
+                var actual = new java.util.LinkedHashMap<String, List<String>>();
                 while (result.next()) {
-                    actual.add(result.getString("column_name"));
+                    actual.computeIfAbsent(result.getString("constraint_name"), ignored -> new ArrayList<>())
+                            .add(result.getString("column_name"));
                 }
-                assertThat(actual).isEqualTo(expectedColumns);
+                assertThat(actual)
+                        .as("Expected exactly one %s constraint on %s", constraintType, tableName)
+                        .hasSize(1);
+                assertThat(actual.values()).containsExactly(expectedColumns);
             }
         }
     }
+
+    private record ForeignKeyMetadata(
+            String childColumn, String parentTable, String parentColumn, String deleteRule) {}
 }

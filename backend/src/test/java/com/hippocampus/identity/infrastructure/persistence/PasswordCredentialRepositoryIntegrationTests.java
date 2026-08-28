@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
@@ -48,8 +49,12 @@ class PasswordCredentialRepositoryIntegrationTests extends PostgresIntegrationTe
 
             assertThatThrownBy(() -> insertCredential(user.getId(), encoder.encode("runtime duplicate")))
                     .isInstanceOf(Exception.class);
-            assertThatThrownBy(() -> insertCredential(UUID.randomUUID(), null))
-                    .isInstanceOf(Exception.class);
+
+            var nullHashUser = users.saveAndFlush(
+                    new UserEntity("null-hash@example.test", "Student", UserStatus.ACTIVE));
+            assertThatThrownBy(() -> credentials.saveAndFlush(
+                    new PasswordCredentialEntity(nullHashUser.getId(), null)))
+                    .isInstanceOf(DataIntegrityViolationException.class);
         }
     }
 
