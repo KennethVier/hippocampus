@@ -15,12 +15,16 @@ afterEach(() => {
 describe('apiClient success handling', () => {
   it('returns a successful JSON response with owned headers and credentials', async () => {
     const controller = new AbortController()
-    const fetchMock = stubFetch(
-      new Response(JSON.stringify({ id: 'subject-1' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      }),
-    )
+    const fetchMock = vi.fn<typeof fetch>()
+    fetchMock
+      .mockResolvedValueOnce(csrfResponse('synthetic-csrf-token'))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'subject-1' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
 
     const result = await apiClient.requestJson<{ id: string }>('/subjects', {
       method: 'POST',
@@ -29,15 +33,24 @@ describe('apiClient success handling', () => {
     })
 
     expect(result).toEqual({ id: 'subject-1' })
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    const [url, init] = fetchMock.mock.calls[0] ?? []
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const [csrfUrl, csrfInit] = fetchMock.mock.calls[0] ?? []
+    const [url, init] = fetchMock.mock.calls[1] ?? []
+    const csrfHeaders = new Headers(csrfInit?.headers)
     const headers = new Headers(init?.headers)
+    expect(csrfUrl).toBe('/auth/csrf')
+    expect(csrfInit?.method).toBe('GET')
+    expect(csrfInit?.credentials).toBe('include')
+    expect(csrfInit?.signal).toBe(controller.signal)
+    expect(csrfHeaders.get('Accept')).toBe(ACCEPT_HEADER_VALUE)
+    expect(csrfHeaders.has('Content-Type')).toBe(false)
     expect(url).toBe('/subjects')
     expect(init?.credentials).toBe('include')
     expect(init?.signal).toBe(controller.signal)
     expect(init?.body).toBe(JSON.stringify({ name: 'Anatomy' }))
     expect(headers.get('Accept')).toBe(ACCEPT_HEADER_VALUE)
     expect(headers.get('Content-Type')).toBe('application/json')
+    expect(headers.get('X-CSRF-TOKEN')).toBe('synthetic-csrf-token')
   })
 
   it('returns undefined for 204 and empty successful responses', async () => {
@@ -64,12 +77,16 @@ describe('apiClient success handling', () => {
   it('passes FormData unchanged and leaves multipart Content-Type to the browser', async () => {
     const formData = new FormData()
     formData.append('file', new Blob(['synthetic']), 'notes.txt')
-    const fetchMock = stubFetch(
-      new Response(JSON.stringify({ materialId: 'material-1' }), {
-        status: 201,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    )
+    const fetchMock = vi.fn<typeof fetch>()
+    fetchMock
+      .mockResolvedValueOnce(csrfResponse('synthetic-csrf-token'))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ materialId: 'material-1' }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
 
     const result = await apiClient.requestMultipart<{ materialId: string }>(
       '/materials',
@@ -77,13 +94,17 @@ describe('apiClient success handling', () => {
     )
 
     expect(result).toEqual({ materialId: 'material-1' })
-    const init = fetchMock.mock.calls[0]?.[1]
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const csrfInit = fetchMock.mock.calls[0]?.[1]
+    const init = fetchMock.mock.calls[1]?.[1]
+    expect(csrfInit?.credentials).toBe('include')
     const headers = new Headers(init?.headers)
     expect(init?.method).toBe('POST')
     expect(init?.body).toBe(formData)
     expect(init?.credentials).toBe('include')
     expect(headers.get('Accept')).toBe(ACCEPT_HEADER_VALUE)
     expect(headers.has('Content-Type')).toBe(false)
+    expect(headers.get('X-CSRF-TOKEN')).toBe('synthetic-csrf-token')
   })
 
   it('allows safe custom headers without surrendering transport ownership', async () => {
@@ -91,15 +112,30 @@ describe('apiClient success handling', () => {
 
     await apiClient.requestJson('/subjects', {
       headers: {
-        'X-CSRF-TOKEN': 'synthetic-csrf-token',
         'Idempotency-Key': 'synthetic-idempotency-key',
       },
     })
 
     const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers)
-    expect(headers.get('X-CSRF-TOKEN')).toBe('synthetic-csrf-token')
     expect(headers.get('Idempotency-Key')).toBe('synthetic-idempotency-key')
     expect(headers.get('Accept')).toBe(ACCEPT_HEADER_VALUE)
+  })
+
+  it('rejects caller-supplied CSRF headers before any request', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const error = await captureApiError(
+      apiClient.requestJson('/subjects', {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': 'caller-token' },
+        body: { name: 'Anatomy' },
+      }),
+    )
+
+    expect(error.code).toBe('REQUEST_HEADER_NOT_ALLOWED')
+    expect(JSON.stringify(error)).not.toContain('caller-token')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
 
@@ -108,6 +144,7 @@ describe('apiClient header ownership', () => {
     ['Accept', 'text/plain'],
     ['Content-Type', 'application/xml'],
     ['Authorization', 'Bearer private-token'],
+    ['X-CSRF-TOKEN', 'private-csrf-token'],
   ])('rejects caller-controlled JSON header %s', async (header, value) => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
@@ -138,6 +175,47 @@ describe('apiClient header ownership', () => {
 
     expect(error.code).toBe('REQUEST_HEADER_NOT_ALLOWED')
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it.each(['GET', 'HEAD', 'OPTIONS', 'TRACE'])('does not acquire CSRF for safe method %s', async (method) => {
+    const fetchMock = stubFetch(new Response(null, { status: 204 }))
+
+    await apiClient.requestJson('/subjects', { method })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/subjects')
+  })
+
+  it.each(['post', 'PUT', 'patch', 'DELETE', 'PROPFIND'])('acquires CSRF for unsafe method %s', async (method) => {
+    const fetchMock = vi.fn<typeof fetch>()
+    fetchMock
+      .mockResolvedValueOnce(csrfResponse('synthetic-csrf-token'))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await apiClient.requestJson('/subjects', { method })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/auth/csrf')
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('X-CSRF-TOKEN'))
+      .toBe('synthetic-csrf-token')
+  })
+
+  it('defaults bodyless JSON requests to safe GET and multipart requests to unsafe POST', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+    fetchMock
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(csrfResponse('synthetic-csrf-token'))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await apiClient.requestJson('/subjects')
+    await apiClient.requestMultipart('/materials', new FormData())
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('GET')
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe('GET')
+    expect(fetchMock.mock.calls[2]?.[1]?.method).toBe('POST')
   })
 })
 
@@ -348,6 +426,52 @@ describe('apiClient failure normalization', () => {
     expect(Object.prototype.hasOwnProperty.call(error, 'cause')).toBe(false)
   })
 
+  it('does not send an unsafe request when CSRF acquisition returns an HTTP failure', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      problemResponse({
+        status: 403,
+        code: 'CSRF_VALIDATION_FAILED',
+        message: 'CSRF validation failed.',
+        details: {},
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const error = await captureApiError(
+      apiClient.requestJson('/subjects', { method: 'POST', body: { name: 'Anatomy' } }),
+    )
+
+    expect(error).toMatchObject({ kind: 'http', status: 403, code: 'CSRF_VALIDATION_FAILED' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['missing token', {}],
+    ['blank token', { token: '   ' }],
+    ['non-string token', { token: 42 }],
+  ])('fails closed for %s CSRF payload', async (_name, payload) => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const error = await captureApiError(
+      apiClient.requestJson('/subjects', { method: 'POST', body: { name: 'Anatomy' } }),
+    )
+
+    expect(error).toMatchObject({
+      kind: 'invalid-response',
+      status: 200,
+      code: 'INVALID_RESPONSE',
+      message: 'The server returned an invalid response.',
+    })
+    expect(JSON.stringify(error)).not.toContain('42')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('distinguishes caller cancellation and passes the signal to fetch', async () => {
     const controller = new AbortController()
     controller.abort()
@@ -369,6 +493,40 @@ describe('apiClient failure normalization', () => {
     })
     expect(JSON.stringify(error)).not.toContain('PRIVATE_ABORT_EXCEPTION')
     expect(Object.prototype.hasOwnProperty.call(error, 'cause')).toBe(false)
+  })
+
+  it('normalizes abort during CSRF acquisition and never sends the mutation', async () => {
+    const controller = new AbortController()
+    const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(
+      new DOMException('PRIVATE_ABORT_EXCEPTION', 'AbortError'),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const error = await captureApiError(
+      apiClient.requestJson('/subjects', { method: 'POST', signal: controller.signal }),
+    )
+
+    expect(error.code).toBe('REQUEST_ABORTED')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBe(controller.signal)
+  })
+
+  it('normalizes abort during the mutation after successful CSRF acquisition', async () => {
+    const controller = new AbortController()
+    const fetchMock = vi.fn<typeof fetch>()
+    fetchMock
+      .mockResolvedValueOnce(csrfResponse('private-csrf-token'))
+      .mockRejectedValueOnce(new DOMException('PRIVATE_ABORT_EXCEPTION', 'AbortError'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const error = await captureApiError(
+      apiClient.requestJson('/subjects', { method: 'POST', signal: controller.signal }),
+    )
+
+    expect(error.code).toBe('REQUEST_ABORTED')
+    expect(JSON.stringify(error)).not.toContain('private-csrf-token')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[1]?.[1]?.signal).toBe(controller.signal)
   })
 
   it('normalizes JSON serialization failure without retaining the source value', async () => {
@@ -432,6 +590,13 @@ function stubFetch(response: Response): ReturnType<typeof vi.fn<typeof fetch>> {
   const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(response)
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
+}
+
+function csrfResponse(token: string): Response {
+  return new Response(JSON.stringify({ token }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  })
 }
 
 function problemResponse(

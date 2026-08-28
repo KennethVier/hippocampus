@@ -2,7 +2,8 @@ import { ApiConfigurationError, resolveApiUrl } from './apiConfig'
 
 const ACCEPT_HEADER_VALUE = 'application/json, application/problem+json'
 const CORRELATION_ID_HEADER = 'X-Correlation-ID'
-const CONTROLLED_HEADERS = ['accept', 'content-type', 'authorization'] as const
+const CONTROLLED_HEADERS = ['accept', 'content-type', 'authorization', 'x-csrf-token'] as const
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE'])
 const ERROR_CODE_PATTERN = /^[A-Z][A-Z0-9_]*$/
 const CORRELATION_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -57,11 +58,13 @@ async function requestJson<TResponse>(
   options: JsonRequestOptions = {},
 ): Promise<TResponse | undefined> {
   const hasBody = options.body !== undefined
-  const body = hasBody ? serializeJsonBody(options.body) : undefined
   const headers = createHeaders(options.headers, hasBody)
+  const body = hasBody ? serializeJsonBody(options.body) : undefined
+  const method = effectiveMethod(options.method, 'GET')
+  await addCsrfHeaderIfUnsafe(method, headers, options.signal)
 
   return executeRequest<TResponse>(path, {
-    method: options.method,
+    method,
     headers,
     signal: options.signal,
     credentials: 'include',
@@ -75,14 +78,52 @@ async function requestMultipart<TResponse>(
   options: ApiRequestOptions = {},
 ): Promise<TResponse | undefined> {
   const headers = createHeaders(options.headers, false)
+  const method = effectiveMethod(options.method, 'POST')
+  await addCsrfHeaderIfUnsafe(method, headers, options.signal)
 
   return executeRequest<TResponse>(path, {
-    method: options.method ?? 'POST',
+    method,
     headers,
     signal: options.signal,
     credentials: 'include',
     body,
   })
+}
+
+function effectiveMethod(method: string | undefined, defaultMethod: string): string {
+  return (method ?? defaultMethod).toUpperCase()
+}
+
+function isUnsafeMethod(method: string): boolean {
+  return !SAFE_METHODS.has(method)
+}
+
+async function addCsrfHeaderIfUnsafe(
+  method: string,
+  headers: Headers,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  if (!isUnsafeMethod(method)) {
+    return
+  }
+
+  const token = await acquireCsrfToken(signal)
+  headers.set('X-CSRF-TOKEN', token)
+}
+
+async function acquireCsrfToken(signal: AbortSignal | undefined): Promise<string> {
+  const response = await executeRequest<unknown>('/auth/csrf', {
+    method: 'GET',
+    headers: createHeaders(undefined, false),
+    signal,
+    credentials: 'include',
+  })
+
+  if (!isRecord(response) || typeof response.token !== 'string' || !response.token.trim()) {
+    throw invalidResponse(200, null)
+  }
+
+  return response.token.trim()
 }
 
 export const apiClient = Object.freeze({

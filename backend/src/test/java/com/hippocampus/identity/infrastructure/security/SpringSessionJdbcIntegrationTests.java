@@ -21,11 +21,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.web.csrf.CsrfToken;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.jayway.jsonpath.JsonPath;
 import com.hippocampus.identity.infrastructure.persistence.PasswordCredentialEntity;
 import com.hippocampus.identity.infrastructure.persistence.PasswordCredentialRepository;
 import com.hippocampus.identity.infrastructure.persistence.UserEntity;
@@ -49,11 +48,11 @@ class SpringSessionJdbcIntegrationTests extends PostgresIntegrationTestSupport {
             var cookieManager = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
             var client = httpClient(cookieManager);
 
-            var csrf = get(client, endpoint(context, "/api/auth/login"));
+            var csrf = get(client, endpoint(context, "/api/auth/csrf"));
             assertThat(csrf.statusCode()).isEqualTo(200);
             var preLoginCookie = captureSessionCookie(csrf);
 
-            var login = login(client, context, "jdbc-session@example.test", csrf.body().trim());
+            var login = login(client, context, "jdbc-session@example.test", csrfToken(csrf));
             assertThat(login.statusCode()).isEqualTo(204);
             assertThat(login.body()).isEmpty();
             var postLoginCookie = captureSessionCookie(login);
@@ -77,9 +76,9 @@ class SpringSessionJdbcIntegrationTests extends PostgresIntegrationTestSupport {
 
         try (var applicationA = startApplication()) {
             userId = createUser(applicationA, "restart-session@example.test");
-            var csrf = get(client, endpoint(applicationA, "/api/auth/login"));
+            var csrf = get(client, endpoint(applicationA, "/api/auth/csrf"));
             capturedCookie = captureSessionCookie(
-                    login(client, applicationA, "restart-session@example.test", csrf.body().trim()));
+                    login(client, applicationA, "restart-session@example.test", csrfToken(csrf)));
             assertThat(capturedCookie.value()).doesNotContain(userId.toString());
             assertBaseCookie(capturedCookie);
             assertAuthenticated(client, applicationA, userId);
@@ -100,8 +99,8 @@ class SpringSessionJdbcIntegrationTests extends PostgresIntegrationTestSupport {
             var userId = createUser(context, "expired-session@example.test");
             var cookieManager = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
             var client = httpClient(cookieManager);
-            var csrf = get(client, endpoint(context, "/api/auth/login"));
-            var login = login(client, context, "expired-session@example.test", csrf.body().trim());
+            var csrf = get(client, endpoint(context, "/api/auth/csrf"));
+            var login = login(client, context, "expired-session@example.test", csrfToken(csrf));
             var cookie = captureSessionCookie(login);
             assertBaseCookie(cookie);
             assertThat(sessionRow(userId).principalName()).isEqualTo(userId.toString());
@@ -134,6 +133,10 @@ class SpringSessionJdbcIntegrationTests extends PostgresIntegrationTestSupport {
 
     private static HttpResponse<String> get(HttpClient client, URI endpoint) throws Exception {
         return client.send(HttpRequest.newBuilder(endpoint).GET().build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private static String csrfToken(HttpResponse<String> response) {
+        return JsonPath.read(response.body(), "$.token");
     }
 
     private static HttpResponse<String> login(HttpClient client, ConfigurableApplicationContext context,
@@ -254,12 +257,6 @@ class SpringSessionJdbcIntegrationTests extends PostgresIntegrationTestSupport {
 
     @RestController
     static class TestSessionController {
-        @GetMapping("/api/auth/login")
-        String csrf(HttpServletRequest request) {
-            var token = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
-            return token.getToken();
-        }
-
         @GetMapping("/api/test/authenticated")
         String authenticated(Authentication authentication) {
             return ((HippocampusPrincipal) authentication.getPrincipal()).userId().toString();
