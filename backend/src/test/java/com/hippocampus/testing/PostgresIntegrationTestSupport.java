@@ -3,6 +3,7 @@ package com.hippocampus.testing;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Arrays;
 
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
@@ -62,23 +63,31 @@ public abstract class PostgresIntegrationTestSupport {
     }
 
     protected static ConfigurableApplicationContext startApplicationWithFlyway(Class<?>... additionalSources) {
+        return startApplicationWithFlywayAndArguments(additionalSources);
+    }
+
+    protected static ConfigurableApplicationContext startApplicationWithFlywayAndArguments(
+            Class<?>[] additionalSources, String... additionalArguments) {
         var sources = new Class<?>[additionalSources.length + 1];
         sources[0] = HippocampusApplication.class;
         System.arraycopy(additionalSources, 0, sources, 1, additionalSources.length);
+        var defaultArguments = new String[] {
+                "--spring.autoconfigure.exclude=",
+                "--spring.datasource.url=" + POSTGRES.getJdbcUrl(),
+                "--spring.datasource.username=" + POSTGRES.getUsername(),
+                "--spring.datasource.password=" + POSTGRES.getPassword(),
+                "--spring.flyway.enabled=true",
+                "--spring.flyway.url=" + POSTGRES.getJdbcUrl(),
+                "--spring.flyway.user=" + POSTGRES.getUsername(),
+                "--spring.flyway.password=" + POSTGRES.getPassword(),
+                "--spring.flyway.baseline-on-migrate=false",
+                "--server.port=0"
+        };
+        var applicationArguments = Arrays.copyOf(defaultArguments, defaultArguments.length + additionalArguments.length);
+        System.arraycopy(additionalArguments, 0, applicationArguments, defaultArguments.length, additionalArguments.length);
         return new SpringApplicationBuilder(sources)
                 .web(WebApplicationType.SERVLET)
                 .profiles("test")
-                .run(
-                        "--spring.autoconfigure.exclude=",
-                        "--spring.datasource.url=" + POSTGRES.getJdbcUrl(),
-                        "--spring.datasource.username=" + POSTGRES.getUsername(),
-                        "--spring.datasource.password=" + POSTGRES.getPassword(),
-                        "--spring.flyway.enabled=true",
-                        "--spring.flyway.url=" + POSTGRES.getJdbcUrl(),
-                        "--spring.flyway.user=" + POSTGRES.getUsername(),
-                        "--spring.flyway.password=" + POSTGRES.getPassword(),
-                        "--spring.flyway.baseline-on-migrate=false",
-                        "--hippocampus.security.login.max-attempts=2",
-                        "--server.port=0");
+                .run(applicationArguments);
     }
 }

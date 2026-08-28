@@ -90,7 +90,7 @@ class AuthenticationFlowIntegrationTests extends PostgresIntegrationTestSupport 
             }
             fixture.mvc.perform(apiPost("/api/auth/login").with(csrf()).contentType(MediaType.TEXT_PLAIN).content("secret"))
                     .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
-            fixture.mvc.perform(apiPost("/api/auth/login").with(csrf()).header("Content-Type", "application/json; broken")
+            fixture.mvc.perform(apiPost("/api/auth/login").with(csrf()).header("Content-Type", "not-a-media-type")
                             .content("{\"email\":\"a@example.test\",\"password\":\"secret\"}"))
                     .andExpect(status().isBadRequest()).andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
@@ -102,7 +102,7 @@ class AuthenticationFlowIntegrationTests extends PostgresIntegrationTestSupport 
     }
 
     @Test
-    void csrfUnauthenticatedApiAndRateLimitContractsAreEnforced() throws Exception {
+    void csrfAndUnauthenticatedApiContractsAreEnforced() throws Exception {
         try (var fixture = fixture()) {
             fixture.createUser("csrf@example.test", UserStatus.ACTIVE, true);
             var rejected = fixture.mvc.perform(login("csrf@example.test", PASSWORD))
@@ -113,12 +113,19 @@ class AuthenticationFlowIntegrationTests extends PostgresIntegrationTestSupport 
                     .andExpect(status().isUnauthorized())
                     .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+        }
+    }
 
-            fixture.mvc.perform(login("nobody@example.test", "wrong").with(csrf()).with(request -> { request.setRemoteAddr("192.0.2.9"); return request; }))
-                    .andExpect(status().isUnauthorized());
-            fixture.mvc.perform(login("nobody@example.test", "wrong").with(csrf()).with(request -> { request.setRemoteAddr("192.0.2.9"); return request; }))
-                    .andExpect(status().isUnauthorized());
-            fixture.mvc.perform(login("nobody@example.test", "wrong").with(csrf()).with(request -> { request.setRemoteAddr("192.0.2.9"); return request; }))
+    @Test
+    void rateLimitContractIsEnforced() throws Exception {
+        try (var fixture = fixtureWithRateLimit(2)) {
+            fixture.mvc.perform(loginFrom("nobody@example.test", "wrong", "192.0.2.9"))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value("AUTHENTICATION_FAILED"));
+            fixture.mvc.perform(loginFrom("nobody@example.test", "wrong", "192.0.2.9"))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value("AUTHENTICATION_FAILED"));
+            fixture.mvc.perform(loginFrom("nobody@example.test", "wrong", "192.0.2.9"))
                     .andExpect(status().isTooManyRequests())
                     .andExpect(jsonPath("$.code").value("AUTHENTICATION_RATE_LIMITED"));
         }
@@ -127,6 +134,13 @@ class AuthenticationFlowIntegrationTests extends PostgresIntegrationTestSupport 
     private static MockHttpServletRequestBuilder login(String email, String password) {
         return apiPost("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}");
+    }
+
+    private static MockHttpServletRequestBuilder loginFrom(String email, String password, String remoteAddress) {
+        return login(email, password).with(csrf()).with(request -> {
+            request.setRemoteAddr(remoteAddress);
+            return request;
+        });
     }
 
     private static MockHttpServletRequestBuilder apiPost(String path) {
@@ -139,6 +153,17 @@ class AuthenticationFlowIntegrationTests extends PostgresIntegrationTestSupport 
 
     private static Fixture fixture() throws Exception {
         var context = startApplicationWithFlyway(TestEndpointConfiguration.class);
+        return fixture(context);
+    }
+
+    private static Fixture fixtureWithRateLimit(int maxAttempts) throws Exception {
+        var context = startApplicationWithFlywayAndArguments(
+                new Class<?>[] {TestEndpointConfiguration.class},
+                "--hippocampus.security.login.max-attempts=" + maxAttempts);
+        return fixture(context);
+    }
+
+    private static Fixture fixture(org.springframework.context.ConfigurableApplicationContext context) {
         var mvc = MockMvcBuilders.webAppContextSetup((WebApplicationContext) context)
                 .apply(org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity())
                 .build();
