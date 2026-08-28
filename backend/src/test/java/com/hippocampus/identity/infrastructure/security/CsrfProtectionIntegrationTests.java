@@ -173,7 +173,7 @@ class CsrfProtectionIntegrationTests extends PostgresIntegrationTestSupport {
     @Test
     void csrfFailureDoesNotDiscloseSubmittedOrSessionValues() throws Exception {
         try (var fixture = fixture()) {
-            var session = new MockHttpSession();
+            var session = new MockHttpSession(null, "PRIVATE_SESSION_ID_VALUE");
             var submitted = "PRIVATE_SUBMITTED_CSRF_TOKEN";
             var result = fixture.mvc.perform(mutation().session(session).header("X-CSRF-TOKEN", submitted))
                     .andExpect(status().isForbidden())
