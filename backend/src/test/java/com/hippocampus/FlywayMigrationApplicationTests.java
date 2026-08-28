@@ -38,8 +38,10 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("1");
         assertSuccessfulFlywayVersion("2");
         assertSuccessfulFlywayVersion("3");
+        assertSuccessfulFlywayVersion("4");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
+        assertSpringSessionSchema();
         assertUsersColumnsMatchContract();
         assertUsersPrimaryKey();
         assertUsersEmailUniqueConstraint();
@@ -55,8 +57,10 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("1");
         assertSuccessfulFlywayVersion("2");
         assertSuccessfulFlywayVersion("3");
+        assertSuccessfulFlywayVersion("4");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
+        assertSpringSessionSchema();
     }
 
     private static void assertDatabaseIsEmpty() throws SQLException {
@@ -147,10 +151,78 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                           AND table_name <> 'flyway_schema_history'
                         ORDER BY table_name
                         """)) {
+            var actual = new ArrayList<String>();
+            while (result.next()) {
+                actual.add(result.getString("table_name"));
+            }
+            assertThat(actual).containsExactly(
+                    "spring_session", "spring_session_attributes",
+                    "user_password_credentials", "users");
+        }
+    }
+
+    private static void assertSpringSessionSchema() throws SQLException {
+        assertConstraintColumns("spring_session", "PRIMARY KEY", List.of("primary_id"));
+        assertConstraintColumns("spring_session_attributes", "PRIMARY KEY",
+                List.of("session_primary_id", "attribute_name"));
+        assertSpringSessionIndexes();
+        assertSpringSessionAttributesForeignKey();
+    }
+
+    private static void assertSpringSessionIndexes() throws SQLException {
+        try (var connection = openPostgresConnection();
+                var statement = connection.prepareStatement("""
+                    SELECT indexname, indexdef
+                    FROM pg_indexes
+                    WHERE schemaname = 'public' AND tablename = ?
+                    ORDER BY indexname
+                    """)) {
+            statement.setString(1, "spring_session");
+            try (var result = statement.executeQuery()) {
+                var indexes = new java.util.LinkedHashMap<String, String>();
+                while (result.next()) {
+                    indexes.put(result.getString("indexname"), result.getString("indexdef"));
+                }
+                assertThat(indexes.keySet()).contains(
+                        "spring_session_ix1", "spring_session_ix2", "spring_session_ix3");
+                assertThat(indexes.get("spring_session_ix1")).containsIgnoringCase("UNIQUE");
+                assertThat(indexes.get("spring_session_ix1")).containsIgnoringCase("session_id");
+                assertThat(indexes.get("spring_session_ix2")).containsIgnoringCase("expiry_time");
+                assertThat(indexes.get("spring_session_ix3")).containsIgnoringCase("principal_name");
+            }
+        }
+    }
+
+    private static void assertSpringSessionAttributesForeignKey() throws SQLException {
+        try (var connection = openPostgresConnection();
+                var statement = connection.createStatement();
+                var result = statement.executeQuery("""
+                    SELECT kcu.column_name AS child_column,
+                           ccu.table_name AS parent_table,
+                           ccu.column_name AS parent_column,
+                           rc.delete_rule
+                    FROM information_schema.table_constraints tc
+                    JOIN information_schema.key_column_usage kcu
+                      ON tc.constraint_catalog = kcu.constraint_catalog
+                     AND tc.constraint_schema = kcu.constraint_schema
+                     AND tc.constraint_name = kcu.constraint_name
+                    JOIN information_schema.constraint_column_usage ccu
+                      ON tc.constraint_catalog = ccu.constraint_catalog
+                     AND tc.constraint_schema = ccu.constraint_schema
+                     AND tc.constraint_name = ccu.constraint_name
+                    JOIN information_schema.referential_constraints rc
+                      ON tc.constraint_catalog = rc.constraint_catalog
+                     AND tc.constraint_schema = rc.constraint_schema
+                     AND tc.constraint_name = rc.constraint_name
+                    WHERE tc.table_schema = 'public'
+                      AND tc.table_name = 'spring_session_attributes'
+                      AND tc.constraint_type = 'FOREIGN KEY'
+                    """)) {
             assertThat(result.next()).isTrue();
-            assertThat(result.getString("table_name")).isEqualTo("user_password_credentials");
-            assertThat(result.next()).isTrue();
-            assertThat(result.getString("table_name")).isEqualTo("users");
+            assertThat(result.getString("child_column")).isEqualTo("session_primary_id");
+            assertThat(result.getString("parent_table")).isEqualTo("spring_session");
+            assertThat(result.getString("parent_column")).isEqualTo("primary_id");
+            assertThat(result.getString("delete_rule")).isEqualTo("CASCADE");
             assertThat(result.next()).isFalse();
         }
     }

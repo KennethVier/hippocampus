@@ -34,6 +34,22 @@ class SpringProfilesApplicationTests {
             assertThat(environment.getRequiredProperty(
                     "logging.structured.ecs.service.environment"))
                     .isEqualTo(scenario.profile());
+            assertThat(environment.getRequiredProperty(
+                    "server.servlet.session.cookie.http-only", Boolean.class)).isTrue();
+            assertThat(environment.getRequiredProperty(
+                    "server.servlet.session.cookie.same-site"))
+                    .isEqualTo(scenario.expectedSameSite());
+            assertThat(environment.getRequiredProperty(
+                    "server.servlet.session.cookie.path"))
+                    .isEqualTo("/api");
+            if (scenario.expectedSecure() == null) {
+                assertThat(environment.getProperty(
+                        "server.servlet.session.cookie.secure", Boolean.class)).isNull();
+            } else {
+                assertThat(environment.getRequiredProperty(
+                        "server.servlet.session.cookie.secure", Boolean.class))
+                        .isEqualTo(scenario.expectedSecure());
+            }
 
             var request = HttpRequest.newBuilder()
                     .uri(URI.create("http://127.0.0.1:" + assignedPort
@@ -49,18 +65,19 @@ class SpringProfilesApplicationTests {
 
     private static Stream<ProfileScenario> profileScenarios() {
         return Stream.of(
-                new ProfileScenario("local", "127.0.0.1", List.of(
+                new ProfileScenario("local", "127.0.0.1", "lax", null, List.of(
                         "--SERVER_PORT=0",
                         "--spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration",
                         "--spring.flyway.enabled=false")),
-                new ProfileScenario("test", "127.0.0.1", List.of(
+                new ProfileScenario("test", "127.0.0.1", "lax", null, List.of(
                         "--spring.flyway.enabled=false")),
-                new ProfileScenario("pilot", "0.0.0.0", List.of(
+                new ProfileScenario("pilot", "0.0.0.0", "none", true, List.of(
                         "--PORT=0",
                         "--spring.flyway.enabled=false")));
     }
 
-    private record ProfileScenario(String profile, String expectedAddress, List<String> arguments) {
+    private record ProfileScenario(String profile, String expectedAddress, String expectedSameSite,
+            Boolean expectedSecure, List<String> arguments) {
         @Override
         public String toString() {
             return profile;

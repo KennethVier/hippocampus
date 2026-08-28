@@ -399,7 +399,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Security
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Persist sessions server-side.
 - **Build:** Enable Spring Session JDBC and required schema; configure idle timeout.
 - **How it works:** Browser stores only secure session cookie.
@@ -408,7 +408,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Session survives app restart if DB remains; expired sessions fail.
 - **Definition of Done:** Session tests pass.
 - **Authority:** Documents 17,22
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Boot-managed `spring-boot-starter-session-jdbc` (Spring Session 4.1.1) is configured with Flyway V4's standard PostgreSQL Spring Session schema, a configurable 30-minute idle timeout, and profile-scoped cookie policy (local/test HttpOnly + SameSite=Lax + Path=/api; pilot Secure + SameSite=None). Testcontainers-backed real-server integration tests prove authenticated session persistence, session-ID rotation, database-backed restart survival, and deterministic expiry rejection; migration tests assert tables, indexes, and cascade foreign key; profile tests assert cookie settings. Focused validation (`SpringSessionJdbcIntegrationTests,FlywayMigrationApplicationTests,AuthenticationFlowIntegrationTests,SpringProfilesApplicationTests`) passed with 12 tests and zero failures/errors/skips; `clean verify` passed with 54 tests and zero failures/errors/skips. Authentication-flow documentation updated in `docs/security/authentication-flow.md`.
 - **Notes / blockers:** _None_
 
 ## P1-04 — Implement CSRF protection
