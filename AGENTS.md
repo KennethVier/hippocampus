@@ -55,17 +55,20 @@ For frontend UI work:
 - Prefer one cohesive responsibility and one primary reason to change; do not fragment cohesive behavior merely to create smaller classes.
 - Use design patterns only when a real design pressure exists. The agent must be able to explain what problem the pattern solves and why simpler code is insufficient.
 - Prefer composition over inheritance and explicit domain/use-case names over generic `Service`, `Manager`, `Processor`, `Util`, or `Helper` abstractions.
-- Use modern Java/TypeScript features when they improve clarity, correctness, or domain expression. Do not use features merely because they are new.
+- Use modern Java/TypeScript/Spring features when they improve clarity, correctness, or domain expression. Do not use features merely because they are new or available.
 - Do not introduce speculative abstractions, dependencies, infrastructure, or future architecture without an approved need.
 
 Detailed guidance lives in:
 
-- `hippocampus-java-spring-engineering`
-- `hippocampus-react-typescript-engineering`
-- `hippocampus-architecture-patterns`
-- `hippocampus-testing-security`
-- `hippocampus-review-implementation`
-- `hippocampus-security-vulnerability-review`
+- `hippocampus-java-spring-engineering` — Java 25 language/backend engineering baseline;
+- `hippocampus-spring-boot-engineering` — Spring Boot 4.1.x framework gold standards;
+- `hippocampus-react-typescript-engineering`;
+- `hippocampus-architecture-patterns`;
+- `hippocampus-testing-security`;
+- `hippocampus-review-implementation`;
+- `hippocampus-security-vulnerability-review`.
+
+For backend work, apply the Java, Spring Boot, architecture/pattern, testing, review, and security skills together as applicable.
 
 ## Implementation Discipline
 
@@ -108,9 +111,9 @@ Dependency direction:
 
 `api -> application -> domain/ports <- infrastructure`
 
-Do not let domain code depend on Spring MVC, JPA repositories, provider SDKs, or HTTP clients.
+Do not let domain code depend on Spring MVC, JPA repositories, provider SDKs, HTTP clients, or other framework infrastructure.
 
-## Java Baseline
+## Java / Spring Boot Baseline
 
 - Java 25.
 - Spring Boot 4.1.x according to the version policy in Document 17.
@@ -120,14 +123,19 @@ Do not let domain code depend on Spring MVC, JPA repositories, provider SDKs, or
 - Prefer immutable values/records for DTOs, commands, results, and value carriers where semantics fit.
 - Prefer explicit local variable types by default; `var` is compile-time type inference and has no runtime inference cost, but should be used only when the type remains obvious and readability improves.
 - Prefer package-by-feature/module ownership over giant technical-layer packages.
-- Transactions belong primarily around application use cases.
+- Keep Spring/framework annotations out of domain code where possible.
+- Prefer typed `@ConfigurationProperties` for coherent configuration rather than scattered `@Value`.
+- Keep controllers thin and backend authorization enforceable below the transport layer.
+- Transactions belong primarily around application use cases and must account for Spring proxy semantics.
 - Avoid holding database transactions open during AI/network calls.
 - Do not expose JPA entities directly through APIs.
-- Avoid `EAGER` as a default relationship strategy.
+- Avoid `EAGER` as a default relationship strategy and do not rely on Open Session in View to hide persistence design problems.
 - Use explicit validation and typed domain/application errors.
 - Use Flyway for schema changes; never rely on production Hibernate auto-update.
 - Keep provider-specific DTOs inside provider adapters.
+- Prefer Spring Boot dependency management/BOM; do not override managed versions merely to chase newer releases.
 - Preview Java features require explicit approval; permanent Java 25 language features may be used when they improve the design.
+- Do not add Spring subsystems/features merely because the framework supports them; use only what solves approved requirements.
 
 ## Mandatory Security Gate
 
