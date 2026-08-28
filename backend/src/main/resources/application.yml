@@ -8,6 +8,10 @@ spring:
     enabled: false
     locations: classpath:db/migration
     clean-disabled: true
+  session:
+    timeout: ${HIPPOCAMPUS_SESSION_IDLE_TIMEOUT:PT30M}
+    jdbc:
+      initialize-schema: never
 
 hippocampus:
   security:
@@ -18,6 +22,12 @@ hippocampus:
 
 server:
   address: 127.0.0.1
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: lax
+        path: /api
 
 management:
   endpoints:

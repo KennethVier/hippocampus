@@ -6,6 +6,11 @@ spring:
 server:
   address: 0.0.0.0
   port: ${PORT:8080}
+  servlet:
+    session:
+      cookie:
+        secure: true
+        same-site: none
 
 logging:
   structured:
