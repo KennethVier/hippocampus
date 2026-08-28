@@ -415,7 +415,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Security
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Protect cookie-authenticated mutations.
 - **Build:** Configure Spring Security CSRF and frontend token acquisition/submission.
 - **How it works:** GETs read; state-changing requests require valid CSRF token.
