@@ -415,7 +415,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Security
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Protect cookie-authenticated mutations.
 - **Build:** Configure Spring Security CSRF and frontend token acquisition/submission.
 - **How it works:** GETs read; state-changing requests require valid CSRF token.
@@ -424,7 +424,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Cross-site forged state change is rejected.
 - **Definition of Done:** CSRF tests pass.
 - **Authority:** Documents 22,25
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Spring Security uses an explicit `HttpSessionCsrfTokenRepository` with the `X-CSRF-TOKEN` header, session-bound tokens, XOR masking, and CSRF-aware authentication-session strategy; `GET /api/auth/csrf` acquires the token for the frontend, while the frontend acquires and submits it immediately before every non-safe request and uses `credentials: include`. Integration coverage proves login/session-ID rotation, pre-login token invalidation, fresh post-login token success, missing/invalid token rejection, session binding, and preservation of the generic `ACCESS_DENIED` contract for non-CSRF denials. Focused backend validation (`AuthenticationFlowIntegrationTests,SpringSessionJdbcIntegrationTests,CsrfProtectionIntegrationTests`) passed with 17 tests and zero failures/errors/skips; full backend `clean verify` passed with 63 tests and zero failures/errors/skips. Existing frontend validation remains 46 focused tests and 103 full-suite tests, with typecheck, lint, and build passing. No CORS, JWT, Redis, migration, or later-phase changes were introduced.
 - **Notes / blockers:** _None_
 
 ## P1-05 — Restrict CORS
