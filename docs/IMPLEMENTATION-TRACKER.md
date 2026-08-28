@@ -383,7 +383,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Security
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Allow a student to establish an authenticated session.
 - **Build:** Implement chosen v1 login credential flow using Spring Security; map identity to users.id.
 - **How it works:** Successful authentication creates/uses server-side session.
@@ -392,8 +392,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Authenticated user can enter app; invalid credentials reveal no sensitive details.
 - **Definition of Done:** Auth tests pass and flow documented.
 - **Authority:** Documents 22
-- **Evidence / link:** V3 credential migration and Hibernate mapping; Spring Security JSON login with exact-email database authentication, generic failures, server-side context persistence/session rotation, CSRF enforcement, and bounded fixed-window throttling; dedicated provider unit tests plus PostgreSQL credential-repository and end-to-end authentication integration tests are under `backend/src/test` alongside deterministic limiter and migration-contract coverage.
-- **Notes / blockers:** Implementation review and authoritative CI/Testcontainers validation remain required before Done.
+- **Evidence / link:** PR #37 merged at f38da0394896b500b7d2dbc595ea165c559c2fb6; post-merge `quality` workflow run #55 (run ID 33144274234) on `main` succeeded with `backend-quality`, `frontend-quality`, and `security`; external implementation review accepted; V3 credential migration and Hibernate mapping; Spring Security JSON login with exact-email database authentication, generic credential failures, server-side context persistence/session rotation, CSRF enforcement, and bounded fixed-window throttling; provider unit, PostgreSQL credential-repository, end-to-end authentication integration, deterministic limiter, migration-contract, and authentication-flow documentation coverage.
+- **Notes / blockers:** _None_
 
 ## P1-03 — Configure Spring Session JDBC
 
