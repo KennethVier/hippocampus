@@ -135,8 +135,8 @@ class HippocampusArchitectureTests {
 
     @Test
     void featureInfrastructureRemainsEncapsulated() {
-        for (var module : FEATURE_MODULES) {
-            var modulePackage = BASE_PACKAGE + "." + module;
+        for (String module : FEATURE_MODULES) {
+            String modulePackage = BASE_PACKAGE + "." + module;
             noClasses()
                     .that().resideOutsideOfPackages(
                             modulePackage + "..",
@@ -191,7 +191,7 @@ class HippocampusArchitectureTests {
             return true;
         }
 
-        var packageName = javaClass.getPackageName();
+        String packageName = javaClass.getPackageName();
         return APPROVED_MODULE_ROOTS.stream()
                 .map(module -> BASE_PACKAGE + "." + module)
                 .anyMatch(modulePackage -> packageName.equals(modulePackage)

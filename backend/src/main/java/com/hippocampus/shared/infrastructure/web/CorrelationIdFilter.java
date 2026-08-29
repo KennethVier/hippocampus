@@ -1,8 +1,8 @@
 package com.hippocampus.shared.infrastructure.web;
 
 import java.io.IOException;
-import java.util.concurrent.TimeUnit;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +20,7 @@ public final class CorrelationIdFilter extends OncePerRequestFilter {
 
     public static final String HEADER_NAME = "X-Correlation-ID";
     static final String MDC_KEY = "correlationId";
+
     private static final Logger LOG = LoggerFactory.getLogger(CorrelationIdFilter.class);
     private static final String REQUEST_ATTRIBUTE = CorrelationIdFilter.class.getName() + ".correlationId";
 
@@ -28,10 +29,10 @@ public final class CorrelationIdFilter extends OncePerRequestFilter {
             HttpServletRequest request,
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
-        var correlationId = resolveCorrelationId(request);
+        String correlationId = resolveCorrelationId(request);
         request.setAttribute(REQUEST_ATTRIBUTE, correlationId);
         response.setHeader(HEADER_NAME, correlationId);
-        var startedAt = System.nanoTime();
+        long startedAt = System.nanoTime();
 
         MDC.put(MDC_KEY, correlationId);
         try {
@@ -54,26 +55,26 @@ public final class CorrelationIdFilter extends OncePerRequestFilter {
     }
 
     public static String currentCorrelationId(HttpServletRequest request) {
-        var correlationId = request.getAttribute(REQUEST_ATTRIBUTE);
+        Object correlationId = request.getAttribute(REQUEST_ATTRIBUTE);
         if (correlationId instanceof String value) {
             return value;
         }
 
-        var generated = UUID.randomUUID().toString();
+        String generated = UUID.randomUUID().toString();
         request.setAttribute(REQUEST_ATTRIBUTE, generated);
         return generated;
     }
 
     private static String resolveCorrelationId(HttpServletRequest request) {
-        var supplied = request.getHeader(HEADER_NAME);
+        String supplied = request.getHeader(HEADER_NAME);
         if (supplied == null || supplied.isBlank()) {
             return UUID.randomUUID().toString();
         }
 
-        var candidate = supplied.trim();
+        String candidate = supplied.trim();
         try {
-            var parsed = UUID.fromString(candidate);
-            var canonical = parsed.toString();
+            UUID parsed = UUID.fromString(candidate);
+            String canonical = parsed.toString();
             return canonical.equalsIgnoreCase(candidate) ? canonical : UUID.randomUUID().toString();
         } catch (IllegalArgumentException exception) {
             return UUID.randomUUID().toString();
