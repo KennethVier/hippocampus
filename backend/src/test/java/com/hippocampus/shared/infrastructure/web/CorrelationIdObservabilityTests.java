@@ -32,7 +32,7 @@ import com.jayway.jsonpath.JsonPath;
 
 @ActiveProfiles("test")
 @ExtendWith(OutputCaptureExtension.class)
-@WebMvcTest(properties = {
+@WebMvcTest(controllers = CorrelationIdObservabilityTests.ObservabilityTestController.class, properties = {
                 "debug=false",
                 "logging.level.root=INFO",
                 "logging.level.org.springframework.web=INFO",
