@@ -132,8 +132,9 @@ class AuthenticationFlowIntegrationTests extends PostgresIntegrationTestSupport 
                     .andExpect(status().isNoContent())
                     .andExpect(content().string(""));
 
-            fixture.mvc.perform(apiGet("/api/test/authenticated").session(session))
+            fixture.mvc.perform(apiGet("/api/auth/me").session(session))
                     .andExpect(status().isUnauthorized())
+                    .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
         }
     }
