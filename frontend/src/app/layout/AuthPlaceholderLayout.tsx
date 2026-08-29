@@ -1,4 +1,10 @@
 import { Link, NavLink, Outlet } from 'react-router'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router'
+
+import { Button } from '../../components/ui'
+import { logout } from '../../features/auth/authApi'
+import { currentSessionQueryKey } from '../../features/auth/currentSessionQuery'
 
 import './AuthPlaceholderLayout.css'
 
@@ -11,6 +17,17 @@ const primaryNavigation = [
 ] as const
 
 export function AuthPlaceholderLayout() {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const logoutMutation = useMutation({
+    mutationFn: logout,
+    onSuccess: async () => {
+      await queryClient.cancelQueries({ queryKey: currentSessionQueryKey })
+      queryClient.removeQueries({ queryKey: currentSessionQueryKey })
+      navigate('/login', { replace: true })
+    },
+  })
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">
@@ -21,7 +38,12 @@ export function AuthPlaceholderLayout() {
         <Link className="product-link" to="/home">
           Hippocampus
         </Link>
-        <Link to="/settings">Settings</Link>
+        <div className="header-actions">
+          <Link to="/settings">Settings</Link>
+          <Button disabled={logoutMutation.isPending} onClick={() => logoutMutation.mutate()} variant="tertiary">
+            {logoutMutation.isPending ? 'Signing out…' : 'Sign out'}
+          </Button>
+        </div>
       </header>
 
       <div className="app-body">
@@ -46,6 +68,7 @@ export function AuthPlaceholderLayout() {
           <Outlet />
         </main>
       </div>
+      {logoutMutation.isError ? <p className="logout-error" role="alert">Sign out could not be completed. Try again.</p> : null}
     </div>
   )
 }
