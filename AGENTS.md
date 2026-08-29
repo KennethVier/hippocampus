@@ -48,6 +48,28 @@ For frontend UI work:
 - PostgreSQL is the authoritative persistent store; pgvector is part of the retrieval foundation.
 - Uploaded binaries live in private object storage, not in PostgreSQL blobs.
 
+## Engineering Principles
+
+- Correctness, security, domain clarity, cohesion, and maintainability outrank novelty or conciseness.
+- Apply SRP and SOLID as design guides, not mechanical rules.
+- Prefer one cohesive responsibility and one primary reason to change; do not fragment cohesive behavior merely to create smaller classes.
+- Use design patterns only when a real design pressure exists. The agent must be able to explain what problem the pattern solves and why simpler code is insufficient.
+- Prefer composition over inheritance and explicit domain/use-case names over generic `Service`, `Manager`, `Processor`, `Util`, or `Helper` abstractions.
+- Use modern Java/TypeScript/Spring features when they improve clarity, correctness, or domain expression. Do not use features merely because they are new or available.
+- Do not introduce speculative abstractions, dependencies, infrastructure, or future architecture without an approved need.
+
+Detailed guidance lives in:
+
+- `hippocampus-java-spring-engineering` — Java 25 language/backend engineering baseline;
+- `hippocampus-spring-boot-engineering` — Spring Boot 4.1.x framework gold standards;
+- `hippocampus-react-typescript-engineering`;
+- `hippocampus-architecture-patterns`;
+- `hippocampus-testing-security`;
+- `hippocampus-review-implementation`;
+- `hippocampus-security-vulnerability-review`.
+
+For backend work, apply the Java, Spring Boot, architecture/pattern, testing, review, and security skills together as applicable.
+
 ## Implementation Discipline
 
 Before changing code:
@@ -89,24 +111,45 @@ Dependency direction:
 
 `api -> application -> domain/ports <- infrastructure`
 
-Do not let domain code depend on Spring MVC, JPA repositories, provider SDKs, or HTTP clients.
+Do not let domain code depend on Spring MVC, JPA repositories, provider SDKs, HTTP clients, or other framework infrastructure.
 
-## Java Baseline
+## Java / Spring Boot Baseline
 
 - Java 25.
 - Spring Boot 4.1.x according to the version policy in Document 17.
 - Maven.
 - Constructor injection.
-- Small explicit services.
-- Prefer immutable values/records for DTOs and commands where appropriate.
+- Small explicit services/use cases.
+- Prefer immutable values/records for DTOs, commands, results, and value carriers where semantics fit.
+- Prefer explicit local variable types by default; `var` is compile-time type inference and has no runtime inference cost, but should be used only when the type remains obvious and readability improves.
 - Prefer package-by-feature/module ownership over giant technical-layer packages.
-- Transactions belong primarily around application use cases.
+- Keep Spring/framework annotations out of domain code where possible.
+- Prefer typed `@ConfigurationProperties` for coherent configuration rather than scattered `@Value`.
+- Keep controllers thin and backend authorization enforceable below the transport layer.
+- Transactions belong primarily around application use cases and must account for Spring proxy semantics.
 - Avoid holding database transactions open during AI/network calls.
 - Do not expose JPA entities directly through APIs.
-- Avoid `EAGER` as a default relationship strategy.
+- Avoid `EAGER` as a default relationship strategy and do not rely on Open Session in View to hide persistence design problems.
 - Use explicit validation and typed domain/application errors.
 - Use Flyway for schema changes; never rely on production Hibernate auto-update.
 - Keep provider-specific DTOs inside provider adapters.
+- Prefer Spring Boot dependency management/BOM; do not override managed versions merely to chase newer releases.
+- Preview Java features require explicit approval; permanent Java 25 language features may be used when they improve the design.
+- Do not add Spring subsystems/features merely because the framework supports them; use only what solves approved requirements.
+
+## Mandatory Security Gate
+
+Security is both a design concern and an independent completion gate.
+
+- Planning and implementation must follow secure-by-design practices.
+- Required implementation tests must pass first.
+- General implementation/code review must be completed.
+- Then run `hippocampus-security-vulnerability-review` as an independent adversarial review.
+- Use OWASP ASVS 5.0.0 as the verification baseline, with OWASP Top 10:2025 and OWASP API Security Top 10 as threat-oriented lenses.
+- Critical and High findings block completion. Medium findings normally block completion unless a human explicitly documents risk acceptance. Agents must not silently accept security risk.
+- Security findings require remediation, regression/security tests, rerun of affected tests, and security re-review.
+- If a control cannot be adequately verified by the agent, return `MANUAL SECURITY REVIEW REQUIRED`; never invent a security guarantee.
+- Do not claim an implementation is "secure from all vulnerabilities" or "OWASP compliant" without scoped evidence.
 
 ## Do Not Introduce Without Approved Decision
 
@@ -127,13 +170,15 @@ If a significant unresolved decision is discovered, stop and follow Document 27.
 
 ## Completion Rule
 
-A task is not `Done` because code exists.
+A task is not `Done` because code exists or tests are green.
 
 `Done` requires:
 
 - implementation exists;
 - required tests pass;
 - expected behavior is demonstrated;
+- implementation/code review has no unresolved blocking findings;
+- the independent security vulnerability review has passed or any required manual review/risk acceptance is explicitly documented;
 - Definition of Done is satisfied;
 - evidence is recorded;
 - no undocumented architectural deviation remains.
