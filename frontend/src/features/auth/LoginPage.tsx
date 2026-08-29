@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router'
 
 import { ApiError } from '../../api/apiClient'
@@ -17,6 +17,7 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [validationError, setValidationError] = useState<string | null>(null)
+  const errorSummaryRef = useRef<HTMLDivElement>(null)
   const destination = safeReturnPath(location.state)
   const loginMutation = useMutation({
     mutationFn: login,
@@ -26,6 +27,13 @@ export function LoginPage() {
       navigate(destination, { replace: true })
     },
   })
+  const mutationError = loginMutation.error
+  const errorMessage = validationError ?? loginErrorMessage(mutationError)
+  const checkingFailed = session.isError && !isAuthenticationRequired(session.error)
+
+  useEffect(() => {
+    if (errorMessage) errorSummaryRef.current?.focus()
+  }, [errorMessage])
 
   if (session.isSuccess) return <Navigate replace to={destination} />
 
@@ -39,10 +47,6 @@ export function LoginPage() {
     loginMutation.mutate({ email: email.trim(), password })
   }
 
-  const mutationError = loginMutation.error
-  const errorMessage = validationError ?? loginErrorMessage(mutationError)
-  const checkingFailed = session.isError && !isAuthenticationRequired(session.error)
-
   return (
     <main className="login-page">
       <Card className="login-card">
@@ -54,7 +58,7 @@ export function LoginPage() {
             We couldn't check your existing session. You can still try to sign in.
           </div>
         ) : null}
-        {errorMessage ? <div className="login-alert" role="alert" tabIndex={-1}>{errorMessage}</div> : null}
+        {errorMessage ? <div ref={errorSummaryRef} className="login-alert" role="alert" tabIndex={-1}>{errorMessage}</div> : null}
         <form className="login-form" onSubmit={submit} noValidate>
           <Input autoComplete="email" label="Email" name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
           <Input autoComplete="current-password" label="Password" name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
