@@ -479,7 +479,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Frontend
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Handle auth lifecycle cleanly.
 - **Build:** Create login screen, protected routes, session bootstrap, expired-session redirect, return-path handling.
 - **How it works:** TanStack Query tracks /me; no tokens in localStorage.
@@ -488,7 +488,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** User logs in/out; expired session returns safely to login.
 - **Definition of Done:** Critical E2E auth journey passes.
 - **Authority:** Documents 20,25
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** PR [#56](https://github.com/KennethVier/hippocampus/pull/56) was externally reviewed and merged into `main` as `8e1f27def3ddd43d158c11421eafd26badcd5732`. The reviewed head `20dd40cbdc2908e4cb6bad9cf62b895eb78b615e` implements the browser session lifecycle with a public accessible login page, TanStack Query-owned `GET /api/auth/me` bootstrap, protected routes that withhold private content until authentication is known, strict same-application return-path validation, expired-session recovery, and framework-native CSRF-protected `POST /api/auth/logout`; no authentication token or session identifier is stored in browser storage. Final PR quality run #99 (ID `33259301437`) completed successfully with `backend-quality`, `frontend-quality`, `auth-e2e`, and `security` all successful. The non-skipped `auth-e2e` job ran the real PostgreSQL-backed Spring backend and browser flow using an isolated runtime-provisioned account and proved invalid-login handling, successful login with protected-route restoration, server-session invalidation and safe reauthentication, real logout followed by `401 AUTHENTICATION_REQUIRED` from `/api/auth/me`, and absence of auth state in local/session storage. General implementation review: **APPROVED** after accessibility, logout-contract, and E2E evidence findings were remediated. Independent adversarial review: **SECURITY PASS** for the P1-08 changed surface after CI Playwright trace retention was disabled to avoid retaining authentication trace data. No ADR was required because the approved opaque server-session architecture remains unchanged. P1-09 generalized private-state clearing remains deferred and was not implemented. The expected result and critical E2E Definition of Done are satisfied.
 - **Notes / blockers:** _None_
 
 ## P1-09 — Clear private state on logout
