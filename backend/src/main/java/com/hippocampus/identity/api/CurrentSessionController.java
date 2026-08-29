@@ -18,7 +18,8 @@ public final class CurrentSessionController {
     }
 
     @GetMapping("/me")
-    CurrentSessionResponse currentSession() {
+    CurrentSessionResponse currentSession()
+            {
         CurrentSession session = getCurrentSession.execute();
         return new CurrentSessionResponse(session.userId());
     }
