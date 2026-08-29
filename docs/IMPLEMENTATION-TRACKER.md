@@ -447,7 +447,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Domain
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Remove client-controlled ownership identity.
 - **Build:** Implement CurrentUser/AuthenticatedUser port resolved from Spring Security principal.
 - **How it works:** Application use cases obtain user ID server-side.
@@ -456,7 +456,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Resource ownership always derives from session.
 - **Definition of Done:** No use case accepts client userId as authority.
 - **Authority:** Documents 19,22
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** PR [#49](https://github.com/KennethVier/hippocampus/pull/49) was externally approved and merged into `main` at merge commit `ed690f925623e679e6460f0f66d630a45f2c1e86`. PR quality run #81 (`33233085385`) completed successfully with `backend-quality`, `frontend-quality`, and `security` all successful. The implementation adds a privacy-minimal immutable `AuthenticatedUser` record, a framework-independent `CurrentUser` port, and a `SpringSecurityCurrentUser` infrastructure adapter that derives the persisted `users.id` exclusively from the trusted authenticated `HippocampusPrincipal`; missing, unauthenticated, or unexpected principals fail closed. Focused unit and Spring Security integration coverage proves trusted-principal resolution, unauthenticated denial, unexpected-principal rejection, and that a client-supplied `userId` cannot override the session-derived ownership identity. No `/me`, logout UX, roles, JWT, dependency, schema, configuration, or P1-07+ behavior was introduced. General implementation review verdict was **APPROVED** and the independent OWASP-oriented review verdict was **SECURITY PASS** for the P1-06 changed surface; no ADR was required; the expected result and Definition of Done are satisfied.
 - **Notes / blockers:** _None_
 
 ## P1-07 — Implement /me session endpoint
