@@ -463,7 +463,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Backend
 - **Priority:** Should
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Give frontend safe session/user context.
 - **Build:** Return minimal user profile/session state.
 - **How it works:** Frontend queries /me on authenticated shell bootstrap.
@@ -472,7 +472,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Frontend can determine logged-in user without tokens.
 - **Definition of Done:** Endpoint stable and privacy-minimal.
 - **Authority:** Documents 20,22
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** `GET /api/auth/me` is implemented using the existing `CurrentUser` abstraction, which derives identity from the authenticated server principal, and returns only `{ "userId": "<uuid>" }`. The authenticated API test passes; an unauthenticated request returns `AUTHENTICATION_REQUIRED`. The response exposes no email, token, session ID, credentials, roles, or unrelated profile data. No frontend P1-08 work, security configuration, schema, dependency, JWT, or bearer-token changes were introduced. GitHub Actions quality validation passed for the P1-07 PR head.
 - **Notes / blockers:** _None_
 
 ## P1-08 — Implement login/session recovery UX

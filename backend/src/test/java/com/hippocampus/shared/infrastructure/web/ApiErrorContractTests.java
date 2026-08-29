@@ -33,7 +33,7 @@ import com.jayway.jsonpath.JsonPath;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
-@WebMvcTest
+@WebMvcTest(controllers = ApiErrorContractTests.ErrorContractController.class)
 @Import({
         CorrelationIdFilter.class,
         ApiExceptionHandler.class,
