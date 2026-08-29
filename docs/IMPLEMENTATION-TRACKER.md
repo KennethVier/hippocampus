@@ -431,7 +431,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Security
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Allow only approved origins.
 - **Build:** Configure local and pilot frontend origins with credentials support.
 - **How it works:** Backend rejects credentialed requests from unapproved origins.
@@ -440,7 +440,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Approved frontend works; wildcard credentialed CORS absent.
 - **Definition of Done:** CORS tests pass.
 - **Authority:** Documents 22
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** PR [#47](https://github.com/KennethVier/hippocampus/pull/47) was externally approved and merged into `main` at merge commit `6b1b7b860d46f0aac30c8fb3ec9ae4cbed417ad8`. PR quality run #77 (`33231440671`) completed successfully with `backend-quality`, `frontend-quality`, and `security` all successful. CORS integration coverage proves exact approved credentialed origins succeed; unapproved origins and disallowed methods receive no credentialed CORS access; wildcard/pattern origins are rejected by typed configuration; same-origin requests remain unaffected; local/test/pilot profiles bind the intended origin policy. Spring Security authentication, Spring Session JDBC, CSRF, backend authorization/ownership, and secure pilot cookie requirements remain unchanged. No dependency, migration, JWT, Redis, P1-06+, or architecture deviation was introduced. Independent OWASP-oriented review found no blocking issue; no ADR was required; the expected result and Definition of Done are satisfied.
 - **Notes / blockers:** _None_
 
 ## P1-06 — Create current-user access abstraction
