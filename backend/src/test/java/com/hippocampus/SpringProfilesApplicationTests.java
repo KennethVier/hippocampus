@@ -13,18 +13,23 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.core.env.ConfigurableEnvironment;
+
+import com.hippocampus.identity.infrastructure.security.CorsProperties;
 
 class SpringProfilesApplicationTests {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("profileScenarios")
     void profileStartsWithExpectedNetworkConfiguration(ProfileScenario scenario) throws Exception {
-        try (var context = new SpringApplicationBuilder(HippocampusApplication.class)
+        try (ConfigurableApplicationContext context = new SpringApplicationBuilder(HippocampusApplication.class)
                 .web(WebApplicationType.SERVLET)
                 .profiles(scenario.profile())
                 .run(scenario.arguments().toArray(String[]::new))) {
-            var environment = context.getEnvironment();
-            var assignedPort = environment.getRequiredProperty("local.server.port", Integer.class);
+            ConfigurableEnvironment environment = context.getEnvironment();
+            Integer assignedPort = environment.getRequiredProperty("local.server.port", Integer.class);
+            CorsProperties corsProperties = context.getBean(CorsProperties.class);
 
             assertThat(environment.getActiveProfiles()).containsExactly(scenario.profile());
             assertThat(environment.getRequiredProperty("server.address"))
@@ -42,6 +47,7 @@ class SpringProfilesApplicationTests {
             assertThat(environment.getRequiredProperty(
                     "server.servlet.session.cookie.path"))
                     .isEqualTo("/api");
+            assertThat(corsProperties.allowedOrigins()).containsExactlyElementsOf(scenario.expectedCorsOrigins());
             if (scenario.expectedSecure() == null) {
                 assertThat(environment.getProperty(
                         "server.servlet.session.cookie.secure", Boolean.class)).isNull();
@@ -51,12 +57,12 @@ class SpringProfilesApplicationTests {
                         .isEqualTo(scenario.expectedSecure());
             }
 
-            var request = HttpRequest.newBuilder()
+            HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("http://127.0.0.1:" + assignedPort
                             + "/actuator/health/readiness"))
                     .GET()
                     .build();
-            var response = HttpClient.newHttpClient()
+            HttpResponse<String> response = HttpClient.newHttpClient()
                     .send(request, HttpResponse.BodyHandlers.ofString());
 
             assertThat(response.statusCode()).isEqualTo(200);
@@ -65,19 +71,42 @@ class SpringProfilesApplicationTests {
 
     private static Stream<ProfileScenario> profileScenarios() {
         return Stream.of(
-                new ProfileScenario("local", "127.0.0.1", "lax", null, List.of(
-                        "--SERVER_PORT=0",
-                        "--spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration",
-                        "--spring.flyway.enabled=false")),
-                new ProfileScenario("test", "127.0.0.1", "lax", null, List.of(
-                        "--spring.flyway.enabled=false")),
-                new ProfileScenario("pilot", "0.0.0.0", "none", true, List.of(
-                        "--PORT=0",
-                        "--spring.flyway.enabled=false")));
+                new ProfileScenario(
+                        "local",
+                        "127.0.0.1",
+                        "lax",
+                        null,
+                        List.of("http://localhost:5173", "http://127.0.0.1:5173"),
+                        List.of(
+                                "--SERVER_PORT=0",
+                                "--spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration",
+                                "--spring.flyway.enabled=false")),
+                new ProfileScenario(
+                        "test",
+                        "127.0.0.1",
+                        "lax",
+                        null,
+                        List.of("http://localhost:5173"),
+                        List.of("--spring.flyway.enabled=false")),
+                new ProfileScenario(
+                        "pilot",
+                        "0.0.0.0",
+                        "none",
+                        true,
+                        List.of("https://hippocampus-pilot.example.test"),
+                        List.of(
+                                "--PORT=0",
+                                "--spring.flyway.enabled=false",
+                                "--HIPPOCAMPUS_CORS_ALLOWED_ORIGINS=https://hippocampus-pilot.example.test")));
     }
 
-    private record ProfileScenario(String profile, String expectedAddress, String expectedSameSite,
-            Boolean expectedSecure, List<String> arguments) {
+    private record ProfileScenario(
+            String profile,
+            String expectedAddress,
+            String expectedSameSite,
+            Boolean expectedSecure,
+            List<String> expectedCorsOrigins,
+            List<String> arguments) {
         @Override
         public String toString() {
             return profile;

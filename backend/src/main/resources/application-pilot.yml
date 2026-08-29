@@ -3,6 +3,11 @@ spring:
     activate:
       on-profile: pilot
 
+hippocampus:
+  security:
+    cors:
+      allowed-origins: ${HIPPOCAMPUS_CORS_ALLOWED_ORIGINS}
+
 server:
   address: 0.0.0.0
   port: ${PORT:8080}

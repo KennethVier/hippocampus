@@ -8,6 +8,8 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
@@ -27,6 +29,8 @@ import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
 import org.springframework.security.web.csrf.XorCsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.savedrequest.NullRequestCache;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import com.hippocampus.identity.infrastructure.web.JsonLoginAuthenticationFilter;
 import com.hippocampus.identity.infrastructure.web.SecurityProblemWriter;
@@ -35,12 +39,24 @@ import com.hippocampus.shared.infrastructure.web.CorrelationIdFilter;
 import tools.jackson.databind.ObjectMapper;
 
 @Configuration
-@EnableConfigurationProperties(LoginRateLimitProperties.class)
+@EnableConfigurationProperties({LoginRateLimitProperties.class, CorsProperties.class})
 public class SecurityConfiguration {
 
     private static final String LOGIN_PATH = "/api/auth/login";
     private static final String CSRF_PATH = "/api/auth/csrf";
     private static final String CSRF_HEADER_NAME = "X-CSRF-TOKEN";
+    private static final List<String> CORS_ALLOWED_METHODS = List.of(
+            HttpMethod.GET.name(),
+            HttpMethod.HEAD.name(),
+            HttpMethod.POST.name(),
+            HttpMethod.PUT.name(),
+            HttpMethod.PATCH.name(),
+            HttpMethod.DELETE.name(),
+            HttpMethod.OPTIONS.name());
+    private static final List<String> CORS_ALLOWED_HEADERS = List.of(
+            HttpHeaders.ACCEPT,
+            HttpHeaders.CONTENT_TYPE,
+            CSRF_HEADER_NAME);
 
     @Bean
     PasswordEncoder passwordEncoder() {
@@ -108,6 +124,20 @@ public class SecurityConfiguration {
     }
 
     @Bean
+    UrlBasedCorsConfigurationSource corsConfigurationSource(CorsProperties properties) {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(properties.allowedOrigins());
+        configuration.setAllowedMethods(CORS_ALLOWED_METHODS);
+        configuration.setAllowedHeaders(CORS_ALLOWED_HEADERS);
+        configuration.setExposedHeaders(List.of(CorrelationIdFilter.HEADER_NAME));
+        configuration.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/**", configuration);
+        return source;
+    }
+
+    @Bean
     FilterRegistrationBean<CorrelationIdFilter> correlationFilterOrder(CorrelationIdFilter filter) {
         FilterRegistrationBean<CorrelationIdFilter> registration = new FilterRegistrationBean<>(filter);
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
@@ -125,6 +155,7 @@ public class SecurityConfiguration {
             ChangeSessionIdAuthenticationStrategy sessionStrategy,
             CompositeSessionAuthenticationStrategy loginSessionStrategy,
             CsrfTokenRepository csrfTokenRepository,
+            UrlBasedCorsConfigurationSource corsConfigurationSource,
             AccessDeniedHandler accessDeniedHandler) throws Exception {
         JsonLoginAuthenticationFilter loginFilter = new JsonLoginAuthenticationFilter(
                 manager,
@@ -145,6 +176,7 @@ public class SecurityConfiguration {
 
         http.authenticationManager(manager)
                 .securityMatcher("/api/**")
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .securityContext(context -> context.securityContextRepository(contextRepository))
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
