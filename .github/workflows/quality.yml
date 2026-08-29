@@ -76,6 +76,143 @@ jobs:
         working-directory: frontend
         run: npm audit --audit-level=high
 
+  auth-e2e:
+    name: auth-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg18
+        env:
+          POSTGRES_DB: hippocampus
+          POSTGRES_USER: hippocampus
+          POSTGRES_PASSWORD: hippocampus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hippocampus -d hippocampus"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Java
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '25.0.4'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.16.0'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build backend for E2E
+        working-directory: backend
+        run: ./mvnw -B -ntp -DskipTests package
+
+      - name: Start backend and wait for readiness
+        env:
+          SPRING_PROFILES_ACTIVE: local
+          HIPPOCAMPUS_CORS_ALLOWED_ORIGINS: http://127.0.0.1:4173
+          HIPPOCAMPUS_POSTGRES_PORT: '5432'
+          HIPPOCAMPUS_POSTGRES_USER: hippocampus
+          HIPPOCAMPUS_POSTGRES_PASSWORD: hippocampus
+        run: |
+          set -euo pipefail
+          jar="$(find backend/target -maxdepth 1 -name 'hippocampus-backend-*.jar' ! -name '*.original' | head -n 1)"
+          test -n "$jar"
+          nohup java -jar "$jar" >/tmp/hippocampus-backend.log 2>&1 &
+          echo $! >/tmp/hippocampus-backend.pid
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8080/actuator/health/readiness >/dev/null; then
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/hippocampus-backend.pid)" 2>/dev/null; then
+              cat /tmp/hippocampus-backend.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/hippocampus-backend.log
+          exit 1
+
+      - name: Provision isolated E2E account
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          E2E_EMAIL="e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}@example.test"
+          E2E_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::$E2E_PASSWORD"
+          ./mvnw -q -DincludeScope=runtime dependency:build-classpath -Dmdep.outputFile=/tmp/hippocampus-runtime-classpath
+          cat >/tmp/HippocampusE2ePasswordHash.java <<'JAVA'
+          import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+          class HippocampusE2ePasswordHash {
+              public static void main(String[] args) {
+                  System.out.print(PasswordEncoderFactories.createDelegatingPasswordEncoder().encode(args[0]));
+              }
+          }
+          JAVA
+          CLASSPATH="$(cat /tmp/hippocampus-runtime-classpath):target/classes"
+          E2E_PASSWORD_HASH="$(java -cp "$CLASSPATH" /tmp/HippocampusE2ePasswordHash.java "$E2E_PASSWORD")"
+          echo "::add-mask::$E2E_PASSWORD_HASH"
+          USER_ID="$(python - <<'PY'
+          import uuid
+          print(uuid.uuid4())
+          PY
+          )"
+          POSTGRES_CONTAINER="$(docker ps --filter ancestor=pgvector/pgvector:0.8.6-pg18 --format '{{.ID}}' | head -n 1)"
+          test -n "$POSTGRES_CONTAINER"
+          docker exec -i "$POSTGRES_CONTAINER" psql -U hippocampus -d hippocampus \
+            -v ON_ERROR_STOP=1 \
+            -v user_id="$USER_ID" \
+            -v email="$E2E_EMAIL" \
+            -v password_hash="$E2E_PASSWORD_HASH" <<'SQL'
+          INSERT INTO users (id, email, display_name, status, created_at, updated_at)
+          VALUES (:'user_id'::uuid, :'email', 'E2E Student', 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+          INSERT INTO user_password_credentials (user_id, password_hash, created_at, updated_at)
+          VALUES (:'user_id'::uuid, :'password_hash', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+          SQL
+          {
+            echo "HIPPOCAMPUS_E2E_EMAIL=$E2E_EMAIL"
+            echo "HIPPOCAMPUS_E2E_PASSWORD=$E2E_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Install locked frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run real authentication journey
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: http://127.0.0.1:8080
+        run: npm run test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-auth-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Show backend log on failure
+        if: failure()
+        run: cat /tmp/hippocampus-backend.log || true
+
   security:
     name: security
     runs-on: ubuntu-latest

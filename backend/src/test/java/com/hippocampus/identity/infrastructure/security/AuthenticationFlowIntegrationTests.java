@@ -117,6 +117,29 @@ class AuthenticationFlowIntegrationTests extends PostgresIntegrationTestSupport 
     }
 
     @Test
+    void logoutRequiresCsrfAndInvalidatesAuthenticatedSession() throws Exception {
+        try (var fixture = fixture()) {
+            fixture.createUser("logout@example.test", UserStatus.ACTIVE, true);
+            var login = fixture.mvc.perform(login("logout@example.test", PASSWORD).with(csrf()))
+                    .andExpect(status().isNoContent()).andReturn();
+            var session = (MockHttpSession) login.getRequest().getSession(false);
+
+            fixture.mvc.perform(apiPost("/api/auth/logout").session(session))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("CSRF_VALIDATION_FAILED"));
+
+            fixture.mvc.perform(apiPost("/api/auth/logout").session(session).with(csrf()))
+                    .andExpect(status().isNoContent())
+                    .andExpect(content().string(""));
+
+            fixture.mvc.perform(apiGet("/api/auth/me").session(session))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                    .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+        }
+    }
+
+    @Test
     void rateLimitContractIsEnforced() throws Exception {
         try (var fixture = fixtureWithRateLimit(2)) {
             fixture.mvc.perform(loginFrom("nobody@example.test", "wrong", "192.0.2.9"))

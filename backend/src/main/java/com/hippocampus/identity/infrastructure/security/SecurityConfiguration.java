@@ -43,6 +43,7 @@ import tools.jackson.databind.ObjectMapper;
 public class SecurityConfiguration {
 
     private static final String LOGIN_PATH = "/api/auth/login";
+    private static final String LOGOUT_PATH = "/api/auth/logout";
     private static final String CSRF_PATH = "/api/auth/csrf";
     private static final String CSRF_HEADER_NAME = "X-CSRF-TOKEN";
     private static final List<String> CORS_ALLOWED_METHODS = List.of(
@@ -185,7 +186,7 @@ public class SecurityConfiguration {
                         .csrfTokenRepository(csrfTokenRepository)
                         .csrfTokenRequestHandler(new XorCsrfTokenRequestAttributeHandler()))
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers(LOGIN_PATH, CSRF_PATH).permitAll()
+                        .requestMatchers(LOGIN_PATH, LOGOUT_PATH, CSRF_PATH).permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, exception) -> problems.write(
@@ -198,7 +199,10 @@ public class SecurityConfiguration {
                 .requestCache(cache -> cache.requestCache(new NullRequestCache()))
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
-                .logout(logout -> logout.disable())
+                .logout(logout -> logout
+                        .logoutUrl(LOGOUT_PATH)
+                        .logoutSuccessHandler(
+                                (request, response, authentication) -> response.setStatus(HttpStatus.NO_CONTENT.value())))
                 .addFilterAt(loginFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
