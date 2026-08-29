@@ -8,6 +8,11 @@ spring:
     hibernate:
       ddl-auto: validate
 
+hippocampus:
+  security:
+    cors:
+      allowed-origins: http://localhost:5173
+
 server:
   port: 0
 
