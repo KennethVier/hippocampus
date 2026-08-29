@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router'
 
 import { Button } from '../../components/ui'
 import { logout } from '../../features/auth/authApi'
-import { currentSessionQueryKey } from '../../features/auth/currentSessionQuery'
+import { clearPrivateClientState } from '../../features/auth/clearPrivateClientState'
 
 import './AuthPlaceholderLayout.css'
 
@@ -22,8 +22,7 @@ export function AuthPlaceholderLayout() {
   const logoutMutation = useMutation({
     mutationFn: logout,
     onSuccess: async () => {
-      await queryClient.cancelQueries({ queryKey: currentSessionQueryKey })
-      queryClient.removeQueries({ queryKey: currentSessionQueryKey })
+      await clearPrivateClientState(queryClient)
       navigate('/login', { replace: true })
     },
   })

@@ -495,7 +495,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Frontend
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Prevent shared-device leakage.
 - **Build:** Clear query cache, user-scoped Zustand, active streams and drafts on logout.
 - **How it works:** Logout response invalidates backend session then frontend state.
@@ -504,7 +504,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Next user cannot see previous user's cached data.
 - **Definition of Done:** Logout privacy test passes.
 - **Authority:** Documents 20,22
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Added a narrow frontend private-state lifecycle that awaits cancellation of every active TanStack query and clears the complete shared QueryClient, including QueryCache and MutationCache, only after the existing CSRF-protected backend logout succeeds; authoritative `401 AUTHENTICATION_REQUIRED` session expiry uses a single-shot transition that withholds private content, performs the same cleanup exactly once, preserves the safe structured return state, and replace-navigates to login. Focused Vitest/RTL validation passed with 12 tests covering multi-key User A query removal, mutation-state removal, AbortSignal cancellation, late-result non-repopulation, backend-success-before-cleanup ordering, network/5xx/401/403 logout failure preservation, exact-once expiry cleanup, and same-QueryClient/runtime User A-to-User B observable isolation; the full frontend suite passed with 129 tests, and typecheck, lint, build, and `git diff --check` passed. The existing real Playwright auth journey was not run locally because the required runtime-provisioned `HIPPOCAMPUS_E2E_EMAIL` and `HIPPOCAMPUS_E2E_PASSWORD` were unavailable; its backend/session contract and artifact policy were unchanged. General implementation review verdict: **APPROVED** after two test-evidence gaps were remediated. Independent adversarial review verdict: **SECURITY PASS** for the P1-09 changed surface, with the scoped caveat that TanStack Query has no generic active-mutation cancellation API and no current private active product mutation exists. Repository audits confirmed no current Zustand store/dependency, SSE/EventSource owner, global or persisted draft owner, or application-owned private browser persistence, so no fake owners or speculative cleanup infrastructure were added. No dependency, backend, schema, migration, API, CI, ADR, browser-storage, or P1-10+ change was introduced.
 - **Notes / blockers:** _None_
 
 ## P1-10 — Add ownership authorization test harness
