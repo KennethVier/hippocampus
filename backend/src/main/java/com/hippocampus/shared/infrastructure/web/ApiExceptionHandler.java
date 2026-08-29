@@ -82,7 +82,7 @@ final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     ResponseEntity<Object> handleUnexpectedException(Exception exception, HttpServletRequest request) {
-        var correlationId = CorrelationIdFilter.currentCorrelationId(request);
+        String correlationId = CorrelationIdFilter.currentCorrelationId(request);
         LOG.atError()
                 .addKeyValue("event", "unhandled_exception")
                 .addKeyValue("errorCode", "INTERNAL_ERROR")
@@ -139,9 +139,9 @@ final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             HttpHeaders headers,
             HttpStatusCode status,
             WebRequest request) {
-        var servletRequest = servletRequest(request);
+        HttpServletRequest servletRequest = servletRequest(request);
         if (status.is5xxServerError()) {
-            var correlationId = CorrelationIdFilter.currentCorrelationId(servletRequest);
+            String correlationId = CorrelationIdFilter.currentCorrelationId(servletRequest);
             LOG.atError()
                     .addKeyValue("event", "unhandled_framework_exception")
                     .addKeyValue("errorCode", "INTERNAL_ERROR")
@@ -185,10 +185,10 @@ final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             String message,
             Map<String, ?> details,
             String correlationId,
-        HttpServletRequest request) {
-        var problemDetail = ProblemDetail.forStatusAndDetail(status, message);
+            HttpServletRequest request) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(status, message);
         problemDetail.setType(URI.create("about:blank"));
-        var resolvedStatus = HttpStatus.resolve(status.value());
+        HttpStatus resolvedStatus = HttpStatus.resolve(status.value());
         problemDetail.setTitle(resolvedStatus == null ? "Request Failed" : resolvedStatus.getReasonPhrase());
         problemDetail.setInstance(URI.create(request.getRequestURI()));
         problemDetail.setProperty("code", code);
@@ -196,7 +196,7 @@ final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         problemDetail.setProperty("correlationId", correlationId);
         problemDetail.setProperty("details", details);
 
-        var responseHeaders = new HttpHeaders();
+        HttpHeaders responseHeaders = new HttpHeaders();
         responseHeaders.setContentType(MediaType.APPLICATION_PROBLEM_JSON);
         responseHeaders.set(CorrelationIdFilter.HEADER_NAME, correlationId);
         return new ResponseEntity<>(problemDetail, responseHeaders, status);
