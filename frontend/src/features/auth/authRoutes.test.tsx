@@ -35,7 +35,7 @@ describe('authentication routes', () => {
     expect(screen.queryByRole('heading', { name: 'Welcome back' })).not.toBeInTheDocument()
   })
 
-  it('shows a generic invalid-credentials message', async () => {
+  it('shows and focuses a generic invalid-credentials message', async () => {
     const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(authenticationRequired())
       .mockResolvedValueOnce(jsonResponse({ token: 'csrf' }))
@@ -46,7 +46,9 @@ describe('authentication routes', () => {
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'student@example.test' } })
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'private password' } })
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Email or password is incorrect.')
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Email or password is incorrect.')
+    expect(alert).toHaveFocus()
     expect(screen.queryByText('Authentication failed.')).not.toBeInTheDocument()
   })
 })
