@@ -4,7 +4,7 @@ Audience: Product, architecture, backend, frontend, AI/RAG, DevOps,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 27
-Last Updated: 2026-08-28
+Last Updated: 2026-08-30
 Owner: Project Hippocampus Team
 Prerequisites:
 - README
@@ -24,7 +24,7 @@ Scope: Decision authority, decision categories, ADR lifecycle, ADR
   Source-of-Truth freeze procedure.
 Status: Final
 Title: Decision Log / ADR Index
-Version: 1.0.2
+Version: 1.0.3
 ---
 
 # 27 - Decision Log / ADR Index
@@ -1383,6 +1383,7 @@ When ADRs exist, add an index:
 | --- | --- | --- | --- | --- |
 | [ADR-0001](adr/ADR-0001-mobile-client-architecture-and-authentication-boundary.md) | Mobile Client Architecture and Authentication Boundary | ACCEPTED | 2026-08-27 | ARCHITECTURE, FRONTEND, SECURITY, BACKEND, TESTING |
 | [ADR-0002](adr/ADR-0002-v1-student-credential-mechanism.md) | V1 Student Credential Mechanism | ACCEPTED | 2026-08-28 | SECURITY, BACKEND, DATA, ARCHITECTURE |
+| [ADR-0003](adr/ADR-0003-learning-organization-archive-lifecycle.md) | Learning Organization Archive Lifecycle | ACCEPTED | 2026-08-30 | DOMAIN, DATA, BACKEND |
 
 This table begins empty at initial v1 freeze unless a real pending
 decision already exists.
@@ -1405,6 +1406,15 @@ remains the ownership root. No JWT/token or native authentication change
 is introduced. Controlled provisioning and bounded abuse-control and
 enumeration-resistance requirements apply. Documents 18, 22, and 26 are
 aligned with the accepted decision.
+
+## ADR-0003 Decision Summary
+
+Subject, Topic, and Subtopic share an `ACTIVE` / `ARCHIVED`
+non-destructive lifecycle represented by constrained `VARCHAR NOT NULL`
+status fields. Parent archive does not rewrite descendant persisted
+statuses, ownership and the single Subtopic level remain unchanged, and
+primary hierarchy foreign keys are non-cascading. Documents 18 and the
+Implementation Tracker are aligned before P2-01 implementation.
 
 ------------------------------------------------------------------------
 
@@ -1690,6 +1700,11 @@ Phase 0 — Engineering Foundation
                                       Hippocampus Team  ADR-0002 and aligned
                                                         credential decision
                                                         governance
+
+  1.0.3             2026-08-30        Project           Accepted and indexed
+                                      Hippocampus Team  ADR-0003 and aligned
+                                                        learning organization
+                                                        archive lifecycle
 
   ----------------------------------------------------------------------------
 

@@ -556,7 +556,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Priority:** Must
 - **Status:** Not Started
 - **Goal:** Persist learner organization.
-- **Build:** Create subjects, topics, subtopics tables/entities/repos with ownership path and archive status.
+- **Build:** Create Subject, Topic, and Subtopic tables/entities/repos with the Subject → User, Topic → Subject → User, and Subtopic → Topic → Subject → User ownership hierarchy and an `ACTIVE` / `ARCHIVED` lifecycle state on all three entities.
 - **How it works:** Subject belongs to user; Topic belongs to Subject; one explicit Subtopic level.
 - **Dependencies:** P1 identity
 - **Tests / validation:** Flyway, FK, uniqueness, ownership repository tests.
