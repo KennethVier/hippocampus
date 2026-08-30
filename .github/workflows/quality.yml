@@ -143,13 +143,10 @@ jobs:
           cat /tmp/hippocampus-backend.log
           exit 1
 
-      - name: Provision isolated E2E account
+      - name: Provision isolated E2E accounts
         working-directory: backend
         run: |
           set -euo pipefail
-          E2E_EMAIL="e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}@example.test"
-          E2E_PASSWORD="$(openssl rand -hex 24)"
-          echo "::add-mask::$E2E_PASSWORD"
           ./mvnw -q -DincludeScope=runtime dependency:build-classpath -Dmdep.outputFile=/tmp/hippocampus-runtime-classpath
           cat >/tmp/HippocampusE2ePasswordHash.java <<'JAVA'
           import org.springframework.security.crypto.factory.PasswordEncoderFactories;
@@ -160,29 +157,34 @@ jobs:
           }
           JAVA
           CLASSPATH="$(cat /tmp/hippocampus-runtime-classpath):target/classes"
-          E2E_PASSWORD_HASH="$(java -cp "$CLASSPATH" /tmp/HippocampusE2ePasswordHash.java "$E2E_PASSWORD")"
-          echo "::add-mask::$E2E_PASSWORD_HASH"
-          USER_ID="$(python - <<'PY'
-          import uuid
-          print(uuid.uuid4())
-          PY
-          )"
           POSTGRES_CONTAINER="$(docker ps --filter ancestor=pgvector/pgvector:0.8.6-pg18 --format '{{.ID}}' | head -n 1)"
           test -n "$POSTGRES_CONTAINER"
-          docker exec -i "$POSTGRES_CONTAINER" psql -U hippocampus -d hippocampus \
-            -v ON_ERROR_STOP=1 \
-            -v user_id="$USER_ID" \
-            -v email="$E2E_EMAIL" \
-            -v password_hash="$E2E_PASSWORD_HASH" <<'SQL'
+          previous_user_id=
+          for label in A B; do
+            email="e2e-${label,,}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}@example.test"
+            password="$(openssl rand -hex 24)"
+            user_id="$(python -c 'import uuid; print(uuid.uuid4())')"
+            test -z "$previous_user_id" || test "$user_id" != "$previous_user_id"
+            previous_user_id="$user_id"
+            echo "::add-mask::$password"
+            password_hash="$(java -cp "$CLASSPATH" /tmp/HippocampusE2ePasswordHash.java "$password")"
+            echo "::add-mask::$password_hash"
+            docker exec -i "$POSTGRES_CONTAINER" psql -U hippocampus -d hippocampus \
+              -v ON_ERROR_STOP=1 \
+              -v user_id="$user_id" \
+              -v email="$email" \
+              -v password_hash="$password_hash" <<'SQL'
           INSERT INTO users (id, email, display_name, status, created_at, updated_at)
           VALUES (:'user_id'::uuid, :'email', 'E2E Student', 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
           INSERT INTO user_password_credentials (user_id, password_hash, created_at, updated_at)
           VALUES (:'user_id'::uuid, :'password_hash', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
           SQL
-          {
-            echo "HIPPOCAMPUS_E2E_EMAIL=$E2E_EMAIL"
-            echo "HIPPOCAMPUS_E2E_PASSWORD=$E2E_PASSWORD"
-          } >> "$GITHUB_ENV"
+            {
+              echo "HIPPOCAMPUS_E2E_USER_${label}_EMAIL=$email"
+              echo "HIPPOCAMPUS_E2E_USER_${label}_PASSWORD=$password"
+              echo "HIPPOCAMPUS_E2E_USER_${label}_ID=$user_id"
+            } >> "$GITHUB_ENV"
+          done
 
       - name: Install locked frontend dependencies
         working-directory: frontend
@@ -273,3 +275,26 @@ jobs:
         uses: actions/dependency-review-action@ce3cf9537a52e8119d91fd484ab5b8a807627bf8 # v4.6.0
         with:
           fail-on-severity: high
+
+  phase1-gate:
+    name: phase1-gate
+    if: ${{ always() }}
+    needs:
+      - backend-quality
+      - frontend-quality
+      - auth-e2e
+      - security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every Phase 1 acceptance input
+        env:
+          BACKEND_RESULT: ${{ needs.backend-quality.result }}
+          FRONTEND_RESULT: ${{ needs.frontend-quality.result }}
+          AUTH_E2E_RESULT: ${{ needs.auth-e2e.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+        run: |
+          set -euo pipefail
+          test "$BACKEND_RESULT" = success
+          test "$FRONTEND_RESULT" = success
+          test "$AUTH_E2E_RESULT" = success
+          test "$SECURITY_RESULT" = success

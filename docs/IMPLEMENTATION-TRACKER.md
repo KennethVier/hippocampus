@@ -527,7 +527,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Gate
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Prove private student workspace exists.
 - **Build:** Run auth, session, CSRF, CORS, ownership and frontend journey as one release gate.
 - **How it works:** All Phase 1 pieces operate together.
@@ -536,8 +536,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Student securely enters and exits private workspace.
 - **Definition of Done:** All Phase 1 acceptance tests green; no cross-user leak.
 - **Authority:** Documents 26
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** P1-11 strengthens the existing real Playwright authentication journey into one shared-browser User A to User B acceptance flow. GitHub Actions now provisions two distinct runtime-only PostgreSQL students with independently generated passwords and accepted password hashes; the browser verifies each server-authoritative `/api/auth/me` identity, logout invalidation, distinct user IDs, empty browser authentication storage, and safe expiry behavior. The existing backend Phase 1 security suite and P1-10 `OwnershipAuthorizationHarnessTests` remain unchanged and authoritative, while a lightweight fail-closed `phase1-gate` aggregates `backend-quality`, `frontend-quality`, `auth-e2e`, and `security` without duplicating their workloads. Local frontend validation passed: 129 tests, typecheck, lint, and production build. Local backend and real-browser execution could not run because this workspace has neither a Docker socket nor network access to bootstrap Maven; authoritative PR CI remains required. General implementation review found no blocking code, architecture, or scope issue. Independent security review requires the real PostgreSQL-backed Playwright journey, backend suite, dependency review, and secret scan to complete in authoritative CI before a final security verdict. No production code, dependency, schema, authentication policy, or Phase 2 behavior changed; Phase 1 remains **Not Evaluated** until P1-11 is externally accepted, merged, validated, and marked Done.
+- **Notes / blockers:** Authoritative GitHub Actions validation and external implementation/security acceptance remain required before completion.
 
 # Phase 2 — Subjects + Topics + Learning Materials
 
