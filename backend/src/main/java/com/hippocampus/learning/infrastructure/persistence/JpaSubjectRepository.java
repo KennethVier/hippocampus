@@ -19,7 +19,7 @@ import com.hippocampus.learning.port.SubjectRepository;
 
 @Repository
 @Lazy
-public final class JpaSubjectRepository implements SubjectRepository {
+public class JpaSubjectRepository implements SubjectRepository {
 
     private static final String SUBJECT_NAME_CONSTRAINT = "uq_subjects_user_lower_name";
 
