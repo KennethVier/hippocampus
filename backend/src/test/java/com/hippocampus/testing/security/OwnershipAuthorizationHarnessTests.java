@@ -27,6 +27,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
@@ -300,6 +302,7 @@ class OwnershipAuthorizationHarnessTests extends PostgresIntegrationTestSupport 
     }
 
     @RestControllerAdvice(assignableTypes = SyntheticOwnershipController.class)
+    @Order(Ordered.HIGHEST_PRECEDENCE)
     static final class SyntheticOwnershipProblemHandler {
         @ExceptionHandler(SyntheticForbidden.class) ResponseEntity<ProblemDetail> forbidden() {
             return problem(HttpStatus.FORBIDDEN, "TEST_OWNERSHIP_FORBIDDEN", "Synthetic resource access is forbidden.");
