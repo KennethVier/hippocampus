@@ -10,8 +10,12 @@ import org.springframework.test.web.servlet.ResultMatcher;
 public final class OwnershipAssertions {
     private OwnershipAssertions() {}
 
-    public static ResultMatcher forbiddenWithoutForeignData(String... foreignMarkers) {
-        String[] markers = validatedForeignMarkers(foreignMarkers);
+    /**
+     * The supplied markers must identify protected, server-derived resource data. A value already
+     * supplied by the caller in the request URI is not itself evidence of a response data leak.
+     */
+    public static ResultMatcher forbiddenWithoutForeignData(String... protectedMarkers) {
+        String[] markers = validatedProtectedMarkers(protectedMarkers);
         return result -> {
             assertThat(result.getResponse().getStatus()).isEqualTo(403);
             assertNoForeignData(result.getResponse().getContentAsString(), result.getResponse().getHeaderNames(),
@@ -19,8 +23,12 @@ public final class OwnershipAssertions {
         };
     }
 
-    public static ResultMatcher notFoundWithoutForeignData(String... foreignMarkers) {
-        String[] markers = validatedForeignMarkers(foreignMarkers);
+    /**
+     * The supplied markers must identify protected, server-derived resource data. A value already
+     * supplied by the caller in the request URI is not itself evidence of a response data leak.
+     */
+    public static ResultMatcher notFoundWithoutForeignData(String... protectedMarkers) {
+        String[] markers = validatedProtectedMarkers(protectedMarkers);
         return result -> {
             assertThat(result.getResponse().getStatus()).isEqualTo(404);
             assertNoForeignData(result.getResponse().getContentAsString(), result.getResponse().getHeaderNames(),
@@ -29,11 +37,11 @@ public final class OwnershipAssertions {
     }
 
     public static ResultMatcher collectionContainsOwnedAndExcludesForeign(
-            String ownedMarker, String... foreignMarkers) {
+            String ownedMarker, String... protectedForeignMarkers) {
         if (ownedMarker == null || ownedMarker.isBlank()) {
             throw new IllegalArgumentException("ownedMarker must not be blank");
         }
-        String[] markers = validatedForeignMarkers(foreignMarkers);
+        String[] markers = validatedProtectedMarkers(protectedForeignMarkers);
         return result -> {
             assertThat(result.getResponse().getStatus()).isBetween(200, 299);
             assertThat(result.getResponse().getContentAsString()).contains(ownedMarker);
@@ -42,14 +50,14 @@ public final class OwnershipAssertions {
         };
     }
 
-    private static String[] validatedForeignMarkers(String[] foreignMarkers) {
-        if (foreignMarkers == null || foreignMarkers.length == 0) {
-            throw new IllegalArgumentException("at least one foreign marker is required");
+    private static String[] validatedProtectedMarkers(String[] protectedMarkers) {
+        if (protectedMarkers == null || protectedMarkers.length == 0) {
+            throw new IllegalArgumentException("at least one protected marker is required");
         }
-        String[] copy = Arrays.copyOf(foreignMarkers, foreignMarkers.length);
+        String[] copy = Arrays.copyOf(protectedMarkers, protectedMarkers.length);
         for (String marker : copy) {
             if (marker == null || marker.isBlank()) {
-                throw new IllegalArgumentException("foreign markers must not contain null or blank values");
+                throw new IllegalArgumentException("protected markers must not contain null or blank values");
             }
         }
         return copy;

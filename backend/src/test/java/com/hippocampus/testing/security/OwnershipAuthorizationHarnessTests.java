@@ -79,9 +79,11 @@ class OwnershipAuthorizationHarnessTests extends PostgresIntegrationTestSupport 
             fixture.mvc().perform(get("/api/test/ownership/forbidden/{id}", fixture.resourceA().resourceId())
                             .with(authenticatedAs(fixture.users().userB())))
                     .andExpect(forbiddenWithoutForeignData(
-                            fixture.resourceA().resourceId().toString(), RESOURCE_A_MARKER))
+                            fixture.resourceA().ownerId().toString(), RESOURCE_A_MARKER))
                     .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.status").value(403))
+                    .andExpect(jsonPath("$.instance").value(
+                            "/api/test/ownership/forbidden/" + fixture.resourceA().resourceId()))
                     .andExpect(jsonPath("$.code").value("TEST_OWNERSHIP_FORBIDDEN"));
 
             MvcResult hidden = fixture.mvc().perform(
@@ -89,7 +91,7 @@ class OwnershipAuthorizationHarnessTests extends PostgresIntegrationTestSupport 
                                     .with(authenticatedAs(fixture.users().userB())))
                     .andReturn();
             ResultMatcher matcher = forbiddenWithoutForeignData(
-                    fixture.resourceA().resourceId().toString(), RESOURCE_A_MARKER);
+                    fixture.resourceA().ownerId().toString(), RESOURCE_A_MARKER);
             assertThatThrownBy(() -> matcher.match(hidden)).isInstanceOf(AssertionError.class);
         }
     }
@@ -100,9 +102,11 @@ class OwnershipAuthorizationHarnessTests extends PostgresIntegrationTestSupport 
             fixture.mvc().perform(get("/api/test/ownership/hidden/{id}", fixture.resourceA().resourceId())
                             .with(authenticatedAs(fixture.users().userB())))
                     .andExpect(notFoundWithoutForeignData(
-                            fixture.resourceA().resourceId().toString(), RESOURCE_A_MARKER))
+                            fixture.resourceA().ownerId().toString(), RESOURCE_A_MARKER))
                     .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.status").value(404))
+                    .andExpect(jsonPath("$.instance").value(
+                            "/api/test/ownership/hidden/" + fixture.resourceA().resourceId()))
                     .andExpect(jsonPath("$.code").value("TEST_OWNERSHIP_NOT_FOUND"));
 
             MvcResult forbidden = fixture.mvc().perform(
@@ -110,7 +114,7 @@ class OwnershipAuthorizationHarnessTests extends PostgresIntegrationTestSupport 
                                     .with(authenticatedAs(fixture.users().userB())))
                     .andReturn();
             ResultMatcher matcher = notFoundWithoutForeignData(
-                    fixture.resourceA().resourceId().toString(), RESOURCE_A_MARKER);
+                    fixture.resourceA().ownerId().toString(), RESOURCE_A_MARKER);
             assertThatThrownBy(() -> matcher.match(forbidden)).isInstanceOf(AssertionError.class);
         }
     }
@@ -122,7 +126,10 @@ class OwnershipAuthorizationHarnessTests extends PostgresIntegrationTestSupport 
                             .with(authenticatedAs(fixture.users().userB())))
                     .andExpect(status().isOk())
                     .andExpect(collectionContainsOwnedAndExcludesForeign(
-                            RESOURCE_B_MARKER, fixture.resourceA().resourceId().toString(), RESOURCE_A_MARKER))
+                            RESOURCE_B_MARKER,
+                            fixture.resourceA().resourceId().toString(),
+                            fixture.resourceA().ownerId().toString(),
+                            RESOURCE_A_MARKER))
                     .andExpect(jsonPath("$[0].resourceId").value(fixture.resourceB().resourceId().toString()))
                     .andExpect(jsonPath("$[0].marker").value(RESOURCE_B_MARKER));
         }
@@ -138,7 +145,7 @@ class OwnershipAuthorizationHarnessTests extends PostgresIntegrationTestSupport 
                                     .contentType(MediaType.APPLICATION_JSON)
                                     .content("{\"marker\":\"" + REPLACEMENT_MARKER + "\"}"))
                     .andExpect(forbiddenWithoutForeignData(
-                            fixture.resourceA().resourceId().toString(), RESOURCE_A_MARKER))
+                            fixture.resourceA().ownerId().toString(), RESOURCE_A_MARKER))
                     .andReturn();
             SyntheticOwnedResource after = fixture.store().find(fixture.resourceA().resourceId()).orElseThrow();
             assertThat(after).isEqualTo(before);
