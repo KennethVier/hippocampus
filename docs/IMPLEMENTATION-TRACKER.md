@@ -511,7 +511,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Security
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Make IDOR checks reusable for every future resource.
 - **Build:** Create test helpers with User A/User B and assertion patterns for 403/404/no data.
 - **How it works:** Every new user-owned API reuses harness.
@@ -520,7 +520,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Cross-user tests become cheap and mandatory.
 - **Definition of Done:** Harness self-test passes and reuse contract is established for subsequent user-owned resource tests.
 - **Authority:** Documents 22,25
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Added the reusable P1-10 ownership/IDOR authorization test harness under "com.hippocampus.testing.security", including "OwnershipTestUser", "OwnershipTestUsers", "OwnershipTestRequests", "OwnershipAssertions", and "OwnershipAuthorizationHarnessTests". The harness establishes deterministic persisted User A/User B identities, authenticated request helpers, exact 403/404 ownership-policy assertions, foreign protected-data leakage checks across response bodies and headers, collection isolation checks, and denied-mutation state preservation with subsequent owner mutation success. The testing/security skill now directs future user-owned backend API tests to reuse "OwnershipTestUsers", "OwnershipTestRequests", and "OwnershipAssertions" rather than recreate ad-hoc ownership fixtures. PR #61 ("3fc94e674dfc57652a75e7059b6f050f284af274") passed GitHub Actions quality run #115 (ID "33298484212"): "backend-quality", "frontend-quality", "security", and "auth-e2e" all succeeded. "backend-quality" completed the backend tests, architecture tests, migrations, and build successfully. No production authorization behavior, P1-11 implementation, or Phase 2 scope was introduced.
 - **Notes / blockers:** _None_
 
 ## P1-11 — Phase 1 end-to-end gate
