@@ -4,7 +4,7 @@ Audience: Backend, architecture, database, AI, QA, security, and DevOps
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 18
-Last Updated: 2026-08-28
+Last Updated: 2026-08-30
 Owner: Project Hippocampus Team
 Prerequisites:
 - 00 - Project Vision
@@ -260,6 +260,7 @@ user_id UUID FK -> users.id
 name VARCHAR NOT NULL
 description TEXT NULL
 sort_order INT NULL
+status VARCHAR NOT NULL
 created_at TIMESTAMPTZ NOT NULL
 updated_at TIMESTAMPTZ NOT NULL
 ```
@@ -271,6 +272,13 @@ UNIQUE(user_id, lower(name))
 ```
 
 where practical.
+
+Possible status:
+
+``` text
+ACTIVE
+ARCHIVED
+```
 
 ------------------------------------------------------------------------
 
@@ -309,6 +317,7 @@ topic_id UUID FK -> topics.id
 name VARCHAR NOT NULL
 description TEXT NULL
 sort_order INT NULL
+status VARCHAR NOT NULL
 created_at TIMESTAMPTZ NOT NULL
 updated_at TIMESTAMPTZ NOT NULL
 ```
@@ -316,6 +325,13 @@ updated_at TIMESTAMPTZ NOT NULL
 v1 should support only one explicit subtopic level.
 
 Arbitrary recursive topic trees are deferred.
+
+Possible status:
+
+``` text
+ACTIVE
+ARCHIVED
+```
 
 ------------------------------------------------------------------------
 
@@ -1436,19 +1452,26 @@ Queries must validate ownership through authoritative relationships.
 
 v1 should prefer controlled soft/archive behavior for user-facing
 learning structure and hard cleanup for derived search/index records
-where safe.
+where safe. Under ADR-0003, archive is a non-destructive lifecycle state
+for Subject, Topic, and Subtopic; it is not physical deletion and does
+not automatically rewrite descendant statuses or physically delete the
+learning hierarchy, Material, learning history, evidence, or review
+history.
 
-## Topic Deletion
+## Learning Organization Deletion
 
-Should not delete Material.
+Archive is the user-facing lifecycle mechanism for Subject, Topic, and
+Subtopic. Archiving a parent does not cascade status changes to its
+descendants. Physical deletion is not equivalent to archive and should
+not delete Material or retained learning history.
 
 Recommended:
 
 ``` text
+Subject → ARCHIVED
 Topic → ARCHIVED
+Subtopic → ARCHIVED
 ```
-
-or hard-delete only when no retained evidence requires it.
 
 ## Material Deletion
 
@@ -1492,7 +1515,13 @@ Use where deletion would destroy important provenance unexpectedly:
 
 Use for primary user learning entities where history matters.
 
-Exact policies should be finalized with privacy/retention requirements.
+P2-01 should use fail-closed, non-cascading parent foreign keys for the
+primary learning hierarchy. Later privacy/account deletion work may
+perform explicit controlled cleanup where required; it must not be
+conflated with the user-facing archive lifecycle.
+
+Other physical-deletion policies should be finalized with
+privacy/retention requirements.
 
 ------------------------------------------------------------------------
 
