@@ -570,7 +570,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Backend
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Allow user-owned subject management.
 - **Build:** Create create/list/get/update/archive subject use cases and REST endpoints.
 - **How it works:** All queries derive authenticated owner.
@@ -579,8 +579,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Student only sees own subjects.
 - **Definition of Done:** CRUD and IDOR suite pass.
 - **Authority:** Documents 19,22
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** PR #68 implements the five owner-scoped Subject operations under `/api/subjects`: create, bounded ACTIVE-only list, get, update, and idempotent archive. Every use case derives `users.id` from `CurrentUser`; request DTOs contain no authoritative ownership field, repository lookups bind Subject ID to authenticated owner, and foreign/nonexistent IDs share the sanitized `404 SUBJECT_NOT_FOUND` contract. The P1-10 `OwnershipTestUsers`, `OwnershipTestRequests`, and `OwnershipAssertions` harness proves User A/User B collection isolation, foreign get/update/archive denial without protected-data leakage, denied mutation state preservation, and client `userId` non-authority. PostgreSQL remains authoritative for per-owner case-insensitive name uniqueness; the adapter recognizes only `uq_subjects_user_lower_name` through structured Hibernate constraint metadata and maps it to safe `409 SUBJECT_NAME_CONFLICT`. The list query applies owner and ACTIVE predicates before ordering by `sort_order ASC NULLS LAST`, `lower(name)`, and UUID, with page size bounded to 100. Archived Subjects remain owner-readable and owner-updatable without unarchiving, archive is idempotent, and no hard delete or descendant cascade is introduced. Quality run #133 (ID `33313937787`) exercised the PostgreSQL/Testcontainers suite but failed when class-level `@Validated` routed invalid pagination through AOP as `ConstraintViolationException`, producing `500` instead of the asserted `400`; the corrective commit removes that class-level proxy validation so Spring MVC raises `HandlerMethodValidationException`, and adds a focused MVC regression covering negative page, zero size, and size above 100. The focused post-fix suite passed 31 tests with zero failures/errors/skips, including Subject domain/application, pagination MVC, error contract, CurrentUser/CORS regressions, and all eight architecture tests. Local Maven-wrapper download and Docker/Testcontainers execution remain unavailable; system-Maven `clean verify` compiled and ran 124 tests but reported 53 environment errors from the missing Docker runtime, with zero assertion failures and zero skips. General implementation review approved API thinness, use-case/transaction responsibilities, port direction, UUID ownership, pagination, constraint translation, and scope with no unresolved blocker. Independent adversarial security review found no blocking Critical, High, or Medium issue in authentication, BOLA/IDOR, collection isolation, client ownership, denial preservation, CSRF/CORS, overposting, or exception privacy; the prior security job passed, while replacement GitHub Actions backend validation for the corrective commit is pending and must not be represented as green until it executes.
+- **Notes / blockers:** Replacement GitHub Actions validation for PR #68 is pending; P2-02 must not be marked `Done` until external review, authoritative CI, merge, and completion evidence are factual.
 
 ## P2-03 — Implement Topic/Subtopic CRUD use cases/API
 
