@@ -39,6 +39,8 @@ Do not replace database integration evidence with mocked repositories when SQL/s
 
 Verify authentication, authorization/ownership/IDOR resistance, CSRF, CORS where applicable, stable errors, validation, upload limits, session behavior, security headers/configuration, and fail-closed behavior.
 
+For new user-owned backend API and repository tests, reuse `OwnershipTestUsers`, `OwnershipTestRequests`, and `OwnershipAssertions` from the P1-10 `com.hippocampus.testing.security` harness instead of rebuilding User A/User B security setup ad hoc. Select the resource's exact 403 or 404 policy and assert zero foreign-data leakage.
+
 ### Frontend
 
 Use Vitest + React Testing Library for student-visible behavior, accessibility-relevant interaction, error/loading/empty states, and boundary behavior.

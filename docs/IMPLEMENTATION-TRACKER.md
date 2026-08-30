@@ -518,7 +518,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Dependencies:** Auth
 - **Tests / validation:** Harness self-test.
 - **Expected result:** Cross-user tests become cheap and mandatory.
-- **Definition of Done:** Harness used by subsequent phases.
+- **Definition of Done:** Harness self-test passes and reuse contract is established for subsequent user-owned resource tests.
 - **Authority:** Documents 22,25
 - **Evidence / link:** _To be recorded during implementation_
 - **Notes / blockers:** _None_
