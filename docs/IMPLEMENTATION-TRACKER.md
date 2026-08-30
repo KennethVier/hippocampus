@@ -554,7 +554,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Database
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Persist learner organization.
 - **Build:** Create Subject, Topic, and Subtopic tables/entities/repos with the Subject → User, Topic → Subject → User, and Subtopic → Topic → Subject → User ownership hierarchy and an `ACTIVE` / `ARCHIVED` lifecycle state on all three entities.
 - **How it works:** Subject belongs to user; Topic belongs to Subject; one explicit Subtopic level.
@@ -563,8 +563,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Organization persists with correct hierarchy.
 - **Definition of Done:** Schema and CRUD tests pass.
 - **Authority:** Documents 18
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Added Flyway `V5__create_learning_organization.sql` with normalized `users → subjects → topics → subtopics` ownership, non-cascading `ON DELETE RESTRICT` foreign keys, constrained `ACTIVE` / `ARCHIVED` status on all three tables, the per-user case-insensitive Subject-name functional unique index, and Topic/Subtopic parent indexes; the Subject unique index also serves the owner-prefix lookup without a redundant `subjects(user_id)` index. Added the shared `LearningOrganizationStatus` persistence enum, UUID/`Instant` JPA entities with lazy unidirectional intra-aggregate parent relationships and no cascades/orphan removal, minimal Spring Data repositories with owner-scoped traversal, and PostgreSQL integration coverage for Flyway metadata/idempotence, status checks, CRUD, timestamps, FKs, uniqueness, restrictive deletion, and User A/User B ownership lookup. `mvn -B -ntp -DskipTests package` passed, compiling 46 main and 28 test sources. The focused 12-test command and full 109-test `clean verify` were executed but could not complete in this workspace because `/var/run/docker.sock` and a valid Docker environment are unavailable; focused result was 12 run, 0 failures, 12 environment errors, 0 skipped, while full verification was 109 run, 0 failures, 46 environment errors, 0 skipped. Static general implementation review: **APPROVED** with executable PostgreSQL evidence deferred to PR `backend-quality`. Independent security review: **MANUAL SECURITY REVIEW REQUIRED** until CI executes the PostgreSQL migration/integrity/ownership tests; static review found no unresolved Critical, High, or Medium code finding in the scoped persistence surface. No API/controller, frontend, authentication/session/configuration, dependency, Material, recursive hierarchy, denormalized child ownership, or P2-02/P2-03 implementation was introduced. ADR-0003 is implemented; no additional ADR is required.
+- **Notes / blockers:** PR `backend-quality` must execute the Docker/Testcontainers-backed focused and full backend suites before external acceptance or `Done`.
 
 ## P2-02 — Implement Subject CRUD use cases/API
 
