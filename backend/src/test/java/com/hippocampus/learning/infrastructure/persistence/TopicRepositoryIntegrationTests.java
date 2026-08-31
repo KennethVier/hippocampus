@@ -27,7 +27,7 @@ class TopicRepositoryIntegrationTests extends PostgresIntegrationTestSupport {
     void createsReadsUpdatesAndPersistsBothLifecycleStates() {
         try (var context = startApplicationWithFlyway()) {
             var subjects = context.getBean(SpringDataSubjectRepository.class);
-            var topics = context.getBean(TopicRepository.class);
+            var topics = context.getBean(SpringDataTopicRepository.class);
             var users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "topic-crud");
             var subject = subjects.saveAndFlush(new SubjectEntity(
                     users.userA().userId(), "Anatomy", LearningOrganizationStatus.ACTIVE));
@@ -65,7 +65,7 @@ class TopicRepositoryIntegrationTests extends PostgresIntegrationTestSupport {
     void rejectsNonexistentSubjectAndScopesOwnershipThroughSubject() {
         try (var context = startApplicationWithFlyway()) {
             var entityManager = context.getBean(EntityManager.class);
-            var topics = context.getBean(TopicRepository.class);
+            var topics = context.getBean(SpringDataTopicRepository.class);
             var missingSubject = entityManager.getReference(SubjectEntity.class, UUID.randomUUID());
             assertThatThrownBy(() -> topics.saveAndFlush(new TopicEntity(
                     missingSubject, "Invalid", LearningOrganizationStatus.ACTIVE)))
@@ -76,7 +76,7 @@ class TopicRepositoryIntegrationTests extends PostgresIntegrationTestSupport {
             var users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "topic-owner");
             var subject = context.getBean(SpringDataSubjectRepository.class).saveAndFlush(new SubjectEntity(
                     users.userA().userId(), "Anatomy", LearningOrganizationStatus.ACTIVE));
-            var topics = context.getBean(TopicRepository.class);
+            var topics = context.getBean(SpringDataTopicRepository.class);
             var topic = topics.saveAndFlush(new TopicEntity(subject, "Thorax", LearningOrganizationStatus.ACTIVE));
             assertThat(topics.findByIdAndSubjectUserId(topic.getId(), users.userA().userId())).isPresent();
             assertThat(topics.findByIdAndSubjectUserId(topic.getId(), users.userB().userId())).isEmpty();
@@ -88,7 +88,7 @@ class TopicRepositoryIntegrationTests extends PostgresIntegrationTestSupport {
         try (var context = startApplicationWithFlyway()) {
             var users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "topic-delete");
             var subjects = context.getBean(SpringDataSubjectRepository.class);
-            var topics = context.getBean(TopicRepository.class);
+            var topics = context.getBean(SpringDataTopicRepository.class);
             var subject = subjects.saveAndFlush(new SubjectEntity(
                     users.userA().userId(), "Anatomy", LearningOrganizationStatus.ACTIVE));
             var removable = topics.saveAndFlush(new TopicEntity(

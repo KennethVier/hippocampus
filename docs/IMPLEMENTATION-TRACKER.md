@@ -586,7 +586,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Backend
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Allow organization within subjects.
 - **Build:** Create topic/subtopic create/list/update/archive APIs with parent ownership validation.
 - **How it works:** Topic cannot be attached to another user's subject.
@@ -595,7 +595,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Hierarchy remains ownership-safe.
 - **Definition of Done:** API tests pass.
 - **Authority:** Documents 18,19
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Implemented the eight bounded Topic/Subtopic create, list, update, and idempotent archive endpoints with immutable parents, exact submitted-name preservation, duplicate sibling names, and no get/delete/restore/reparent behavior. Every use case derives the owner from `CurrentUser`; owner-aware child ports and JPA adapters qualify Topic ownership through Subject and Subtopic ownership through Topic → Subject, qualify active ancestors for create/list/update, and deliberately ignore ancestor lifecycle only for owner-authorized archive. ACTIVE-only collection SQL and count queries share identical owner/parent/ancestor predicates and deterministic name/sort-order/UUID ordering. API tests use the existing User A/B ownership harness to cover foreign parent attachment, collection isolation, denied mutation preservation, sanitized not-found behavior, ancestor archive policy, archived-child updates, duplicate names, and ownership/parent/status overposting. The existing P2-01 repositories were renamed to infrastructure-explicit Spring Data names and their PostgreSQL coverage was preserved; application/domain/API layers remain isolated by passing architecture tests. Local focused domain and architecture validation passed 10 tests with zero failures/errors/skips, and system-Maven compilation/package passed. Maven Wrapper download was unavailable because the implementation environment had no network route. System-Maven `clean verify` compiled all production and test sources and ran 130 tests with zero assertion failures and zero skips, but reported 57 environment errors because Docker/Testcontainers could not find `/var/run/docker.sock`. General implementation review approved task scope, layering, lifecycle/query semantics, proxy-safe Spring wiring, and test design with no blocking finding. Independent adversarial security review found no blocking Critical, High, or Medium issue in BOLA/IDOR design, qualified parent attachment, SQL collection isolation, ancestor eligibility, owner-aware mutation, overposting, archive-through-ancestor behavior, CSRF enforcement, or error privacy within the available source/compiled-test evidence. Authoritative PR quality run #142 (ID `33364484889`) completed successfully at reviewed head `ec3e0f8194db493c9c90750c78881734645e2a86`: `backend-quality`, `frontend-quality`, `security`, `auth-e2e`, and `phase1-gate` all succeeded. The successful PostgreSQL/Testcontainers `backend-quality` job resolves the local Docker limitation and verifies the backend suite in the authoritative CI environment. No migration, dependency, frontend, authentication, Material, uniqueness, recursive hierarchy, denormalized ownership, cascade, or hard-delete change was introduced.
 - **Notes / blockers:** _None_
 
 ## P2-04 — Create Material and MaterialVersion foundation
