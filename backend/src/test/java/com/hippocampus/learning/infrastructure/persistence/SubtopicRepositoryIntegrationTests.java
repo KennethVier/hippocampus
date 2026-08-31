@@ -29,9 +29,9 @@ class SubtopicRepositoryIntegrationTests extends PostgresIntegrationTestSupport 
             var users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "subtopic-crud");
             var subject = context.getBean(SpringDataSubjectRepository.class).saveAndFlush(new SubjectEntity(
                     users.userA().userId(), "Anatomy", LearningOrganizationStatus.ACTIVE));
-            var topic = context.getBean(TopicRepository.class).saveAndFlush(new TopicEntity(
+            var topic = context.getBean(SpringDataTopicRepository.class).saveAndFlush(new TopicEntity(
                     subject, "Thorax", LearningOrganizationStatus.ACTIVE));
-            var subtopics = context.getBean(SubtopicRepository.class);
+            var subtopics = context.getBean(SpringDataSubtopicRepository.class);
             var subtopic = new SubtopicEntity(topic, "Heart", LearningOrganizationStatus.ACTIVE);
             subtopic.setDescription(null);
             subtopic.setSortOrder(null);
@@ -70,7 +70,7 @@ class SubtopicRepositoryIntegrationTests extends PostgresIntegrationTestSupport 
     void rejectsNonexistentTopicAndScopesOwnershipThroughFullHierarchy() {
         try (var context = startApplicationWithFlyway()) {
             var entityManager = context.getBean(EntityManager.class);
-            var subtopics = context.getBean(SubtopicRepository.class);
+            var subtopics = context.getBean(SpringDataSubtopicRepository.class);
             var missingTopic = entityManager.getReference(TopicEntity.class, UUID.randomUUID());
             assertThatThrownBy(() -> subtopics.saveAndFlush(new SubtopicEntity(
                     missingTopic, "Invalid", LearningOrganizationStatus.ACTIVE)))
@@ -81,9 +81,9 @@ class SubtopicRepositoryIntegrationTests extends PostgresIntegrationTestSupport 
             var users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "subtopic-owner");
             var subject = context.getBean(SpringDataSubjectRepository.class).saveAndFlush(new SubjectEntity(
                     users.userA().userId(), "Anatomy", LearningOrganizationStatus.ACTIVE));
-            var topic = context.getBean(TopicRepository.class).saveAndFlush(new TopicEntity(
+            var topic = context.getBean(SpringDataTopicRepository.class).saveAndFlush(new TopicEntity(
                     subject, "Thorax", LearningOrganizationStatus.ACTIVE));
-            var subtopics = context.getBean(SubtopicRepository.class);
+            var subtopics = context.getBean(SpringDataSubtopicRepository.class);
             var subtopic = subtopics.saveAndFlush(new SubtopicEntity(
                     topic, "Heart", LearningOrganizationStatus.ACTIVE));
             assertThat(subtopics.findByIdAndTopicSubjectUserId(subtopic.getId(), users.userA().userId())).isPresent();
@@ -97,9 +97,9 @@ class SubtopicRepositoryIntegrationTests extends PostgresIntegrationTestSupport 
             var users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "subtopic-delete");
             var subject = context.getBean(SpringDataSubjectRepository.class).saveAndFlush(new SubjectEntity(
                     users.userA().userId(), "Anatomy", LearningOrganizationStatus.ACTIVE));
-            var topics = context.getBean(TopicRepository.class);
+            var topics = context.getBean(SpringDataTopicRepository.class);
             var topic = topics.saveAndFlush(new TopicEntity(subject, "Thorax", LearningOrganizationStatus.ACTIVE));
-            var subtopics = context.getBean(SubtopicRepository.class);
+            var subtopics = context.getBean(SpringDataSubtopicRepository.class);
             var removable = subtopics.saveAndFlush(new SubtopicEntity(
                     topic, "Removable", LearningOrganizationStatus.ACTIVE));
             subtopics.deleteById(removable.getId());

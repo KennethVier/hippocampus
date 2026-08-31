@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface SpringDataSubjectRepository extends JpaRepository<SubjectEntity, UUID> {
     Optional<SubjectEntity> findByIdAndUserId(UUID id, UUID userId);
+    Optional<SubjectEntity> findByIdAndUserIdAndStatus(UUID id, UUID userId, LearningOrganizationStatus status);
 
     @Query(value = """
             SELECT * FROM subjects
