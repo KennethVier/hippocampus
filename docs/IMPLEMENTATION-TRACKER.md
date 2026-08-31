@@ -98,7 +98,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Goal:** Establish React application baseline.
 - **Build:** Create React 19 + TypeScript + Vite project with app, features, components, api, hooks, state, schemas, types, test folders.
 - **How it works:** App shell owns providers/router; feature folders own feature UI.
-- **Dependencies:** Frontend project
+- **Dependencies:** None
 - **Tests / validation:** npm test/build/typecheck/lint.
 - **Expected result:** Frontend loads base route without runtime/type errors.
 - **Definition of Done:** Build/test/typecheck pass; folders match Doc 20.
@@ -524,7 +524,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Cross-user tests become cheap and mandatory.
 - **Definition of Done:** Harness self-test passes and reuse contract is established for subsequent user-owned resource tests.
 - **Authority:** Documents 22,25
-- **Evidence / link:** Added the reusable P1-10 ownership/IDOR authorization test harness under "com.hippocampus.testing.security", including "OwnershipTestUser", "OwnershipTestUsers", "OwnershipTestRequests", "OwnershipAssertions", and "OwnershipAuthorizationHarnessTests". The harness establishes deterministic persisted User A/User B identities, authenticated request helpers, exact 403/404 ownership-policy assertions, foreign protected-data leakage checks across response bodies and headers, collection isolation checks, and denied-mutation state preservation with subsequent owner mutation success. The testing/security skill now directs future user-owned backend API tests to reuse "OwnershipTestUsers", "OwnershipTestRequests", and "OwnershipAssertions" rather than recreate ad-hoc ownership fixtures. PR #61 ("3fc94e674dfc57652a75e7059b6f050f284af274") passed GitHub Actions quality run #115 (ID "33298484212"): "backend-quality", "frontend-quality", "security", and "auth-e2e" all succeeded. "backend-quality" completed the backend tests, architecture tests, migrations, and build successfully. External implementation and security-harness review accepted P1-10 after the ownership harness and no-data-leak contract were verified. Implementation PR [#61](https://github.com/KennethVier/hippocampus/pull/61) was merged into `main` as `82bc5398bb0c2bf74569a3b0250fbe8e4b500e32`. Post-merge main quality workflow run #117 (ID `33298854808`) succeeded at the merge commit, with `backend-quality`, `frontend-quality`, `security`, and `auth-e2e` all successful. The reusable ownership harness self-test and reuse contract, expected result, and Definition of Done are satisfied, with no current blockers. No production authorization behavior, P1-11 implementation, or Phase 2 scope was introduced.
+- **Evidence / link:** Added the reusable P1-10 ownership/IDOR authorization test harness under "com.hippocampus.testing.security", including "OwnershipTestUser", "OwnershipTestUsers", "OwnershipTestRequests", "OwnershipAssertions", and "OwnershipAuthorizationHarnessTests". The harness establishes deterministic persisted User A/User B identities, authenticated request helpers, exact 403/404 ownership-policy assertions, foreign protected-data leakage checks across response bodies and headers, collection isolation checks, and denied-mutation state preservation with subsequent owner mutation success. The testing/security skill now directs future user-owned backend API tests to reuse "OwnershipTestUsers", "OwnershipTestRequests", and "OwnershipAssertions" rather than recreate ad-hoc ownership fixtures. PR #61 ("3fc94e674dfc57652a75e7059b6f050f284af274") passed GitHub Actions quality run #115 (ID "33298484212"): "backend-quality", "frontend-quality", "security", and "auth-e2e" all succeeded. "backend-quality" completed the backend tests, architecture tests, migrations, and build successfully. External implementation and security-harness review accepted P1-10 after the ownership harness and no-data-leak contract were verified. Implementation PR [#61](https://github.com/KennethVier/hippocampus/pull/61) was merged into `main` as `82bc5398bb0c2bf74569a3b0250fbe8e4b500e32`. Post-merge main quality run #117 (ID `33298854808`) succeeded at the merge commit, with `backend-quality`, `frontend-quality`, `security`, and `auth-e2e` all successful. The reusable ownership harness self-test and reuse contract, expected result, and Definition of Done are satisfied, with no current blockers. No production authorization behavior, P1-11 implementation, or Phase 2 scope was introduced.
 - **Notes / blockers:** _None_
 
 ## P1-11 — Phase 1 end-to-end gate
@@ -2895,7 +2895,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Build:** Review all Document 25 blocking criteria, vulnerabilities, known limitations, privacy disclosure, runbooks and capacity.
 - **How it works:** No unresolved blocker can be hand-waved.
 - **Dependencies:** All P12
-- **Tests / validation:** Formal checklist review.
+- **Tests / validation:** Formal checklist.
 - **Expected result:** Hippocampus v1.0.0-RC approved or rejected with reasons.
 - **Definition of Done:** Decision recorded.
 - **Authority:** Documents 25,26
