@@ -42,6 +42,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("3");
         assertSuccessfulFlywayVersion("4");
         assertSuccessfulFlywayVersion("5");
+        assertSuccessfulFlywayVersion("6");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -53,6 +54,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertPasswordCredentialPrimaryKey();
         assertPasswordCredentialForeignKey();
         assertLearningOrganizationSchema();
+        assertMaterialFoundationSchema();
 
         try (var secondContext = startApplicationWithFlyway()) {
             assertThat(secondContext.isActive()).isTrue();
@@ -63,10 +65,12 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("3");
         assertSuccessfulFlywayVersion("4");
         assertSuccessfulFlywayVersion("5");
+        assertSuccessfulFlywayVersion("6");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
         assertLearningOrganizationSchema();
+        assertMaterialFoundationSchema();
     }
 
     private static void assertDatabaseIsEmpty() throws SQLException {
@@ -162,6 +166,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 actual.add(result.getString("table_name"));
             }
             assertThat(actual).containsExactly(
+                    "material_versions", "materials",
                     "spring_session", "spring_session_attributes",
                     "subjects", "subtopics", "topics",
                     "user_password_credentials", "users");
@@ -197,6 +202,118 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertStatusCheck("subtopics", "chk_subtopics_status");
         assertInvalidStatusesRejected();
         assertNoRecursiveSubtopicRelationship();
+    }
+
+    private static void assertMaterialFoundationSchema() throws SQLException {
+        assertColumnsMatch("materials", Map.ofEntries(
+                Map.entry("id", "uuid:NO"),
+                Map.entry("user_id", "uuid:NO"),
+                Map.entry("title", "character varying:NO"),
+                Map.entry("material_type", "character varying:NO"),
+                Map.entry("original_filename", "character varying:YES"),
+                Map.entry("mime_type", "character varying:YES"),
+                Map.entry("storage_key", "character varying:YES"),
+                Map.entry("status", "character varying:NO"),
+                Map.entry("active_version_id", "uuid:YES"),
+                Map.entry("created_at", "timestamp with time zone:NO"),
+                Map.entry("updated_at", "timestamp with time zone:NO")));
+        assertColumnsMatch("material_versions", Map.ofEntries(
+                Map.entry("id", "uuid:NO"),
+                Map.entry("material_id", "uuid:NO"),
+                Map.entry("version_number", "integer:NO"),
+                Map.entry("storage_key", "character varying:YES"),
+                Map.entry("file_size_bytes", "bigint:YES"),
+                Map.entry("page_count", "integer:YES"),
+                Map.entry("content_hash", "character varying:YES"),
+                Map.entry("processing_status", "character varying:NO"),
+                Map.entry("processing_progress", "numeric:YES"),
+                Map.entry("extraction_method", "character varying:YES"),
+                Map.entry("extraction_quality", "character varying:YES"),
+                Map.entry("activated_at", "timestamp with time zone:YES"),
+                Map.entry("created_at", "timestamp with time zone:NO")));
+        assertNumericPrecision("material_versions", "processing_progress", 5, 2);
+        assertNamedConstraint("materials", "pk_materials", "PRIMARY KEY (id)", null);
+        assertNamedConstraint("materials", "fk_materials_user", "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT", "r");
+        assertNamedConstraint("material_versions", "pk_material_versions", "PRIMARY KEY (id)", null);
+        assertNamedConstraint("material_versions", "fk_material_versions_material",
+                "FOREIGN KEY (material_id) REFERENCES materials(id) ON DELETE RESTRICT", "r");
+        assertNamedConstraint("material_versions", "uq_material_versions_material_version_number",
+                "UNIQUE (material_id, version_number)", null);
+        assertNamedConstraint("material_versions", "uq_material_versions_material_id_id",
+                "UNIQUE (material_id, id)", null);
+        assertNamedConstraint("materials", "fk_materials_active_version",
+                "FOREIGN KEY (id, active_version_id) REFERENCES material_versions(material_id, id) ON DELETE RESTRICT",
+                "r");
+        assertNamedConstraint("material_versions", "chk_material_versions_version_number",
+                "CHECK ((version_number >= 1))", null);
+        assertNamedConstraint("material_versions", "chk_material_versions_file_size",
+                "CHECK ((file_size_bytes >= 0))", null);
+        assertNamedConstraint("material_versions", "chk_material_versions_page_count",
+                "CHECK ((page_count >= 0))", null);
+        assertIndex("materials", "idx_materials_user_status", false, "user_id", "status");
+        assertIndex("material_versions", "idx_material_versions_material_processing_status", false,
+                "material_id", "processing_status");
+        assertNoMaterialVocabularyOrProgressChecks();
+    }
+
+    private static void assertNumericPrecision(
+            String tableName, String columnName, int precision, int scale) throws SQLException {
+        try (var connection = openPostgresConnection();
+                var statement = connection.prepareStatement("""
+                        SELECT numeric_precision, numeric_scale
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = ? AND column_name = ?
+                        """)) {
+            statement.setString(1, tableName);
+            statement.setString(2, columnName);
+            try (var result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getInt("numeric_precision")).isEqualTo(precision);
+                assertThat(result.getInt("numeric_scale")).isEqualTo(scale);
+                assertThat(result.next()).isFalse();
+            }
+        }
+    }
+
+    private static void assertNamedConstraint(
+            String tableName, String constraintName, String expectedDefinition, String expectedDeleteAction)
+            throws SQLException {
+        try (var connection = openPostgresConnection();
+                var statement = connection.prepareStatement("""
+                        SELECT pg_get_constraintdef(oid) AS definition, confdeltype
+                        FROM pg_constraint
+                        WHERE conrelid = ('public.' || ?)::regclass AND conname = ?
+                        """)) {
+            statement.setString(1, tableName);
+            statement.setString(2, constraintName);
+            try (var result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString("definition")).isEqualTo(expectedDefinition);
+                if (expectedDeleteAction != null) {
+                    assertThat(result.getString("confdeltype")).isEqualTo(expectedDeleteAction);
+                }
+                assertThat(result.next()).isFalse();
+            }
+        }
+    }
+
+    private static void assertNoMaterialVocabularyOrProgressChecks() throws SQLException {
+        try (var connection = openPostgresConnection();
+                var statement = connection.createStatement();
+                var result = statement.executeQuery("""
+                        SELECT conname
+                        FROM pg_constraint
+                        WHERE conrelid IN ('public.materials'::regclass, 'public.material_versions'::regclass)
+                          AND contype = 'c'
+                        ORDER BY conname
+                        """)) {
+            var constraints = new ArrayList<String>();
+            while (result.next()) constraints.add(result.getString("conname"));
+            assertThat(constraints).containsExactly(
+                    "chk_material_versions_file_size",
+                    "chk_material_versions_page_count",
+                    "chk_material_versions_version_number");
+        }
     }
 
     private static void assertColumnsMatch(String tableName, Map<String, String> expected)
