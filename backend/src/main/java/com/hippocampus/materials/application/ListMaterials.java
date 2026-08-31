@@ -8,7 +8,7 @@ import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.materials.port.MaterialPageRequest;
 import com.hippocampus.materials.port.MaterialRepository;
 
-public final class ListMaterials {
+public class ListMaterials {
     private final CurrentUser currentUser;
     private final MaterialRepository materials;
 
