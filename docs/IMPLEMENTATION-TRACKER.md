@@ -92,7 +92,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 ## P0-02 — Create frontend repository structure
 
-- **Workstream:** Frontend
+- **Workstream:** Repository
 - **Priority:** Must
 - **Status:** Done
 - **Goal:** Establish React application baseline.
