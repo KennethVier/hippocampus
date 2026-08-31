@@ -5,6 +5,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
 
 import com.hippocampus.identity.port.CurrentUser;
+import com.hippocampus.materials.api.MaterialController;
 import com.hippocampus.materials.application.DeleteMaterial;
 import com.hippocampus.materials.application.GetMaterial;
 import com.hippocampus.materials.application.ListMaterials;
@@ -27,5 +28,13 @@ public class MaterialManagementConfiguration {
     @Bean
     DeleteMaterial deleteMaterial(CurrentUser currentUser, MaterialRepository materials) {
         return new DeleteMaterial(currentUser, materials);
+    }
+
+    @Bean
+    MaterialController materialController(
+            ListMaterials listMaterials,
+            GetMaterial getMaterial,
+            DeleteMaterial deleteMaterial) {
+        return new MaterialController(listMaterials, getMaterial, deleteMaterial);
     }
 }
