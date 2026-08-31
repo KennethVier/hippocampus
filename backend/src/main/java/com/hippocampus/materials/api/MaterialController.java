@@ -21,7 +21,7 @@ import jakarta.validation.constraints.Min;
 @RestController
 @RequestMapping("/api/materials")
 @ConditionalOnBean({ListMaterials.class, GetMaterial.class, DeleteMaterial.class})
-public final class MaterialController {
+public class MaterialController {
     private final ListMaterials listMaterials;
     private final GetMaterial getMaterial;
     private final DeleteMaterial deleteMaterial;

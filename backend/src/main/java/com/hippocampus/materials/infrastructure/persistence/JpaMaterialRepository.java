@@ -42,18 +42,7 @@ public final class JpaMaterialRepository implements MaterialRepository {
 
     @Override
     public boolean markDeletedOwned(UUID materialId, UUID ownerId) {
-        Optional<MaterialEntity> material = materials.findByIdAndUserId(materialId, ownerId);
-        if (material.isEmpty()) {
-            return false;
-        }
-
-        MaterialEntity entity = material.orElseThrow();
-        if (!DELETED.equals(entity.getStatus())) {
-            entity.setStatus(DELETED);
-            entity.setActiveVersionId(null);
-            materials.saveAndFlush(entity);
-        }
-        return true;
+        return materials.markDeletedOwned(materialId, ownerId) == 1;
     }
 
     private static MaterialMetadata metadata(MaterialEntity entity) {
