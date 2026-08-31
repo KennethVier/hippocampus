@@ -1,5 +1,7 @@
 package com.hippocampus.materials.api;
 
+import static com.hippocampus.testing.security.OwnershipAssertions.collectionContainsOwnedAndExcludesForeign;
+import static com.hippocampus.testing.security.OwnershipAssertions.notFoundWithoutForeignData;
 import static com.hippocampus.testing.security.OwnershipTestRequests.authenticatedAs;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -25,6 +27,7 @@ import com.hippocampus.materials.infrastructure.persistence.MaterialVersionEntit
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialRepository;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialVersionRepository;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
+import com.hippocampus.testing.security.OwnershipTestUser;
 import com.hippocampus.testing.security.OwnershipTestUsers;
 
 class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport {
@@ -57,10 +60,11 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
                     .andExpect(jsonPath("$.totalElements").value(3))
                     .andExpect(jsonPath("$.totalPages").value(1))
                     .andExpect(jsonPath("$.items.length()").value(3))
+                    .andExpect(collectionContainsOwnedAndExcludesForeign("first.pdf", "deleted.pdf", "foreign.pdf"))
                     .andReturn();
             assertThat(visible.getResponse().getContentAsString())
                     .contains("first.pdf", "second.pdf", "third.pdf")
-                    .doesNotContain("deleted.pdf", "foreign.pdf", "storageKey", "userId", "activeVersionId");
+                    .doesNotContain("storageKey", "userId", "activeVersionId");
 
             mvc.perform(get("/api/materials").param("page", "0").param("size", "2")
                             .with(authenticatedAs(users.userA())))
@@ -103,9 +107,9 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
             assertThat(ownResult.getResponse().getContentAsString())
                     .doesNotContain("storageKey", "userId", "activeVersionId");
 
-            assertNotFound(mvc, foreign.getId(), users.userA());
-            assertNotFound(mvc, deleted.getId(), users.userA());
-            assertNotFound(mvc, UUID.randomUUID(), users.userA());
+            assertNotFound(mvc, foreign.getId(), users.userA(), "foreign.pdf");
+            assertNotFound(mvc, deleted.getId(), users.userA(), "deleted.pdf");
+            assertNotFound(mvc, UUID.randomUUID(), users.userA(), "foreign-marker-not-present");
 
             mvc.perform(get("/api/materials/{id}", own.getId()))
                     .andExpect(status().isUnauthorized());
@@ -131,7 +135,7 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
 
             mvc.perform(delete("/api/materials/{id}", foreign.getId())
                             .with(authenticatedAs(users.userA())).with(csrf()))
-                    .andExpect(status().isNotFound())
+                    .andExpect(notFoundWithoutForeignData("foreign.pdf"))
                     .andExpect(jsonPath("$.code").value("MATERIAL_NOT_FOUND"));
             assertThat(materials.findById(foreign.getId()).orElseThrow().getStatus()).isEqualTo("UPLOADED");
 
@@ -143,7 +147,7 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
             assertThat(deleted.getActiveVersionId()).isNull();
             assertThat(versions.findAll()).hasSize(1);
 
-            assertNotFound(mvc, own.getId(), users.userA());
+            assertNotFound(mvc, own.getId(), users.userA(), "delete-me.pdf");
             mvc.perform(get("/api/materials").with(authenticatedAs(users.userA())))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalElements").value(1));
@@ -160,10 +164,10 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
         }
     }
 
-    private static void assertNotFound(MockMvc mvc, UUID materialId, com.hippocampus.testing.security.OwnershipTestUser user)
+    private static void assertNotFound(MockMvc mvc, UUID materialId, OwnershipTestUser user, String protectedMarker)
             throws Exception {
         mvc.perform(get("/api/materials/{id}", materialId).with(authenticatedAs(user)))
-                .andExpect(status().isNotFound())
+                .andExpect(notFoundWithoutForeignData(protectedMarker))
                 .andExpect(jsonPath("$.code").value("MATERIAL_NOT_FOUND"));
     }
 
