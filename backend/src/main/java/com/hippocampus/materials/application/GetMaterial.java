@@ -7,7 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.materials.port.MaterialRepository;
 
-public final class GetMaterial {
+public class GetMaterial {
     private final CurrentUser currentUser;
     private final MaterialRepository materials;
 
