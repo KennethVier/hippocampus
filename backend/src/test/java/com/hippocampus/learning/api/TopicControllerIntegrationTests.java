@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import com.hippocampus.identity.infrastructure.persistence.UserRepository;
@@ -93,6 +94,52 @@ class TopicControllerIntegrationTests extends PostgresIntegrationTestSupport {
                     .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ARCHIVED"));
             assertThat(topics.findById(a.getId()).orElseThrow().getStatus()).isEqualTo(LearningOrganizationStatus.ACTIVE);
         }
+    }
+
+    @Test void securityContractRequiresAuthenticationAndCsrfAndConcealsForeignSubjectExistence() throws Exception {
+        try (var context=startApplicationWithFlyway()) {
+            var users=users(context,"topic-security");
+            var subjects=context.getBean(SpringDataSubjectRepository.class);
+            SubjectEntity owned=subject(subjects,users.userA().userId(),"Owned",LearningOrganizationStatus.ACTIVE);
+            SubjectEntity foreign=subject(subjects,users.userB().userId(),"Foreign subject marker",LearningOrganizationStatus.ACTIVE);
+            MockMvc mvc=mvc(context);
+
+            mvc.perform(get("/api/subjects/{id}/topics",owned.getId()))
+                    .andExpect(status().isUnauthorized());
+            mvc.perform(post("/api/subjects/{id}/topics",owned.getId())
+                            .with(authenticatedAs(users.userA()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"Missing CSRF\"}"))
+                    .andExpect(status().isForbidden());
+
+            MvcResult foreignResult=mvc.perform(get("/api/subjects/{id}/topics",foreign.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(notFoundWithoutForeignData("Foreign subject marker"))
+                    .andExpect(jsonPath("$.code").value("SUBJECT_NOT_FOUND"))
+                    .andExpect(jsonPath("$.message").value("Subject was not found."))
+                    .andExpect(jsonPath("$.details").isMap())
+                    .andReturn();
+            MvcResult missingResult=mvc.perform(get("/api/subjects/{id}/topics",UUID.randomUUID())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("SUBJECT_NOT_FOUND"))
+                    .andExpect(jsonPath("$.message").value("Subject was not found."))
+                    .andExpect(jsonPath("$.details").isMap())
+                    .andReturn();
+
+            assertEquivalentNotFound(context,foreignResult,missingResult);
+        }
+    }
+
+    private static void assertEquivalentNotFound(
+            ConfigurableApplicationContext context,MvcResult foreignResult,MvcResult missingResult) throws Exception {
+        var objectMapper=context.getBean(tools.jackson.databind.ObjectMapper.class);
+        var foreignProblem=objectMapper.readTree(foreignResult.getResponse().getContentAsByteArray());
+        var missingProblem=objectMapper.readTree(missingResult.getResponse().getContentAsByteArray());
+        assertThat(foreignResult.getResponse().getStatus()).isEqualTo(missingResult.getResponse().getStatus());
+        assertThat(foreignProblem.get("code")).isEqualTo(missingProblem.get("code"));
+        assertThat(foreignProblem.get("message")).isEqualTo(missingProblem.get("message"));
+        assertThat(foreignProblem.get("details")).isEqualTo(missingProblem.get("details"));
     }
 
     private static OwnershipTestUsers users(ConfigurableApplicationContext c,String s){return OwnershipTestUsers.persistWith(c.getBean(UserRepository.class),s);}

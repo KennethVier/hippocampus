@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import com.hippocampus.identity.infrastructure.persistence.UserRepository;
@@ -98,6 +99,62 @@ class SubtopicControllerIntegrationTests extends PostgresIntegrationTestSupport 
                     .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ARCHIVED"));
             assertThat(subs.findById(a.getId()).orElseThrow().getStatus()).isEqualTo(LearningOrganizationStatus.ACTIVE);
         }
+    }
+
+    @Test void securityContractRequiresAuthenticationAndCsrfAndConcealsForeignSubtopicExistence() throws Exception {
+        try(var context=startApplicationWithFlyway()) {
+            var users=users(context,"subtopic-security");
+            var subjects=context.getBean(SpringDataSubjectRepository.class);
+            var topics=context.getBean(SpringDataTopicRepository.class);
+            var subtopics=context.getBean(SpringDataSubtopicRepository.class);
+            SubjectEntity owned=subject(subjects,users.userA().userId(),"Owned",LearningOrganizationStatus.ACTIVE);
+            SubjectEntity foreign=subject(subjects,users.userB().userId(),"Foreign subject",LearningOrganizationStatus.ACTIVE);
+            TopicEntity ownedTopic=topic(topics,owned,"Owned topic",LearningOrganizationStatus.ACTIVE);
+            TopicEntity foreignTopic=topic(topics,foreign,"Foreign topic",LearningOrganizationStatus.ACTIVE);
+            SubtopicEntity ownedSubtopic=sub(subtopics,ownedTopic,"Owned subtopic",1,LearningOrganizationStatus.ACTIVE);
+            SubtopicEntity foreignSubtopic=sub(subtopics,foreignTopic,"Foreign subtopic marker",1,LearningOrganizationStatus.ACTIVE);
+            MockMvc mvc=mvc(context);
+
+            mvc.perform(get("/api/topics/{id}/subtopics",ownedTopic.getId()))
+                    .andExpect(status().isUnauthorized());
+            mvc.perform(put("/api/subtopics/{id}",ownedSubtopic.getId())
+                            .with(authenticatedAs(users.userA()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"Missing CSRF\"}"))
+                    .andExpect(status().isForbidden());
+
+            MvcResult foreignResult=mvc.perform(put("/api/subtopics/{id}",foreignSubtopic.getId())
+                            .with(authenticatedAs(users.userA())).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"Denied\"}"))
+                    .andExpect(notFoundWithoutForeignData("Foreign subtopic marker"))
+                    .andExpect(jsonPath("$.code").value("SUBTOPIC_NOT_FOUND"))
+                    .andExpect(jsonPath("$.message").value("Subtopic was not found."))
+                    .andExpect(jsonPath("$.details").isMap())
+                    .andReturn();
+            MvcResult missingResult=mvc.perform(put("/api/subtopics/{id}",UUID.randomUUID())
+                            .with(authenticatedAs(users.userA())).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"Denied\"}"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("SUBTOPIC_NOT_FOUND"))
+                    .andExpect(jsonPath("$.message").value("Subtopic was not found."))
+                    .andExpect(jsonPath("$.details").isMap())
+                    .andReturn();
+
+            assertEquivalentNotFound(context,foreignResult,missingResult);
+        }
+    }
+
+    private static void assertEquivalentNotFound(
+            ConfigurableApplicationContext context,MvcResult foreignResult,MvcResult missingResult) throws Exception {
+        var objectMapper=context.getBean(tools.jackson.databind.ObjectMapper.class);
+        var foreignProblem=objectMapper.readTree(foreignResult.getResponse().getContentAsByteArray());
+        var missingProblem=objectMapper.readTree(missingResult.getResponse().getContentAsByteArray());
+        assertThat(foreignResult.getResponse().getStatus()).isEqualTo(missingResult.getResponse().getStatus());
+        assertThat(foreignProblem.get("code")).isEqualTo(missingProblem.get("code"));
+        assertThat(foreignProblem.get("message")).isEqualTo(missingProblem.get("message"));
+        assertThat(foreignProblem.get("details")).isEqualTo(missingProblem.get("details"));
     }
 
     private static OwnershipTestUsers users(ConfigurableApplicationContext c,String s){return OwnershipTestUsers.persistWith(c.getBean(UserRepository.class),s);}
