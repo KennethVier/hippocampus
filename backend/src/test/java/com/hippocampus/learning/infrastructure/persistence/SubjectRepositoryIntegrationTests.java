@@ -28,7 +28,7 @@ class SubjectRepositoryIntegrationTests extends PostgresIntegrationTestSupport {
     @Test
     void createsReadsAndUpdatesSubjectWithGeneratedIdentityAndTimestamps() {
         try (var context = startApplicationWithFlyway()) {
-            var repository = context.getBean(SubjectRepository.class);
+            var repository = context.getBean(SpringDataSubjectRepository.class);
             var users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "subject-crud");
             var subject = new SubjectEntity(users.userA().userId(), "Anatomy", LearningOrganizationStatus.ACTIVE);
             subject.setDescription(null);
@@ -70,7 +70,7 @@ class SubjectRepositoryIntegrationTests extends PostgresIntegrationTestSupport {
     @Test
     void physicallyDeletesChildlessSubjectAsRepositoryCrudPrimitive() {
         try (var context = startApplicationWithFlyway()) {
-            var repository = context.getBean(SubjectRepository.class);
+            var repository = context.getBean(SpringDataSubjectRepository.class);
             var users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "subject-delete");
             var subject = repository.saveAndFlush(new SubjectEntity(
                     users.userA().userId(), "Delete primitive", LearningOrganizationStatus.ACTIVE));
@@ -85,7 +85,7 @@ class SubjectRepositoryIntegrationTests extends PostgresIntegrationTestSupport {
     @Test
     void rejectsSubjectForNonexistentUser() {
         try (var context = startApplicationWithFlyway()) {
-            var repository = context.getBean(SubjectRepository.class);
+            var repository = context.getBean(SpringDataSubjectRepository.class);
             assertThatThrownBy(() -> repository.saveAndFlush(new SubjectEntity(
                     UUID.randomUUID(), "Anatomy", LearningOrganizationStatus.ACTIVE)))
                     .isInstanceOf(DataIntegrityViolationException.class);
@@ -95,7 +95,7 @@ class SubjectRepositoryIntegrationTests extends PostgresIntegrationTestSupport {
     @Test
     void enforcesCaseInsensitiveNameUniquenessPerUser() {
         try (var context = startApplicationWithFlyway()) {
-            var repository = context.getBean(SubjectRepository.class);
+            var repository = context.getBean(SpringDataSubjectRepository.class);
             var users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "subject-unique");
             repository.saveAndFlush(new SubjectEntity(
                     users.userA().userId(), "Anatomy", LearningOrganizationStatus.ACTIVE));
@@ -109,7 +109,7 @@ class SubjectRepositoryIntegrationTests extends PostgresIntegrationTestSupport {
     @Test
     void allowsSameSubjectNameForDifferentUsersAndScopesOwnerLookup() {
         try (var context = startApplicationWithFlyway()) {
-            var repository = context.getBean(SubjectRepository.class);
+            var repository = context.getBean(SpringDataSubjectRepository.class);
             var users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "subject-owner");
             var subjectA = repository.saveAndFlush(new SubjectEntity(
                     users.userA().userId(), "Anatomy", LearningOrganizationStatus.ACTIVE));

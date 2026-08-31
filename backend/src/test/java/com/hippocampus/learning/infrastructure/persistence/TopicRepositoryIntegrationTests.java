@@ -26,7 +26,7 @@ class TopicRepositoryIntegrationTests extends PostgresIntegrationTestSupport {
     @Test
     void createsReadsUpdatesAndPersistsBothLifecycleStates() {
         try (var context = startApplicationWithFlyway()) {
-            var subjects = context.getBean(SubjectRepository.class);
+            var subjects = context.getBean(SpringDataSubjectRepository.class);
             var topics = context.getBean(TopicRepository.class);
             var users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "topic-crud");
             var subject = subjects.saveAndFlush(new SubjectEntity(
@@ -74,7 +74,7 @@ class TopicRepositoryIntegrationTests extends PostgresIntegrationTestSupport {
 
         try (var context = startApplicationWithFlyway()) {
             var users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "topic-owner");
-            var subject = context.getBean(SubjectRepository.class).saveAndFlush(new SubjectEntity(
+            var subject = context.getBean(SpringDataSubjectRepository.class).saveAndFlush(new SubjectEntity(
                     users.userA().userId(), "Anatomy", LearningOrganizationStatus.ACTIVE));
             var topics = context.getBean(TopicRepository.class);
             var topic = topics.saveAndFlush(new TopicEntity(subject, "Thorax", LearningOrganizationStatus.ACTIVE));
@@ -87,7 +87,7 @@ class TopicRepositoryIntegrationTests extends PostgresIntegrationTestSupport {
     void childlessDeleteWorksButDeletingSubjectWithTopicIsRestricted() {
         try (var context = startApplicationWithFlyway()) {
             var users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "topic-delete");
-            var subjects = context.getBean(SubjectRepository.class);
+            var subjects = context.getBean(SpringDataSubjectRepository.class);
             var topics = context.getBean(TopicRepository.class);
             var subject = subjects.saveAndFlush(new SubjectEntity(
                     users.userA().userId(), "Anatomy", LearningOrganizationStatus.ACTIVE));

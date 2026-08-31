@@ -27,7 +27,7 @@ class SubtopicRepositoryIntegrationTests extends PostgresIntegrationTestSupport 
     void createsReadsUpdatesAndPersistsBothLifecycleStates() {
         try (var context = startApplicationWithFlyway()) {
             var users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "subtopic-crud");
-            var subject = context.getBean(SubjectRepository.class).saveAndFlush(new SubjectEntity(
+            var subject = context.getBean(SpringDataSubjectRepository.class).saveAndFlush(new SubjectEntity(
                     users.userA().userId(), "Anatomy", LearningOrganizationStatus.ACTIVE));
             var topic = context.getBean(TopicRepository.class).saveAndFlush(new TopicEntity(
                     subject, "Thorax", LearningOrganizationStatus.ACTIVE));
@@ -79,7 +79,7 @@ class SubtopicRepositoryIntegrationTests extends PostgresIntegrationTestSupport 
 
         try (var context = startApplicationWithFlyway()) {
             var users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "subtopic-owner");
-            var subject = context.getBean(SubjectRepository.class).saveAndFlush(new SubjectEntity(
+            var subject = context.getBean(SpringDataSubjectRepository.class).saveAndFlush(new SubjectEntity(
                     users.userA().userId(), "Anatomy", LearningOrganizationStatus.ACTIVE));
             var topic = context.getBean(TopicRepository.class).saveAndFlush(new TopicEntity(
                     subject, "Thorax", LearningOrganizationStatus.ACTIVE));
@@ -95,7 +95,7 @@ class SubtopicRepositoryIntegrationTests extends PostgresIntegrationTestSupport 
     void leafDeleteWorksButDeletingTopicWithSubtopicIsRestricted() {
         try (var context = startApplicationWithFlyway()) {
             var users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "subtopic-delete");
-            var subject = context.getBean(SubjectRepository.class).saveAndFlush(new SubjectEntity(
+            var subject = context.getBean(SpringDataSubjectRepository.class).saveAndFlush(new SubjectEntity(
                     users.userA().userId(), "Anatomy", LearningOrganizationStatus.ACTIVE));
             var topics = context.getBean(TopicRepository.class);
             var topic = topics.saveAndFlush(new TopicEntity(subject, "Thorax", LearningOrganizationStatus.ACTIVE));
