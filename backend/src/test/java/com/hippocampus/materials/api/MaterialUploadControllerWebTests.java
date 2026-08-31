@@ -30,7 +30,8 @@ import com.hippocampus.testing.security.OwnershipTestUser;
 
 @SpringBootTest(properties = {
         "hippocampus.materials.upload.max-file-size=8B",
-        "hippocampus.materials.upload.max-request-size=32B"
+        "spring.servlet.multipart.max-file-size=8B",
+        "spring.servlet.multipart.max-request-size=32B"
 })
 @AutoConfigureMockMvc
 @Import(MaterialUploadControllerWebTests.TestInfrastructure.class)

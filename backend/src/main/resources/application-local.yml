@@ -24,7 +24,6 @@ hippocampus:
   materials:
     upload:
       max-file-size: ${HIPPOCAMPUS_MATERIAL_UPLOAD_MAX_FILE_SIZE:100MB}
-      max-request-size: ${HIPPOCAMPUS_MATERIAL_UPLOAD_MAX_REQUEST_SIZE:101MB}
   storage:
     backend: filesystem
     filesystem:

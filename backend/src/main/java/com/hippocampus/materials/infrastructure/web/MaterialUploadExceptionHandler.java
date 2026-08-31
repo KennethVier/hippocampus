@@ -11,13 +11,16 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 
 import com.hippocampus.materials.application.MaterialUploadException;
 import com.hippocampus.shared.infrastructure.web.CorrelationIdFilter;
 
 import jakarta.servlet.http.HttpServletRequest;
 
-@RestControllerAdvice(assignableTypes = com.hippocampus.materials.api.MaterialUploadController.class)
+@RestControllerAdvice
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public final class MaterialUploadExceptionHandler {
 
     @ExceptionHandler(MaterialUploadException.class)

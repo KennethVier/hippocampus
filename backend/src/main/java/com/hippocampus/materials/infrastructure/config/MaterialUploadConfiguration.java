@@ -3,6 +3,7 @@ package com.hippocampus.materials.infrastructure.config;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.servlet.autoconfigure.MultipartProperties;
 import org.springframework.context.annotation.Bean;
 
 import com.hippocampus.identity.port.CurrentUser;
@@ -12,7 +13,7 @@ import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.MaterialUploadPersistence;
 
 @AutoConfiguration(after = MaterialUploadPersistenceConfiguration.class)
-@ConditionalOnBean({BinaryObjectStore.class, MaterialUploadPersistence.class})
+@ConditionalOnBean({CurrentUser.class, BinaryObjectStore.class, MaterialUploadPersistence.class})
 @EnableConfigurationProperties(MaterialUploadProperties.class)
 public class MaterialUploadConfiguration {
 
@@ -21,7 +22,9 @@ public class MaterialUploadConfiguration {
             CurrentUser currentUser,
             BinaryObjectStore objectStore,
             MaterialUploadPersistence persistence,
-            MaterialUploadProperties properties) {
+            MaterialUploadProperties properties,
+            MultipartProperties multipartProperties) {
+        properties.validateTransport(multipartProperties);
         return new UploadMaterial(currentUser, objectStore, persistence, properties.maxFileSize().toBytes());
     }
 

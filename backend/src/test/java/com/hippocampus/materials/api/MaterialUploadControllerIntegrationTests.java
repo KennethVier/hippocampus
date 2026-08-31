@@ -2,12 +2,17 @@ package com.hippocampus.materials.api;
 
 import static com.hippocampus.testing.security.OwnershipTestRequests.authenticatedAs;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
@@ -17,6 +22,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
@@ -26,9 +34,12 @@ import org.springframework.web.context.WebApplicationContext;
 import com.hippocampus.identity.infrastructure.persistence.UserRepository;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialRepository;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialVersionRepository;
+import com.hippocampus.materials.infrastructure.persistence.JpaMaterialUploadPersistence;
+import com.hippocampus.materials.infrastructure.persistence.MaterialVersionEntity;
 import com.hippocampus.materials.infrastructure.storage.filesystem.FileSystemBinaryObjectStore;
 import com.hippocampus.materials.port.BinaryObjectKey;
 import com.hippocampus.materials.port.BinaryObjectStore;
+import com.hippocampus.materials.port.MaterialUploadPersistence;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 import com.hippocampus.testing.security.OwnershipTestUsers;
 
@@ -36,7 +47,8 @@ class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSu
 
     private static final String[] UPLOAD_ARGUMENTS = {
             "--hippocampus.materials.upload.max-file-size=8B",
-            "--hippocampus.materials.upload.max-request-size=32B"
+            "--spring.servlet.multipart.max-file-size=8B",
+            "--spring.servlet.multipart.max-request-size=32B"
     };
 
     @BeforeEach
@@ -132,6 +144,27 @@ class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSu
         }
     }
 
+    @Test
+    void rollsBackMaterialWhenVersionPersistenceFailsInsideTransactionalAdapter() throws Exception {
+        try (ConfigurableApplicationContext context = startApplicationWithFlywayAndArguments(
+                new Class<?>[] {StorageTestConfiguration.class, RollbackTestConfiguration.class}, UPLOAD_ARGUMENTS)) {
+            OwnershipTestUsers users = OwnershipTestUsers.persistWith(
+                    context.getBean(UserRepository.class), "material-upload-rollback");
+            MaterialUploadPersistence persistence = context.getBean(
+                    "rollbackMaterialUploadPersistence", MaterialUploadPersistence.class);
+
+            assertThatThrownBy(() -> persistence.createInitialMaterial(new MaterialUploadPersistence.InitialMaterial(
+                    users.userA().userId(), "Rollback source", "PDF", "rollback.pdf", "application/pdf",
+                    "materials/" + java.util.UUID.randomUUID() + "/original", 3)))
+                    .isInstanceOf(DataIntegrityViolationException.class);
+
+            assertThat(context.getBean(SpringDataMaterialRepository.class).count()).isZero();
+            SpringDataMaterialVersionRepository actualVersions = context.getBean(
+                    "springDataMaterialVersionRepository", SpringDataMaterialVersionRepository.class);
+            assertThat(actualVersions.count()).isZero();
+        }
+    }
+
     private static MockMultipartFile file(String name, String type, byte[] content) {
         return new MockMultipartFile("file", name, type, content);
     }
@@ -148,6 +181,21 @@ class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSu
     static class StorageTestConfiguration {
         @Bean BinaryObjectStore binaryObjectStore() throws Exception {
             return new FileSystemBinaryObjectStore(Files.createTempDirectory("hippocampus-upload-test-"));
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class RollbackTestConfiguration {
+        @Bean("rollbackMaterialUploadPersistence")
+        @Primary
+        MaterialUploadPersistence rollbackMaterialUploadPersistence(
+                SpringDataMaterialRepository materials,
+                @Qualifier("springDataMaterialVersionRepository") SpringDataMaterialVersionRepository versions) {
+            SpringDataMaterialVersionRepository failingVersions = mock(
+                    SpringDataMaterialVersionRepository.class, delegatesTo(versions));
+            doThrow(new DataIntegrityViolationException("forced version failure"))
+                    .when(failingVersions).saveAndFlush(any(MaterialVersionEntity.class));
+            return new JpaMaterialUploadPersistence(materials, failingVersions);
         }
     }
 }
