@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type UploadProgress } from '../../../api/apiClient'
@@ -46,14 +46,18 @@ describe('Materials page', () => {
   })
 
   it('renders transfer, finishing, then accepted and synchronizes authoritative list', async () => {
-    vi.spyOn(api, 'listMaterials').mockResolvedValueOnce(empty).mockResolvedValue({ items: [{ ...material, title: 'notes.txt', originalFilename: 'notes.txt', mimeType: 'text/plain' }], page: 0, size: 12, totalElements: 1, totalPages: 1 })
+    vi.spyOn(api, 'listMaterials').mockImplementation(async (page) => page === 0
+      ? { items: [{ ...material, title: 'notes.txt', originalFilename: 'notes.txt', mimeType: 'text/plain' }], page: 0, size: 12, totalElements: 1, totalPages: 1 }
+      : { ...empty, page })
     let progress: ((value: UploadProgress) => void) | undefined; let accept: ((value: MaterialUpload) => void) | undefined
     vi.spyOn(api, 'uploadMaterial').mockImplementation((_file, onProgress) => { progress = onProgress; return new Promise((resolve) => { accept = resolve }) })
-    renderAt('/materials?page=3'); const input = await screen.findByLabelText('Choose file'); fireEvent.change(input, { target: { files: [new File(['notes'], 'notes.txt', { type: 'text/plain' })] } }); fireEvent.click(screen.getByRole('button', { name: 'Upload file' }))
+    const { router } = renderAt('/materials?page=3'); const input = await screen.findByLabelText('Choose file'); fireEvent.change(input, { target: { files: [new File(['notes'], 'notes.txt', { type: 'text/plain' })] } }); fireEvent.click(screen.getByRole('button', { name: 'Upload file' }))
     progress?.({ type: 'determinate', loadedBytes: 37, totalBytes: 100, percentage: 37 }); expect(await screen.findByText('Uploading 37%')).toBeInTheDocument(); expect(screen.queryByRole('heading', { name: 'Upload accepted' })).not.toBeInTheDocument()
     progress?.({ type: 'indeterminate', loadedBytes: 40 }); expect(await screen.findByText('Uploading…')).toBeInTheDocument()
     progress?.({ type: 'determinate', loadedBytes: 100, totalBytes: 100, percentage: 100 }); expect(await screen.findByText('Finishing upload…')).toBeInTheDocument(); expect(screen.queryByRole('heading', { name: 'Upload accepted' })).not.toBeInTheDocument()
-    accept?.(upload); expect(await screen.findByRole('heading', { name: 'Upload accepted' })).toBeInTheDocument(); expect(await screen.findByRole('heading', { name: 'notes.txt' })).toBeInTheDocument()
+    await act(async () => { accept?.(upload) }); expect(await screen.findByRole('heading', { name: 'Upload accepted' })).toBeInTheDocument()
+    await waitFor(() => expect(router.state.location.search).toBe('?page=1'))
+    expect(await screen.findByRole('heading', { name: 'notes.txt' })).toBeInTheDocument()
   })
 
   it('maps upload errors, supports explicit retry/cancel, and aborts on private cleanup without late state', async () => {
