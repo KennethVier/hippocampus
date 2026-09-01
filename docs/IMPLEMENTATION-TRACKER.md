@@ -92,13 +92,13 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 ## P0-02 — Create frontend repository structure
 
-- **Workstream:** Frontend
+- **Workstream:** Repository
 - **Priority:** Must
 - **Status:** Done
 - **Goal:** Establish React application baseline.
 - **Build:** Create React 19 + TypeScript + Vite project with app, features, components, api, hooks, state, schemas, types, test folders.
 - **How it works:** App shell owns providers/router; feature folders own feature UI.
-- **Dependencies:** Frontend project
+- **Dependencies:** None
 - **Tests / validation:** npm test/build/typecheck/lint.
 - **Expected result:** Frontend loads base route without runtime/type errors.
 - **Definition of Done:** Build/test/typecheck pass; folders match Doc 20.
