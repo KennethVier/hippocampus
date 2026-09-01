@@ -14,7 +14,7 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     {
       name: 'mobile-chromium',
-      testMatch: /learning-organization\.spec\.ts/,
+      testMatch: /(learning-organization|materials)\.spec\.ts/,
       use: { ...devices['Pixel 7'] },
     },
   ],

@@ -5,6 +5,8 @@ import { LoginPage } from '../../features/auth/LoginPage'
 import { RequireSession } from '../../features/auth/RequireSession'
 import { SubjectDetailPage } from '../../features/learning-organization/pages/SubjectDetailPage'
 import { SubjectsPage } from '../../features/learning-organization/pages/SubjectsPage'
+import { MaterialsPage } from '../../features/materials/pages/MaterialsPage'
+import { MaterialDetailPage } from '../../features/materials/pages/MaterialDetailPage'
 import { NotFoundPage } from './NotFoundPage'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
 import { RoutePlaceholder } from './RoutePlaceholder'
@@ -27,8 +29,8 @@ export const appRoutes = [
               { path: 'subjects/:subjectId', element: <SubjectDetailPage /> },
               { path: 'topics/:topicId', element: <RoutePlaceholder title="Topic" /> },
               { path: 'missions/:missionId', element: <RoutePlaceholder title="Study Mission" /> },
-              { path: 'materials', element: <RoutePlaceholder title="Materials" /> },
-              { path: 'materials/:materialId', element: <RoutePlaceholder title="Material" /> },
+              { path: 'materials', element: <MaterialsPage /> },
+              { path: 'materials/:materialId', element: <MaterialDetailPage /> },
               { path: 'review', element: <RoutePlaceholder title="Review" /> },
               { path: 'progress', element: <RoutePlaceholder title="Progress" /> },
               { path: 'settings', element: <RoutePlaceholder title="Settings" /> },

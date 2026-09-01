@@ -26,6 +26,15 @@ export interface JsonRequestOptions extends ApiRequestOptions {
   body?: unknown
 }
 
+export type UploadProgress =
+  | { readonly type: 'determinate'; readonly loadedBytes: number; readonly totalBytes: number; readonly percentage: number }
+  | { readonly type: 'indeterminate'; readonly loadedBytes: number }
+
+export interface MultipartProgressOptions extends ApiRequestOptions {
+  expectedStatus?: number
+  onProgress?: (progress: UploadProgress) => void
+}
+
 interface ApiErrorFields {
   kind: ApiErrorKind
   status: number | null
@@ -90,6 +99,21 @@ async function requestMultipart<TResponse>(
   })
 }
 
+async function requestMultipartWithProgress<TResponse>(
+  path: string,
+  body: FormData,
+  options: MultipartProgressOptions = {},
+): Promise<TResponse | undefined> {
+  const headers = createHeaders(options.headers, false)
+  const method = effectiveMethod(options.method, 'POST')
+  if (options.signal?.aborted) throw abortedError()
+  await addCsrfHeaderIfUnsafe(method, headers, options.signal)
+  if (options.signal?.aborted) throw abortedError()
+
+  const url = resolvedRequestUrl(path)
+  return executeProgressRequest<TResponse>(url, body, method, headers, options)
+}
+
 function effectiveMethod(method: string | undefined, defaultMethod: string): string {
   return (method ?? defaultMethod).toUpperCase()
 }
@@ -129,6 +153,7 @@ async function acquireCsrfToken(signal: AbortSignal | undefined): Promise<string
 export const apiClient = Object.freeze({
   requestJson,
   requestMultipart,
+  requestMultipartWithProgress,
 })
 
 function serializeJsonBody(body: unknown): string {
@@ -182,38 +207,14 @@ async function executeRequest<TResponse>(
   path: string,
   init: RequestInit,
 ): Promise<TResponse | undefined> {
-  let url: string
-  try {
-    url = resolveApiUrl(path)
-  } catch (error: unknown) {
-    if (error instanceof ApiConfigurationError) {
-      throw apiError({
-        kind: 'request',
-        status: null,
-        code: 'INVALID_API_CONFIGURATION',
-        message: 'The API client configuration is invalid.',
-      })
-    }
-
-    throw apiError({
-      kind: 'request',
-      status: null,
-      code: 'INVALID_REQUEST_PATH',
-      message: 'The API request path is invalid.',
-    })
-  }
+  const url = resolvedRequestUrl(path)
 
   let response: Response
   try {
     response = await fetch(url, init)
   } catch (error: unknown) {
     if (init.signal?.aborted || isAbortError(error)) {
-      throw apiError({
-        kind: 'aborted',
-        status: null,
-        code: 'REQUEST_ABORTED',
-        message: 'The request was canceled.',
-      })
+      throw abortedError()
     }
 
     throw apiError({
@@ -228,90 +229,122 @@ async function executeRequest<TResponse>(
 }
 
 async function parseResponse<TResponse>(response: Response): Promise<TResponse | undefined> {
-  const headerCorrelationId = normalizeCorrelationId(
-    response.headers.get(CORRELATION_ID_HEADER),
-  )
-
-  if (!response.ok) {
-    return parseFailure(response, headerCorrelationId)
-  }
-
-  if (response.status === 204) {
-    return undefined
-  }
-
   let body: string
   try {
     body = await response.text()
   } catch {
-    throw invalidResponse(response.status, headerCorrelationId)
+    if (!response.ok) throw httpFallback(response.status, normalizeCorrelationId(response.headers.get(CORRELATION_ID_HEADER)))
+    throw invalidResponse(response.status, normalizeCorrelationId(response.headers.get(CORRELATION_ID_HEADER)))
   }
+  return normalizeResponse<TResponse>({ status: response.status, contentType: response.headers.get('Content-Type'), correlationId: response.headers.get(CORRELATION_ID_HEADER), body })
+}
 
-  if (!body.trim()) {
-    return undefined
+interface ResponseParts { readonly status: number; readonly contentType: string | null; readonly correlationId: string | null; readonly body: string }
+
+function normalizeResponse<TResponse>(parts: ResponseParts, expectedStatus?: number): TResponse | undefined {
+  const correlationId = normalizeCorrelationId(parts.correlationId)
+  const successful = parts.status >= 200 && parts.status < 300
+  if (successful && expectedStatus !== undefined && parts.status !== expectedStatus) {
+    throw invalidResponse(parts.status, correlationId)
   }
-
-  if (!isJsonContentType(response.headers.get('Content-Type'))) {
-    throw invalidResponse(response.status, headerCorrelationId)
-  }
-
+  if (!successful) return parseFailure(parts, correlationId)
+  if (parts.status === 204) return undefined
+  if (!parts.body.trim()) return undefined
+  if (!isJsonContentType(parts.contentType)) throw invalidResponse(parts.status, correlationId)
   try {
-    return JSON.parse(body) as TResponse
+    return JSON.parse(parts.body) as TResponse
   } catch {
-    throw invalidResponse(response.status, headerCorrelationId)
+    throw invalidResponse(parts.status, correlationId)
   }
 }
 
-async function parseFailure(
-  response: Response,
-  headerCorrelationId: string | null,
-): Promise<never> {
-  if (!isProblemContentType(response.headers.get('Content-Type'))) {
-    throw httpFallback(response.status, headerCorrelationId)
-  }
-
-  let body: string
-  try {
-    body = await response.text()
-  } catch {
-    throw httpFallback(response.status, headerCorrelationId)
-  }
-
-  if (!body.trim()) {
-    throw httpFallback(response.status, headerCorrelationId)
-  }
+function parseFailure(parts: ResponseParts, headerCorrelationId: string | null): never {
+  if (!isProblemContentType(parts.contentType) || !parts.body.trim()) throw httpFallback(parts.status, headerCorrelationId)
 
   let problem: unknown
   try {
-    problem = JSON.parse(body)
+    problem = JSON.parse(parts.body)
   } catch {
-    throw httpFallback(response.status, headerCorrelationId)
+    throw httpFallback(parts.status, headerCorrelationId)
   }
 
-  if (!isRecord(problem)) {
-    throw httpFallback(response.status, headerCorrelationId)
-  }
+  if (!isRecord(problem)) throw httpFallback(parts.status, headerCorrelationId)
 
   const { status, code, message, correlationId, details } = problem
   if (
     !Number.isInteger(status) ||
-    status !== response.status ||
+    status !== parts.status ||
     typeof code !== 'string' ||
     !ERROR_CODE_PATTERN.test(code) ||
     typeof message !== 'string' ||
     !message.trim()
   ) {
-    throw httpFallback(response.status, headerCorrelationId)
+    throw httpFallback(parts.status, headerCorrelationId)
   }
 
   throw apiError({
     kind: 'http',
-    status: response.status,
+    status: parts.status,
     code,
     message: message.trim(),
     correlationId: headerCorrelationId ?? normalizeCorrelationId(correlationId),
     details: isRecord(details) ? Object.freeze({ ...details }) : EMPTY_DETAILS,
   })
+}
+
+function executeProgressRequest<TResponse>(
+  url: string,
+  body: FormData,
+  method: string,
+  headers: Headers,
+  options: MultipartProgressOptions,
+): Promise<TResponse | undefined> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    let settled = false
+    const signal = options.signal
+    const cleanup = () => {
+      signal?.removeEventListener('abort', abort)
+      xhr.onload = null; xhr.onerror = null; xhr.onabort = null; xhr.upload.onprogress = null
+    }
+    const finish = (action: () => void) => {
+      if (settled) return
+      settled = true; cleanup(); action()
+    }
+    const abort = () => { if (!settled) xhr.abort() }
+
+    xhr.open(method, url)
+    xhr.withCredentials = true
+    headers.forEach((value, name) => xhr.setRequestHeader(name, value))
+    xhr.upload.onprogress = (event) => {
+      if (settled) return
+      if (event.lengthComputable && event.total > 0) {
+        const percentage = Math.min(100, Math.max(0, Math.floor((event.loaded / event.total) * 100)))
+        options.onProgress?.({ type: 'determinate', loadedBytes: event.loaded, totalBytes: event.total, percentage })
+      } else options.onProgress?.({ type: 'indeterminate', loadedBytes: event.loaded })
+    }
+    xhr.onload = () => finish(() => {
+      try {
+        resolve(normalizeResponse<TResponse>({ status: xhr.status, contentType: xhr.getResponseHeader('Content-Type'), correlationId: xhr.getResponseHeader(CORRELATION_ID_HEADER), body: xhr.responseText }, options.expectedStatus))
+      } catch (error: unknown) { reject(error) }
+    })
+    xhr.onerror = () => finish(() => reject(apiError({ kind: 'network', status: null, code: 'NETWORK_ERROR', message: 'Unable to reach the server.' })))
+    xhr.onabort = () => finish(() => reject(abortedError()))
+    signal?.addEventListener('abort', abort, { once: true })
+    xhr.send(body)
+  })
+}
+
+function resolvedRequestUrl(path: string): string {
+  try { return resolveApiUrl(path) }
+  catch (error: unknown) {
+    if (error instanceof ApiConfigurationError) throw apiError({ kind: 'request', status: null, code: 'INVALID_API_CONFIGURATION', message: 'The API client configuration is invalid.' })
+    throw apiError({ kind: 'request', status: null, code: 'INVALID_REQUEST_PATH', message: 'The API request path is invalid.' })
+  }
+}
+
+function abortedError(): ApiError {
+  return apiError({ kind: 'aborted', status: null, code: 'REQUEST_ABORTED', message: 'The request was canceled.' })
 }
 
 function httpFallback(status: number, correlationId: string | null): ApiError {

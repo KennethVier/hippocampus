@@ -66,7 +66,7 @@ describe('App', () => {
     ['/topics/example-topic', 'Topic'],
     ['/missions/example-mission', 'Study Mission'],
     ['/materials', 'Materials'],
-    ['/materials/example-material', 'Material'],
+    ['/materials/example-material', 'Material unavailable'],
     ['/review', 'Review'],
     ['/progress', 'Progress'],
     ['/settings', 'Settings'],
