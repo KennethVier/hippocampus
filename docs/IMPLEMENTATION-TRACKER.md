@@ -92,13 +92,13 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 ## P0-02 — Create frontend repository structure
 
-- **Workstream:** Repository
+- **Workstream:** Frontend
 - **Priority:** Must
 - **Status:** Done
 - **Goal:** Establish React application baseline.
 - **Build:** Create React 19 + TypeScript + Vite project with app, features, components, api, hooks, state, schemas, types, test folders.
 - **How it works:** App shell owns providers/router; feature folders own feature UI.
-- **Dependencies:** None
+- **Dependencies:** Frontend project
 - **Tests / validation:** npm test/build/typecheck/lint.
 - **Expected result:** Frontend loads base route without runtime/type errors.
 - **Definition of Done:** Build/test/typecheck pass; folders match Doc 20.
@@ -396,7 +396,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Authenticated user can enter app; invalid credentials reveal no sensitive details.
 - **Definition of Done:** Auth tests pass and flow documented.
 - **Authority:** Documents 22
-- **Evidence / link:** PR #37 merged at f38da0394896b500b7d2dbc595ea165c559c2fb6; post-merge `quality` workflow run #55 (run ID 33144274234) on `main` succeeded with `backend-quality`, `frontend-quality`, and `security`; external implementation review accepted; V3 credential migration and Hibernate mapping; Spring Security JSON login with exact-email database authentication, generic credential failures, server-side context persistence/session rotation, CSRF enforcement, and bounded fixed-window throttling; provider unit, PostgreSQL credential-repository, end-to-end authentication integration, deterministic limiter, migration-contract, and authentication-flow documentation coverage.
+- **Evidence / link:** PR #37 merged at f38da0394896b500b7d2dbc595ea165c559c2fb6; post-merge `quality` workflow run #55 (run ID 33144274234) on `main` succeeded with `backend-quality`, `frontend-quality`, and `security`; external implementation review accepted; V3 credential migration and Hibernate mapping; Spring Security JSON login with exact-email database authentication, generic credential failures, server-side context persistence/session rotation, and bounded fixed-window throttling; provider unit, PostgreSQL credential-repository, end-to-end authentication integration, deterministic limiter, migration-contract, and authentication-flow documentation coverage.
 - **Notes / blockers:** _None_
 
 ## P1-03 — Configure Spring Session JDBC
@@ -666,7 +666,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Database
 - **Priority:** Must
-- **Status:** In Progress
+- **Status:** Ready for Review
 - **Goal:** Keep Material ≠ Topic while allowing mappings.
 - **Build:** Create material_topic_links with origin/status/version/node optional references.
 - **How it works:** Mapping is many-to-many and validates same-user ownership.
@@ -675,8 +675,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** A material can support many topics and vice versa.
 - **Definition of Done:** Schema/use-case tests pass.
 - **Authority:** Documents 14,18
-- **Evidence / link:** PR [#82](https://github.com/KennethVier/hippocampus/pull/82) implements additive Flyway migration `V7__create_material_topic_links.sql`, the owner-scoped `CreateUserSelectedMaterialTopicLink` use case, one atomic JDBC persistence adapter, and focused schema/use-case/security-negative tests. Quality run [#189](https://github.com/KennethVier/hippocampus/actions/runs/33470528645) exposed missing P2-08 beans because the feature configuration ran before `JdbcClientAutoConfiguration`; the first remediation made the use case proxyable, ordered the configuration, and added focused composition/proxy coverage. The subsequent authoritative quality run [#190](https://github.com/KennethVier/hippocampus/actions/runs/33473078972) reached the P2-08 PostgreSQL tests but `backend-quality` failed with one failure and six errors; `frontend-quality`, automated `security`, and `auth-e2e` passed, while `phase1-gate` failed because `backend-quality` is required. Reproduction against PostgreSQL identified two JDBC defects in the atomic insert: the PostgreSQL driver cannot infer a type for `java.time.Instant`, and the repeated nullable MaterialVersion parameter remained untyped in the SQL `IS NULL` expression. The current remediation lets PostgreSQL assign both timestamps with `CURRENT_TIMESTAMP`, reads `TIMESTAMPTZ` through supported `OffsetDateTime` conversion, and explicitly casts the nullable parameter to UUID in SQL. Local compile, focused tests, configuration/proxy tests, architecture tests, and `git diff --check` must remain green; authoritative PostgreSQL/Testcontainers and full `clean verify` remain required before returning to `Ready for Review`. General implementation review verdict remains **APPROVED WITH REQUIRED CHANGES** pending remediation re-review. The automated GitHub `security` job is not the independent adversarial security gate, which has not run. P3-05 retains ownership of actual DocumentNode schema/integration.
-- **Notes / blockers:** P2-08 remains under remediation until local available validation and a new authoritative PR run establish green `backend-quality` and required gate results. It is not `Done`, no independent `SECURITY PASS` is claimed, and no merge evidence exists.
+- **Evidence / link:** PR [#82](https://github.com/KennethVier/hippocampus/pull/82) implements additive Flyway migration `V7__create_material_topic_links.sql`, the owner-scoped `CreateUserSelectedMaterialTopicLink` use case, one atomic JDBC persistence adapter, and focused schema/use-case/security-negative tests. Earlier quality runs [#189](https://github.com/KennethVier/hippocampus/actions/runs/33470528645) and [#190](https://github.com/KennethVier/hippocampus/actions/runs/33473078972) exposed and drove remediation of Spring auto-configuration/proxy safety and PostgreSQL JDBC typing/timestamp issues. The reviewed implementation head `4afdf06530ba045be5fc8312b45d426cb633eb1a` makes the transactional use case proxyable, orders `MaterialTopicLinkConfiguration` after `JdbcClientAutoConfiguration`, adds focused Spring composition/proxy coverage, lets PostgreSQL assign timestamps with `CURRENT_TIMESTAMP`, reads `TIMESTAMPTZ` through `OffsetDateTime`, and explicitly casts the nullable MaterialVersion parameter to UUID. Authoritative PR quality run [#191](https://github.com/KennethVier/hippocampus/actions/runs/33474752140) (ID `33474752140`) succeeded on that reviewed implementation head: `backend-quality`, `frontend-quality`, automated `security`, `auth-e2e`, and `phase1-gate` all completed successfully; `backend-quality` ran backend tests, architecture tests, PostgreSQL/Testcontainers migrations/integration coverage, and the backend build, resolving the prior remediation failures. External general implementation re-review found no remaining material implementation-code defect in the reviewed candidate; architecture, ownership, provenance, duplicate-active-link, MaterialVersion integrity, deleted-Material fail-closed behavior, and Phase-2 DocumentNode sequencing remain aligned with Documents 14, 18, 19, and 26, with no ADR required. The automated GitHub `security` job is supporting CI evidence only and is not the independent adversarial security gate. Independent security review and merge/final completion evidence remain pending, so P2-08 is not `Done`. P3-05 retains ownership of actual DocumentNode schema/integration.
+- **Notes / blockers:** No current implementation or CI blocker is known. Independent adversarial security review is still required before merge/final completion; no `SECURITY PASS` or merge evidence is claimed.
 
 ## P2-09 — Build Subjects and Topics UI
 
