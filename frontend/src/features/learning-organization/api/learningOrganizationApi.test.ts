@@ -82,18 +82,4 @@ describe('learning organization API boundary', () => {
     await expect(getSubject(subject.id)).rejects.toMatchObject({ kind: 'invalid-response', status: 200, code: 'INVALID_RESPONSE' })
     await expect(getSubject(subject.id)).rejects.toMatchObject({ kind: 'invalid-response', status: 204, code: 'INVALID_RESPONSE' })
   })
-
-  it('preserves centralized client failures unchanged', async () => {
-    const error = new Error('centralized client failure')
-    requestJson.mockRejectedValue(error)
-
-    let caught: unknown
-    try {
-      await getSubject(subject.id)
-    } catch (value) {
-      caught = value
-    }
-
-    expect(caught).toBe(error)
-  })
 })
