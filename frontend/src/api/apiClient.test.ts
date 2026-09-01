@@ -12,6 +12,72 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+class FakeXhr {
+  static instances: FakeXhr[] = []
+  method = ''; url = ''; withCredentials = false; sent: Document | XMLHttpRequestBodyInit | null = null
+  status = 0; responseText = ''; headers = new Map<string, string>(); requestHeaders = new Map<string, string>()
+  upload: { onprogress: ((event: ProgressEvent) => void) | null } = { onprogress: null }
+  onload: (() => void) | null = null; onerror: (() => void) | null = null; onabort: (() => void) | null = null
+  constructor() { FakeXhr.instances.push(this) }
+  open(method: string, url: string) { this.method = method; this.url = url }
+  setRequestHeader(name: string, value: string) { this.requestHeaders.set(name.toLowerCase(), value) }
+  getResponseHeader(name: string) { return this.headers.get(name.toLowerCase()) ?? null }
+  send(body?: Document | XMLHttpRequestBodyInit | null) { this.sent = body ?? null }
+  abort() { this.onabort?.() }
+  respond(status: number, body: string, contentType = 'application/json') { this.status = status; this.responseText = body; this.headers.set('content-type', contentType); this.onload?.() }
+  progress(loaded: number, total: number, lengthComputable = true) { this.upload.onprogress?.({ loaded, total, lengthComputable } as ProgressEvent) }
+}
+
+describe('apiClient progress multipart transport', () => {
+  function install() { FakeXhr.instances = []; vi.stubGlobal('XMLHttpRequest', FakeXhr) }
+  function csrf() { vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockImplementation(async () => csrfResponse('private-csrf-token'))) }
+
+  it('acquires CSRF before starting a credentialed XHR and sends the original FormData without Content-Type', async () => {
+    install(); csrf(); const form = new FormData(); form.append('file', new Blob(['notes']), 'notes.txt')
+    const promise = apiClient.requestMultipartWithProgress('/api/materials', form, { expectedStatus: 201 })
+    expect(FakeXhr.instances).toHaveLength(0); await vi.waitFor(() => expect(FakeXhr.instances).toHaveLength(1))
+    const xhr = FakeXhr.instances[0]!; expect(xhr.method).toBe('POST'); expect(xhr.url).toMatch(/\/api\/materials$/); expect(xhr.withCredentials).toBe(true)
+    expect(xhr.sent).toBe(form); expect(xhr.requestHeaders.get('accept')).toBe(ACCEPT_HEADER_VALUE); expect(xhr.requestHeaders.get('x-csrf-token')).toBe('private-csrf-token'); expect(xhr.requestHeaders.has('content-type')).toBe(false)
+    xhr.respond(201, JSON.stringify({ materialId: 'material-1' })); await expect(promise).resolves.toEqual({ materialId: 'material-1' })
+  })
+
+  it('resolves the configured origin and maps determinate/indeterminate progress without settling at 100%', async () => {
+    install(); csrf(); vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.test'); const progress = vi.fn(); let settled = false
+    const promise = apiClient.requestMultipartWithProgress('/api/materials', new FormData(), { expectedStatus: 201, onProgress: progress }).finally(() => { settled = true })
+    await vi.waitFor(() => expect(FakeXhr.instances).toHaveLength(1)); const xhr = FakeXhr.instances[0]!
+    expect(xhr.url).toBe('https://api.example.test/api/materials'); xhr.progress(37, 100); xhr.progress(3, 0, false); xhr.progress(100, 100); await Promise.resolve(); expect(settled).toBe(false)
+    expect(progress.mock.calls.map((call) => call[0])).toEqual([{ type: 'determinate', loadedBytes: 37, totalBytes: 100, percentage: 37 }, { type: 'indeterminate', loadedBytes: 3 }, { type: 'determinate', loadedBytes: 100, totalBytes: 100, percentage: 100 }])
+    xhr.respond(201, '{}'); await promise
+  })
+
+  it.each([200, 202])('rejects successful status %s when 201 is expected', async (status) => {
+    install(); csrf(); const promise = apiClient.requestMultipartWithProgress('/api/materials', new FormData(), { expectedStatus: 201 })
+    await vi.waitFor(() => expect(FakeXhr.instances).toHaveLength(1)); FakeXhr.instances[0]!.respond(status, '{"private":"PRIVATE_BODY"}')
+    const error = await captureApiError(promise); expect(error).toMatchObject({ kind: 'invalid-response', status, code: 'INVALID_RESPONSE' }); expect(JSON.stringify(error)).not.toContain('PRIVATE_BODY')
+  })
+
+  it('shares malformed success, ProblemDetail, fallback, and correlation normalization', async () => {
+    install(); csrf(); const malformed = apiClient.requestMultipartWithProgress('/api/materials', new FormData(), { expectedStatus: 201 })
+    await vi.waitFor(() => expect(FakeXhr.instances).toHaveLength(1)); FakeXhr.instances[0]!.respond(201, '{bad'); expect((await captureApiError(malformed)).code).toBe('INVALID_RESPONSE')
+    const problem = apiClient.requestMultipartWithProgress('/api/materials', new FormData())
+    await vi.waitFor(() => expect(FakeXhr.instances).toHaveLength(2)); const second = FakeXhr.instances[1]!; second.headers.set('x-correlation-id', CORRELATION_ID); second.respond(413, JSON.stringify({ status: 413, code: 'UPLOAD_TOO_LARGE', message: 'Too large.', details: {} }), 'application/problem+json')
+    expect(await captureApiError(problem)).toMatchObject({ code: 'UPLOAD_TOO_LARGE', correlationId: CORRELATION_ID })
+    const fallback = apiClient.requestMultipartWithProgress('/api/materials', new FormData()); await vi.waitFor(() => expect(FakeXhr.instances).toHaveLength(3)); FakeXhr.instances[2]!.respond(500, 'PRIVATE_RAW', 'text/plain'); expect(await captureApiError(fallback)).toMatchObject({ code: 'HTTP_ERROR' })
+  })
+
+  it('normalizes network errors, pre-abort, active abort, and settles once', async () => {
+    install(); csrf(); const network = apiClient.requestMultipartWithProgress('/api/materials', new FormData()); await vi.waitFor(() => expect(FakeXhr.instances).toHaveLength(1)); FakeXhr.instances[0]!.onerror?.(); expect((await captureApiError(network)).code).toBe('NETWORK_ERROR')
+    const before = new AbortController(); before.abort(); expect((await captureApiError(apiClient.requestMultipartWithProgress('/api/materials', new FormData(), { signal: before.signal }))).code).toBe('REQUEST_ABORTED')
+    const active = new AbortController(); const pending = apiClient.requestMultipartWithProgress('/api/materials', new FormData(), { signal: active.signal }); await vi.waitFor(() => expect(FakeXhr.instances).toHaveLength(2)); const xhr = FakeXhr.instances[1]!; active.abort(); xhr.onerror?.(); expect((await captureApiError(pending)).code).toBe('REQUEST_ABORTED')
+  })
+
+  it('does not start XHR when CSRF acquisition fails and keeps controlled headers forbidden', async () => {
+    install(); vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response('', { status: 500 })))
+    await expect(apiClient.requestMultipartWithProgress('/api/materials', new FormData())).rejects.toBeInstanceOf(ApiError); expect(FakeXhr.instances).toHaveLength(0)
+    csrf(); const error = await captureApiError(apiClient.requestMultipartWithProgress('/api/materials', new FormData(), { headers: { Authorization: 'Bearer PRIVATE_TOKEN' } })); expect(error.code).toBe('REQUEST_HEADER_NOT_ALLOWED'); expect(JSON.stringify(error)).not.toContain('PRIVATE_TOKEN')
+  })
+})
+
 describe('apiClient success handling', () => {
   it('returns a successful JSON response with owned headers and credentials', async () => {
     const controller = new AbortController()
