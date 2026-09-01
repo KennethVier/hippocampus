@@ -1,7 +1,8 @@
 .organization-page { display: grid; gap: var(--hc-space-8); width: 100%; min-width: 0; padding-bottom: var(--hc-space-16); }
-.organization-page h1, .organization-page h2, .organization-page p { overflow-wrap: anywhere; }
+.organization-page h1, .organization-page h2, .organization-page h3, .organization-page p { overflow-wrap: anywhere; }
 .organization-page h1 { margin: 0; font-size: var(--hc-font-size-headline-lg); line-height: var(--hc-line-height-headline-lg); }
 .organization-page h2 { margin: 0; font-size: var(--hc-font-size-headline-md); line-height: var(--hc-line-height-headline-md); }
+.organization-page h3 { margin: 0; font-size: var(--hc-font-size-body-lg); line-height: var(--hc-line-height-body-lg); font-weight: 600; }
 .organization-page p { margin: var(--hc-space-2) 0 0; color: var(--hc-color-text-secondary); }
 .organization-page-header, .organization-section-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--hc-space-6); }
 .organization-eyebrow { color: var(--hc-color-primary) !important; font-size: var(--hc-font-size-label-sm); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
@@ -10,7 +11,7 @@
 .organization-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); gap: var(--hc-space-4); min-width: 0; }
 .organization-grid > .ui-skeleton { min-height: 11rem; }
 .organization-card { display: flex; min-width: 0; flex-direction: column; justify-content: space-between; gap: var(--hc-space-6); }
-.organization-card-copy h2 { overflow-wrap: anywhere; }
+.organization-card-copy h2, .organization-card-copy h3 { overflow-wrap: anywhere; }
 .organization-card-copy p { white-space: pre-wrap; }
 .organization-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--hc-space-3); }
 .organization-link-action { display: inline-flex; min-height: 2.75rem; align-items: center; padding: var(--hc-space-3) var(--hc-space-4); border: var(--hc-border-width) solid var(--hc-color-border-subtle); border-radius: var(--hc-radius); font-size: var(--hc-font-size-label-md); font-weight: 600; }

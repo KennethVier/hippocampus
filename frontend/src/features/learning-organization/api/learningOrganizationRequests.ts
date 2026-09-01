@@ -17,15 +17,3 @@ export const organizationRequest = {
   topic: (topicId: string) => `/api/topics/${encodeURIComponent(topicId)}`,
   topicArchive: (topicId: string) => `/api/topics/${encodeURIComponent(topicId)}/archive`,
 } as const
-
-export function subjectCreateBody(name: string, description: string | null): SubjectInput {
-  return { name, description, sortOrder: null }
-}
-
-export function subjectUpdateBody(name: string, description: string | null, sortOrder: number | null): SubjectInput {
-  return { name, description, sortOrder }
-}
-
-export function topicBody(name: string, description: string | null): TopicInput {
-  return { name, description }
-}

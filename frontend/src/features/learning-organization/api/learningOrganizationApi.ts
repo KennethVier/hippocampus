@@ -9,7 +9,7 @@ import {
   type Topic,
   type TopicPage,
 } from './learningOrganizationContracts'
-import { organizationRequest, subjectCreateBody, type SubjectInput, type TopicInput } from './learningOrganizationRequests'
+import { organizationRequest, type SubjectInput, type TopicInput } from './learningOrganizationRequests'
 
 function parse<T>(schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } }, value: unknown): T {
   const result = schema.safeParse(value)
@@ -33,7 +33,10 @@ export async function getSubject(subjectId: string, signal?: AbortSignal): Promi
 }
 
 export async function createSubject(input: Omit<SubjectInput, 'sortOrder'>): Promise<Subject> {
-  const value = await apiClient.requestJson<unknown>('/api/subjects', { method: 'POST', body: subjectCreateBody(input.name, input.description) })
+  const value = await apiClient.requestJson<unknown>('/api/subjects', {
+    method: 'POST',
+    body: { ...input, sortOrder: null },
+  })
   return parse(subjectSchema, required(value))
 }
 
