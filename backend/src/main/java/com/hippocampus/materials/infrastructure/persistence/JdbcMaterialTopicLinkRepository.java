@@ -3,7 +3,7 @@ package com.hippocampus.materials.infrastructure.persistence;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
-import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -22,7 +22,7 @@ public final class JdbcMaterialTopicLinkRepository implements MaterialTopicLinkR
                 id, topic_id, material_id, material_version_id, document_node_id,
                 link_origin, status, created_at, updated_at
             )
-            SELECT :id, t.id, m.id, mv.id, NULL, 'USER_SELECTED', 'ACTIVE', :now, :now
+            SELECT :id, t.id, m.id, mv.id, NULL, 'USER_SELECTED', 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             FROM topics t
             JOIN subjects s ON s.id = t.subject_id
             JOIN materials m ON m.id = :materialId
@@ -32,7 +32,7 @@ public final class JdbcMaterialTopicLinkRepository implements MaterialTopicLinkR
               AND s.user_id = :ownerId
               AND m.user_id = :ownerId
               AND m.status <> 'DELETED'
-              AND (:materialVersionId IS NULL OR mv.id IS NOT NULL)
+              AND (CAST(:materialVersionId AS UUID) IS NULL OR mv.id IS NOT NULL)
             RETURNING id, topic_id, material_id, material_version_id, document_node_id,
                       link_origin, status, created_at, updated_at
             """;
@@ -47,7 +47,6 @@ public final class JdbcMaterialTopicLinkRepository implements MaterialTopicLinkR
     public CreateMaterialTopicLinkResult createUserSelectedActive(
             UUID ownerId, UUID topicId, UUID materialId, UUID materialVersionId) {
         UUID id = UUID.randomUUID();
-        Instant now = Instant.now();
         try {
             Optional<MaterialTopicLink> created = jdbcClient.sql(CREATE_USER_SELECTED_ACTIVE)
                     .param("id", id)
@@ -55,7 +54,6 @@ public final class JdbcMaterialTopicLinkRepository implements MaterialTopicLinkR
                     .param("topicId", topicId)
                     .param("materialId", materialId)
                     .param("materialVersionId", materialVersionId, Types.OTHER)
-                    .param("now", now)
                     .query(JdbcMaterialTopicLinkRepository::mapLink)
                     .optional();
             return created.map(CreateMaterialTopicLinkResult::created)
@@ -74,7 +72,7 @@ public final class JdbcMaterialTopicLinkRepository implements MaterialTopicLinkR
                 result.getObject("document_node_id", UUID.class),
                 MaterialTopicLinkOrigin.valueOf(result.getString("link_origin")),
                 MaterialTopicLinkStatus.valueOf(result.getString("status")),
-                result.getObject("created_at", Instant.class),
-                result.getObject("updated_at", Instant.class));
+                result.getObject("created_at", OffsetDateTime.class).toInstant(),
+                result.getObject("updated_at", OffsetDateTime.class).toInstant());
     }
 }

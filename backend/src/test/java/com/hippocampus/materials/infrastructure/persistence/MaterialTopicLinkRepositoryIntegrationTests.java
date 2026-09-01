@@ -5,7 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -248,8 +249,9 @@ class MaterialTopicLinkRepositoryIntegrationTests extends PostgresIntegrationTes
             statement.setObject(5, nodeId);
             statement.setString(6, origin);
             statement.setString(7, status);
-            statement.setObject(8, Instant.now());
-            statement.setObject(9, Instant.now());
+            OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+            statement.setObject(8, now);
+            statement.setObject(9, now);
             statement.executeUpdate();
         }
     }
