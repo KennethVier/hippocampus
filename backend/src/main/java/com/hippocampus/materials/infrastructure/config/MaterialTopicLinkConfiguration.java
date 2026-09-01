@@ -10,7 +10,7 @@ import com.hippocampus.materials.application.CreateUserSelectedMaterialTopicLink
 import com.hippocampus.materials.infrastructure.persistence.JdbcMaterialTopicLinkRepository;
 import com.hippocampus.materials.port.MaterialTopicLinkRepository;
 
-@AutoConfiguration
+@AutoConfiguration(afterName = "org.springframework.boot.jdbc.autoconfigure.JdbcClientAutoConfiguration")
 @ConditionalOnBean({CurrentUser.class, JdbcClient.class})
 public class MaterialTopicLinkConfiguration {
 

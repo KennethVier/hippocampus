@@ -10,7 +10,7 @@ import com.hippocampus.materials.domain.MaterialTopicLink;
 import com.hippocampus.materials.port.CreateMaterialTopicLinkResult;
 import com.hippocampus.materials.port.MaterialTopicLinkRepository;
 
-public final class CreateUserSelectedMaterialTopicLink {
+public class CreateUserSelectedMaterialTopicLink {
     private final CurrentUser currentUser;
     private final MaterialTopicLinkRepository links;
 
