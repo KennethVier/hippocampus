@@ -62,7 +62,7 @@ describe('App', () => {
   it.each([
     ['/home', 'Home'],
     ['/subjects', 'Subjects'],
-    ['/subjects/example-subject', 'Subject'],
+    ['/subjects/example-subject', 'Subject unavailable'],
     ['/topics/example-topic', 'Topic'],
     ['/missions/example-mission', 'Study Mission'],
     ['/materials', 'Materials'],

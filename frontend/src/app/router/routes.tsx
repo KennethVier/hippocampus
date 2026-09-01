@@ -3,6 +3,8 @@ import { Navigate, type RouteObject } from 'react-router'
 import { AuthPlaceholderLayout } from '../layout/AuthPlaceholderLayout'
 import { LoginPage } from '../../features/auth/LoginPage'
 import { RequireSession } from '../../features/auth/RequireSession'
+import { SubjectDetailPage } from '../../features/learning-organization/pages/SubjectDetailPage'
+import { SubjectsPage } from '../../features/learning-organization/pages/SubjectsPage'
 import { NotFoundPage } from './NotFoundPage'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
 import { RoutePlaceholder } from './RoutePlaceholder'
@@ -21,8 +23,8 @@ export const appRoutes = [
             children: [
               { index: true, element: <Navigate replace to="/home" /> },
               { path: 'home', element: <RoutePlaceholder title="Home" /> },
-              { path: 'subjects', element: <RoutePlaceholder title="Subjects" /> },
-              { path: 'subjects/:subjectId', element: <RoutePlaceholder title="Subject" /> },
+              { path: 'subjects', element: <SubjectsPage /> },
+              { path: 'subjects/:subjectId', element: <SubjectDetailPage /> },
               { path: 'topics/:topicId', element: <RoutePlaceholder title="Topic" /> },
               { path: 'missions/:missionId', element: <RoutePlaceholder title="Study Mission" /> },
               { path: 'materials', element: <RoutePlaceholder title="Materials" /> },
