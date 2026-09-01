@@ -124,6 +124,7 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
             SpringDataMaterialRepository materials = context.getBean(SpringDataMaterialRepository.class);
             SpringDataMaterialVersionRepository versions = context.getBean(SpringDataMaterialVersionRepository.class);
             MaterialEntity own = createActiveMaterial(materials, versions, users.userA().userId(), "delete-me.pdf");
+            var originalUpdatedAt = own.getUpdatedAt();
             MaterialEntity csrfProtected = createMaterial(materials, users.userA().userId(), "csrf.pdf", "UPLOADED");
             MaterialEntity foreign = createMaterial(materials, users.userB().userId(), "foreign.pdf", "UPLOADED");
 
@@ -145,6 +146,8 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
             MaterialEntity deleted = materials.findById(own.getId()).orElseThrow();
             assertThat(deleted.getStatus()).isEqualTo("DELETED");
             assertThat(deleted.getActiveVersionId()).isNull();
+            assertThat(deleted.getUpdatedAt()).isAfter(originalUpdatedAt);
+            var deletedAt = deleted.getUpdatedAt();
             assertThat(versions.findAll()).hasSize(1);
 
             assertNotFound(mvc, own.getId(), users.userA(), "delete-me.pdf");
@@ -155,6 +158,7 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
             mvc.perform(delete("/api/materials/{id}", own.getId())
                             .with(authenticatedAs(users.userA())).with(csrf()))
                     .andExpect(status().isNoContent());
+            assertThat(materials.findById(own.getId()).orElseThrow().getUpdatedAt()).isEqualTo(deletedAt);
             mvc.perform(delete("/api/materials/{id}", UUID.randomUUID())
                             .with(authenticatedAs(users.userA())).with(csrf()))
                     .andExpect(status().isNotFound())
