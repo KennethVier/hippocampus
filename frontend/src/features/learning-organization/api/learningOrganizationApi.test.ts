@@ -7,7 +7,6 @@ vi.mock('../../../api/apiClient', async (importOriginal) => {
   return { ...actual, apiClient: { ...actual.apiClient, requestJson } }
 })
 
-import { ApiError } from '../../../api/apiClient'
 import {
   archiveSubject,
   archiveTopic,
@@ -84,10 +83,17 @@ describe('learning organization API boundary', () => {
     await expect(getSubject(subject.id)).rejects.toMatchObject({ kind: 'invalid-response', status: 204, code: 'INVALID_RESPONSE' })
   })
 
-  it('preserves normalized ApiError failures from the centralized client', async () => {
-    const error = new ApiError({ kind: 'http', status: 404, code: 'SUBJECT_NOT_FOUND', message: 'hidden' })
+  it('preserves centralized client failures unchanged', async () => {
+    const error = new Error('centralized client failure')
     requestJson.mockRejectedValue(error)
 
-    await expect(getSubject(subject.id)).rejects.toBe(error)
+    let caught: unknown
+    try {
+      await getSubject(subject.id)
+    } catch (value) {
+      caught = value
+    }
+
+    expect(caught).toBe(error)
   })
 })
