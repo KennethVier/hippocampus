@@ -101,18 +101,22 @@ export function SubjectDetailPage() {
           {topics.data ? <OrganizationPagination page={page} totalPages={topics.data.totalPages} onPage={(next) => setParams({ topicsPage: String(next) })} /> : null}
         </section>
       )}
-      {subjectFormOpen ? (
-        <Dialog open onClose={() => setSubjectFormOpen(false)} title="Edit Subject">
-          <SubjectForm initialValues={{ name: current.name, description: current.description ?? '' }} pending={updateSubjectMutation.isPending} serverError={updateSubjectMutation.error ? subjectMutationError(updateSubjectMutation.error) : undefined} onCancel={() => setSubjectFormOpen(false)} onSubmit={(values) => updateSubjectMutation.mutate({ current, values })} />
-        </Dialog>
-      ) : null}
+      <Dialog open={subjectFormOpen} onClose={() => setSubjectFormOpen(false)} title="Edit Subject">
+        {subjectFormOpen ? <SubjectForm initialValues={{ name: current.name, description: current.description ?? '' }} pending={updateSubjectMutation.isPending} serverError={updateSubjectMutation.error ? subjectMutationError(updateSubjectMutation.error) : undefined} onCancel={() => setSubjectFormOpen(false)} onSubmit={(values) => updateSubjectMutation.mutate({ current, values })} /> : null}
+      </Dialog>
       <ArchiveConfirmation entity="Subject" name={current.name} open={subjectArchiveOpen} pending={archiveSubjectMutation.isPending} error={archiveSubjectMutation.error ? subjectMutationError(archiveSubjectMutation.error) : undefined} onClose={() => setSubjectArchiveOpen(false)} onConfirm={() => archiveSubjectMutation.mutate(current.id)} />
-      {topicForm ? (
-        <Dialog open onClose={() => setTopicForm(null)} title={topicForm === 'create' ? 'Create Topic' : 'Edit Topic'}>
-          <TopicForm initialValues={topicForm === 'create' ? undefined : { name: topicForm.name, description: topicForm.description ?? '' }} pending={createTopicMutation.isPending || updateTopicMutation.isPending} serverError={activeTopicError ? topicMutationError(activeTopicError) : undefined} onCancel={() => setTopicForm(null)} onSubmit={(values) => topicForm === 'create' ? createTopicMutation.mutate(values) : updateTopicMutation.mutate({ current: topicForm, values })} />
-        </Dialog>
-      ) : null}
-      {topicArchive ? <ArchiveConfirmation entity="Topic" name={topicArchive.name} open pending={archiveTopicMutation.isPending} error={archiveTopicMutation.error ? topicMutationError(archiveTopicMutation.error) : undefined} onClose={() => setTopicArchive(null)} onConfirm={() => archiveTopicMutation.mutate(topicArchive.id)} /> : null}
+      <Dialog open={topicForm !== null} onClose={() => setTopicForm(null)} title={topicForm === 'create' ? 'Create Topic' : 'Edit Topic'}>
+        {topicForm ? <TopicForm initialValues={topicForm === 'create' ? undefined : { name: topicForm.name, description: topicForm.description ?? '' }} pending={createTopicMutation.isPending || updateTopicMutation.isPending} serverError={activeTopicError ? topicMutationError(activeTopicError) : undefined} onCancel={() => setTopicForm(null)} onSubmit={(values) => topicForm === 'create' ? createTopicMutation.mutate(values) : updateTopicMutation.mutate({ current: topicForm, values })} /> : null}
+      </Dialog>
+      <ArchiveConfirmation
+        entity="Topic"
+        name={topicArchive?.name ?? 'This Topic'}
+        open={topicArchive !== null}
+        pending={archiveTopicMutation.isPending}
+        error={archiveTopicMutation.error ? topicMutationError(archiveTopicMutation.error) : undefined}
+        onClose={() => setTopicArchive(null)}
+        onConfirm={() => { if (topicArchive) archiveTopicMutation.mutate(topicArchive.id) }}
+      />
     </section>
   )
 }
