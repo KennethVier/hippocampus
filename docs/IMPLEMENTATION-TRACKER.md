@@ -5,7 +5,7 @@ Version: 1.0.0
 Status: Active
 Owner: Project Hippocampus Team
 Created: 2026-08-24
-Last Updated: 2026-08-31
+Last Updated: 2026-09-01
 Purpose: Operational tracker for implementing the frozen Hippocampus v1 Source of Truth phase by phase with concrete build requirements, tests, expected behavior, definition of done, and evidence.
 Authority: Document 26 defines implementation order; Documents 00–25 define product/technical requirements; Document 27 governs deviations.
 ---
@@ -650,7 +650,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Backend
 - **Priority:** Must
-- **Status:** In Progress
+- **Status:** Done
 - **Goal:** Let student manage uploaded resources.
 - **Build:** Create list/detail/delete APIs including status and metadata.
 - **How it works:** Delete immediately removes future retrieval eligibility when later indexes exist.
@@ -659,8 +659,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Student sees only own materials and can remove them.
 - **Definition of Done:** CRUD + ownership tests pass.
 - **Authority:** Documents 18,22
-- **Evidence / link:** Implementation continues in PR [#79](https://github.com/KennethVier/hippocampus/pull/79). The branch implements authenticated owner-scoped list/detail/delete endpoints with bounded SQL pagination, concealed `MATERIAL_NOT_FOUND` responses, and logical deletion that atomically sets `status = DELETED` and clears `active_version_id` without deleting versions or binary objects. PostgreSQL integration coverage exercises ownership isolation, pagination, response privacy, CSRF, delete state, version preservation, repeated deletion, and immediate list/detail concealment. Local focused web/configuration and ArchUnit validation passed after the current refinement.
-- **Notes / blockers:** Latest observed PR quality run #179 failed `backend-quality` while the other independent jobs succeeded. The remaining proxy/bootstrap cause was corrected on the implementation branch, but a new authoritative GitHub Actions run and the full PostgreSQL/Testcontainers suite remain required before moving this task to Ready for Review.
+- **Evidence / link:** Implementation PR [#79](https://github.com/KennethVier/hippocampus/pull/79) delivered authenticated owner-scoped material list/detail/delete APIs with bounded SQL pagination, privacy-minimal responses, indistinguishable `MATERIAL_NOT_FOUND` handling for foreign/deleted/missing resources, and CSRF-protected idempotent logical deletion. The reviewed final head `72074726d64c69c02b53e37ad3fe49dab6c19e64` uses an atomic owner-qualified lifecycle update that sets `status = DELETED`, clears `active_version_id`, and advances `updated_at` exactly once; repeated DELETE returns success without rewriting the lifecycle timestamp. PostgreSQL/Testcontainers integration coverage verifies ownership isolation, pagination, response privacy, authentication, CSRF, foreign-mutation preservation, delete state, MaterialVersion preservation, immediate list/detail concealment, lifecycle timestamp advancement, and repeated-delete timestamp stability. External general implementation review verdict: **APPROVED**. Independent adversarial security review verdict: **SECURITY PASS** for the P2-07 changed surface, with no unresolved blocking Critical, High, or Medium finding. Authoritative PR quality run #185 (ID `33465960000`) succeeded on the reviewed head with `backend-quality`, `frontend-quality`, `security`, `auth-e2e`, and `phase1-gate` all successful; the PR `security` job completed explicit commit-range secret scanning and introduced-dependency review successfully. PR #79 merged into `main` as `8e3892bc9c9d22aa2bd54e5685318181a7c19afe`. Post-merge `main` quality run #186 (ID `33466272574`) succeeded at that merge commit with `backend-quality`, `frontend-quality`, `security`, `auth-e2e`, and `phase1-gate` all successful; the push-run dependency-review step was skipped and is not counted as passed. No migration, dependency, frontend, object-store deletion, MaterialVersion mutation, MaterialTopicLink/P2-08, upload hardening/P2-11, ProcessingJob, ingestion, RAG, or AI scope was introduced. Documents 18 and 22 remain satisfied, no ADR or undocumented architecture deviation is required, the expected owner-private material management behavior and CRUD/ownership Definition of Done are satisfied, and no current blocker remains.
+- **Notes / blockers:** _None_
 
 ## P2-08 — Create MaterialTopicLink
 
