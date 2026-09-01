@@ -62,8 +62,8 @@ export function SubjectsPage() {
       {subjects.data?.items.length === 0 ? <EmptyState title="No Subjects yet" description="Create a Subject to begin organizing what you are studying." action={<Button onClick={openCreate}>Create Subject</Button>} /> : null}
       {subjects.data?.items.length ? <div className="organization-grid">{subjects.data.items.map((subject) => <OrganizationCard key={subject.id} kind="Subject" name={subject.name} description={subject.description} detailPath={`/subjects/${subject.id}`} onEdit={() => openEdit(subject)} onArchive={() => { archiveMutation.reset(); setArchiveTarget(subject) }} />)}</div> : null}
       {subjects.data ? <OrganizationPagination page={page} totalPages={subjects.data.totalPages} onPage={setPage} /> : null}
-      {formMode ? (
-        <Dialog open onClose={() => setFormMode(null)} title={formMode === 'create' ? 'Create Subject' : 'Edit Subject'}>
+      <Dialog open={formMode !== null} onClose={() => setFormMode(null)} title={formMode === 'create' ? 'Create Subject' : 'Edit Subject'}>
+        {formMode ? (
           <SubjectForm
             initialValues={formMode === 'create' ? undefined : { name: formMode.name, description: formMode.description ?? '' }}
             pending={createMutation.isPending || updateMutation.isPending}
@@ -71,9 +71,17 @@ export function SubjectsPage() {
             onCancel={() => setFormMode(null)}
             onSubmit={(values) => formMode === 'create' ? createMutation.mutate(values) : updateMutation.mutate({ subject: formMode, values })}
           />
-        </Dialog>
-      ) : null}
-      {archiveTarget ? <ArchiveConfirmation entity="Subject" name={archiveTarget.name} open pending={archiveMutation.isPending} error={archiveMutation.error ? subjectMutationError(archiveMutation.error) : undefined} onClose={() => setArchiveTarget(null)} onConfirm={() => archiveMutation.mutate(archiveTarget.id)} /> : null}
+        ) : null}
+      </Dialog>
+      <ArchiveConfirmation
+        entity="Subject"
+        name={archiveTarget?.name ?? 'This Subject'}
+        open={archiveTarget !== null}
+        pending={archiveMutation.isPending}
+        error={archiveMutation.error ? subjectMutationError(archiveMutation.error) : undefined}
+        onClose={() => setArchiveTarget(null)}
+        onConfirm={() => { if (archiveTarget) archiveMutation.mutate(archiveTarget.id) }}
+      />
     </section>
   )
 }
