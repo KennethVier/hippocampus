@@ -1,5 +1,6 @@
 package com.hippocampus.materials.infrastructure.persistence;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -42,18 +43,11 @@ public final class JpaMaterialRepository implements MaterialRepository {
 
     @Override
     public boolean markDeletedOwned(UUID materialId, UUID ownerId) {
-        Optional<MaterialEntity> owned = materials.findByIdAndUserId(materialId, ownerId);
-        if (owned.isEmpty()) {
-            return false;
+        int updated = materials.markDeletedOwned(materialId, ownerId, Instant.now());
+        if (updated == 1) {
+            return true;
         }
-
-        MaterialEntity material = owned.get();
-        if (!DELETED.equals(material.getStatus()) || material.getActiveVersionId() != null) {
-            material.setStatus(DELETED);
-            material.setActiveVersionId(null);
-            materials.saveAndFlush(material);
-        }
-        return true;
+        return materials.existsByIdAndUserId(materialId, ownerId);
     }
 
     private static MaterialMetadata metadata(MaterialEntity entity) {
