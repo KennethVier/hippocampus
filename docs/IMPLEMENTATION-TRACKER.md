@@ -682,7 +682,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Frontend
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Make organization usable without feature overload.
 - **Build:** Create subject list, subject detail, topic cards/forms, archive interactions.
 - **How it works:** Primary CTA from topic is future Study Mission, not tool selector.
@@ -691,8 +691,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Student organizes study areas cleanly.
 - **Definition of Done:** Desktop/mobile CRUD flow passes.
 - **Authority:** Documents 20
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Implementation on the environment-provided `work` branch adds the responsive `/subjects` Subject CRUD/pagination screen and `/subjects/:subjectId` Subject context plus active-parent-gated Topic CRUD/pagination screen. The feature-local `learning-organization` boundary separates runtime-validated API contracts, request composition, RHF/Zod form schemas, TanStack Query keys/state, reusable organization components, pages, and token-based responsive styling. Subject forms expose only name/description: create sends `sortOrder: null`, while edit preserves the authoritative loaded `sortOrder`. Owned archived Subjects render archived context without fetching or mutating Topics; stale `SUBJECT_NOT_FOUND` Topic mutations invalidate/refetch Subject authority. The direct Topic placeholder, Subtopics, Study Missions, Materials, AI/RAG, Tailwind, backend, global server-state, and P2-10+ remain excluded. Direct dependencies are `react-hook-form@7.62.0`, `zod@4.1.5`, and `@hookform/resolvers@5.2.1`. Focused Vitest/RTL passed (17 tests); the full frontend suite passed (146 tests), TypeScript typecheck, ESLint, and production build passed, dependency-tree inspection and `git diff --check` passed. `npm audit --audit-level=high` could not complete because the registry audit endpoint returned HTTP 403 in this environment; authoritative dependency review remains pending. The required real-backend Playwright spec is implemented and scoped to desktop Chromium plus mobile Chromium without multiplying the historical auth spec, but local execution was unavailable because no real backend/PostgreSQL/runtime-provisioned E2E account was running; authoritative desktop/mobile execution remains pending in GitHub Actions. `.github/workflows/quality.yml` is unchanged. General implementation review, independent security review, PR/CI, merge, post-merge CI, and final completion evidence remain pending; this task is not Done and no security verdict is claimed.
+- **Notes / blockers:** Authoritative GitHub Actions dependency audit/review and desktop/mobile real-backend Playwright execution are required during review; general implementation review and the later independent security review remain pending.
 
 ## P2-10 — Build Materials UI and upload transfer progress
 
