@@ -70,6 +70,6 @@ jobs:
           git add docs/IMPLEMENTATION-TRACKER.md .github/workflows/tmp-p2-10-completion.yml
           git diff --cached --check
           git diff --cached --name-only
-          test "$(git diff --cached --name-only | sort | tr '\n' ' ')" = "docs/IMPLEMENTATION-TRACKER.md "
+          test "$(git diff --cached --name-only | sort | tr '\n' ' ')" = ".github/workflows/tmp-p2-10-completion.yml docs/IMPLEMENTATION-TRACKER.md "
           git commit -m "docs: mark P2-10 complete"
           git push origin HEAD:docs/p2-10-completion
