@@ -666,7 +666,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Database
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Keep Material ≠ Topic while allowing mappings.
 - **Build:** Create material_topic_links with origin/status/version/node optional references.
 - **How it works:** Mapping is many-to-many and validates same-user ownership.
@@ -675,8 +675,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** A material can support many topics and vice versa.
 - **Definition of Done:** Schema/use-case tests pass.
 - **Authority:** Documents 14,18
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Implemented additive Flyway migration `V7__create_material_topic_links.sql` with Topic/Material FKs, composite same-Material version integrity, approved origin/status checks, Phase-2-disabled nullable `document_node_id`, and a PostgreSQL `NULLS NOT DISTINCT` partial unique index for exact ACTIVE targets. Added the materials-owned `CreateUserSelectedMaterialTopicLink` use case, which derives ownership from `CurrentUser`, fixes provenance/status to `USER_SELECTED`/`ACTIVE`, and delegates to one atomic owner-qualified `INSERT ... SELECT` persistence adapter. Added domain/application tests plus PostgreSQL/Testcontainers coverage for migration-from-zero/idempotency, many-to-many behavior, cross-owner hybrid rejection, version-parent integrity, nullable duplicate semantics, concurrent duplicate creation, lifecycle behavior, provenance/timestamps, parent deletion, and Phase-2 DocumentNode disablement. Local `mvn -q -DskipTests compile`, `mvn -q -DskipTests test-compile`, focused domain/application tests, architecture tests, and `git diff --check` passed. The PostgreSQL/Testcontainers command was attempted but could not execute because this environment has no Docker socket; authoritative CI must run it. General implementation self-review found no unresolved code/architecture blocker within available evidence, but final approval remains external. The independent security gate was not run because required PostgreSQL tests could not execute locally; no `SECURITY PASS` is claimed. P3-05 retains ownership of `document_nodes`, the candidate key/composite node FK, removal of the temporary disabled check, and actual node-targeted-link tests. No API, frontend, ingestion, RAG, AI producer, dependency, or later-task scope was added.
+- **Notes / blockers:** Required PostgreSQL/Testcontainers validation and the subsequent independent security review remain pending in authoritative CI/review because Docker is unavailable in this environment. `Done` requires successful CI, accepted implementation review, independent security-gate evidence, merge evidence where applicable, satisfied DoD, and final tracker evidence.
 
 ## P2-09 — Build Subjects and Topics UI
 

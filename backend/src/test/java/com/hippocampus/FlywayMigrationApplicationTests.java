@@ -43,6 +43,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("4");
         assertSuccessfulFlywayVersion("5");
         assertSuccessfulFlywayVersion("6");
+        assertSuccessfulFlywayVersion("7");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -55,6 +56,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertPasswordCredentialForeignKey();
         assertLearningOrganizationSchema();
         assertMaterialFoundationSchema();
+        assertMaterialTopicLinkSchema();
 
         try (var secondContext = startApplicationWithFlyway()) {
             assertThat(secondContext.isActive()).isTrue();
@@ -66,11 +68,13 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("4");
         assertSuccessfulFlywayVersion("5");
         assertSuccessfulFlywayVersion("6");
+        assertSuccessfulFlywayVersion("7");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
         assertLearningOrganizationSchema();
         assertMaterialFoundationSchema();
+        assertMaterialTopicLinkSchema();
     }
 
     private static void assertDatabaseIsEmpty() throws SQLException {
@@ -166,7 +170,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 actual.add(result.getString("table_name"));
             }
             assertThat(actual).containsExactly(
-                    "material_versions", "materials",
+                    "material_topic_links", "material_versions", "materials",
                     "spring_session", "spring_session_attributes",
                     "subjects", "subtopics", "topics",
                     "user_password_credentials", "users");
@@ -254,6 +258,57 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertIndex("material_versions", "idx_material_versions_material_processing_status", false,
                 "material_id", "processing_status");
         assertNoMaterialVocabularyOrProgressChecks();
+    }
+
+    private static void assertMaterialTopicLinkSchema() throws SQLException {
+        assertColumnsMatch("material_topic_links", Map.ofEntries(
+                Map.entry("id", "uuid:NO"),
+                Map.entry("topic_id", "uuid:NO"),
+                Map.entry("material_id", "uuid:NO"),
+                Map.entry("material_version_id", "uuid:YES"),
+                Map.entry("document_node_id", "uuid:YES"),
+                Map.entry("link_origin", "character varying:NO"),
+                Map.entry("status", "character varying:NO"),
+                Map.entry("created_at", "timestamp with time zone:NO"),
+                Map.entry("updated_at", "timestamp with time zone:NO")));
+        assertNamedConstraint("material_topic_links", "pk_material_topic_links", "PRIMARY KEY (id)", null);
+        assertNamedConstraint("material_topic_links", "fk_material_topic_links_topic",
+                "FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE RESTRICT", "r");
+        assertNamedConstraint("material_topic_links", "fk_material_topic_links_material",
+                "FOREIGN KEY (material_id) REFERENCES materials(id) ON DELETE RESTRICT", "r");
+        assertNamedConstraint("material_topic_links", "fk_material_topic_links_material_version",
+                "FOREIGN KEY (material_id, material_version_id) REFERENCES material_versions(material_id, id) ON DELETE RESTRICT",
+                "r");
+        assertNamedConstraint("material_topic_links", "chk_material_topic_links_document_node_requires_version",
+                "CHECK (((document_node_id IS NULL) OR (material_version_id IS NOT NULL)))", null);
+        assertNamedConstraint("material_topic_links", "chk_material_topic_links_document_node_phase2_disabled",
+                "CHECK ((document_node_id IS NULL))", null);
+        assertIndex("material_topic_links", "idx_material_topic_links_topic_status", false, "topic_id", "status");
+        assertIndex("material_topic_links", "uq_material_topic_links_active_exact_target", true,
+                "topic_id", "material_id", "material_version_id", "document_node_id",
+                "NULLS NOT DISTINCT", "WHERE ((status)::text = 'ACTIVE'::text)");
+        assertMaterialTopicLinkVocabularyChecks();
+    }
+
+    private static void assertMaterialTopicLinkVocabularyChecks() throws SQLException {
+        try (var connection = openPostgresConnection();
+                var statement = connection.prepareStatement("""
+                        SELECT conname, pg_get_constraintdef(oid) AS definition
+                        FROM pg_constraint
+                        WHERE conrelid = 'public.material_topic_links'::regclass
+                          AND conname IN ('chk_material_topic_links_origin', 'chk_material_topic_links_status')
+                        ORDER BY conname
+                        """);
+                var result = statement.executeQuery()) {
+            assertThat(result.next()).isTrue();
+            assertThat(result.getString("conname")).isEqualTo("chk_material_topic_links_origin");
+            assertThat(result.getString("definition")).contains(
+                    "USER_SELECTED", "STRUCTURE_DETECTED", "SYSTEM_SUGGESTED", "AI_ASSISTED");
+            assertThat(result.next()).isTrue();
+            assertThat(result.getString("conname")).isEqualTo("chk_material_topic_links_status");
+            assertThat(result.getString("definition")).contains("ACTIVE", "DISMISSED", "ARCHIVED");
+            assertThat(result.next()).isFalse();
+        }
     }
 
     private static void assertNumericPrecision(
