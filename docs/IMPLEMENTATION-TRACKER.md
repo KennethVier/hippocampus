@@ -650,7 +650,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Backend
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** In Progress
 - **Goal:** Let student manage uploaded resources.
 - **Build:** Create list/detail/delete APIs including status and metadata.
 - **How it works:** Delete immediately removes future retrieval eligibility when later indexes exist.
@@ -659,8 +659,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Student sees only own materials and can remove them.
 - **Definition of Done:** CRUD + ownership tests pass.
 - **Authority:** Documents 18,22
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Implementation continues in PR [#79](https://github.com/KennethVier/hippocampus/pull/79). The branch implements authenticated owner-scoped list/detail/delete endpoints with bounded SQL pagination, concealed `MATERIAL_NOT_FOUND` responses, and logical deletion that atomically sets `status = DELETED` and clears `active_version_id` without deleting versions or binary objects. PostgreSQL integration coverage exercises ownership isolation, pagination, response privacy, CSRF, delete state, version preservation, repeated deletion, and immediate list/detail concealment. Local focused web/configuration and ArchUnit validation passed after the current refinement.
+- **Notes / blockers:** Latest observed PR quality run #179 failed `backend-quality` while the other independent jobs succeeded. The remaining proxy/bootstrap cause was corrected on the implementation branch, but a new authoritative GitHub Actions run and the full PostgreSQL/Testcontainers suite remain required before moving this task to Ready for Review.
 
 ## P2-08 — Create MaterialTopicLink
 
