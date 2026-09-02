@@ -15,7 +15,11 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Base64;
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,6 +36,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 import com.hippocampus.identity.infrastructure.persistence.UserRepository;
+import com.hippocampus.materials.MaterialUploadFixtures;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialRepository;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialVersionRepository;
 import com.hippocampus.materials.infrastructure.persistence.JpaMaterialUploadPersistence;
@@ -46,9 +51,9 @@ import com.hippocampus.testing.security.OwnershipTestUsers;
 class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSupport {
 
     private static final String[] UPLOAD_ARGUMENTS = {
-            "--hippocampus.materials.upload.max-file-size=8B",
-            "--spring.servlet.multipart.max-file-size=8B",
-            "--spring.servlet.multipart.max-request-size=32B"
+            "--hippocampus.materials.upload.max-file-size=256B",
+            "--spring.servlet.multipart.max-file-size=256B",
+            "--spring.servlet.multipart.max-request-size=512B"
     };
 
     @BeforeEach
@@ -61,16 +66,14 @@ class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSu
         try (ConfigurableApplicationContext context = context()) {
             OwnershipTestUsers users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "material-upload-valid");
             MockMvc mvc = mvc(context);
-            for (String[] type : new String[][] {
-                    {"application/pdf", "PDF"}, {"image/jpeg", "IMAGE"},
-                    {"image/png", "IMAGE"}, {"text/plain", "TEXT"}}) {
-                byte[] source = new byte[] {1, 2, 3};
+            for (Fixture fixture : supportedFixtures()) {
                 mvc.perform(multipart("/api/materials")
-                                .file(new MockMultipartFile("file", "source.bin", type[0], source))
+                                .file(new MockMultipartFile("file", "source.bin", fixture.declaredMimeType(), fixture.bytes()))
                                 .with(authenticatedAs(users.userA())).with(csrf()))
                         .andExpect(status().isCreated())
                         .andExpect(header().doesNotExist(HttpHeaders.LOCATION))
-                        .andExpect(jsonPath("$.materialType").value(type[1]))
+                        .andExpect(jsonPath("$.materialType").value(fixture.materialType()))
+                        .andExpect(jsonPath("$.mimeType").value(fixture.detectedMimeType()))
                         .andExpect(jsonPath("$.materialStatus").value("UPLOADED"))
                         .andExpect(jsonPath("$.processingStatus").value("UPLOADED"))
                         .andExpect(jsonPath("$.storageKey").doesNotExist())
@@ -83,7 +86,11 @@ class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSu
                 assertThat(material.getUserId()).isEqualTo(users.userA().userId());
                 assertThat(material.getStorageKey()).isNull();
                 assertThat(material.getActiveVersionId()).isNull();
+                assertThat(material.getMimeType()).isIn("application/pdf", "image/jpeg", "image/png", "text/plain");
             });
+            List<String> expectedObjects = supportedFixtures().stream()
+                    .map(fixture -> Base64.getEncoder().encodeToString(fixture.bytes()))
+                    .toList();
             assertThat(versions.findAll()).hasSize(4).allSatisfy(version -> {
                 assertThat(version.getVersionNumber()).isOne();
                 assertThat(version.getStorageKey()).matches("materials/[0-9a-f-]{36}/original");
@@ -91,7 +98,7 @@ class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSu
                 assertThat(version.getActivatedAt()).isNull();
                 ByteArrayOutputStream retrieved = new ByteArrayOutputStream();
                 context.getBean(BinaryObjectStore.class).get(new BinaryObjectKey(version.getStorageKey()), retrieved);
-                assertThat(retrieved.toByteArray()).containsExactly(1, 2, 3);
+                assertThat(Base64.getEncoder().encodeToString(retrieved.toByteArray())).isIn(expectedObjects);
             });
         }
     }
@@ -104,21 +111,54 @@ class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSu
             mvc.perform(multipart("/api/materials").with(authenticatedAs(users.userA())).with(csrf()))
                     .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("UPLOAD_FILE_REQUIRED"));
             mvc.perform(multipart("/api/materials")
-                            .file(file("a.pdf", "application/pdf", new byte[] {1}))
-                            .file(file("b.pdf", "application/pdf", new byte[] {2}))
+                            .file(file("a.pdf", "application/pdf", MaterialUploadFixtures.pdf()))
+                            .file(file("b.pdf", "application/pdf", MaterialUploadFixtures.pdf()))
                             .with(authenticatedAs(users.userA())).with(csrf()))
                     .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("UPLOAD_SINGLE_FILE_REQUIRED"));
             mvc.perform(multipart("/api/materials").file(file("empty.pdf", "application/pdf", new byte[0]))
                             .with(authenticatedAs(users.userA())).with(csrf()))
                     .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("UPLOAD_EMPTY"));
-            mvc.perform(multipart("/api/materials").file(file("bad.zip", "application/zip", new byte[] {1}))
+            mvc.perform(multipart("/api/materials").file(file("bad.zip", "application/pdf", MaterialUploadFixtures.zipLikeUnsupported()))
                             .with(authenticatedAs(users.userA())).with(csrf()))
                     .andExpect(status().isUnsupportedMediaType()).andExpect(jsonPath("$.code").value("UPLOAD_TYPE_UNSUPPORTED"));
-            mvc.perform(multipart("/api/materials").file(file("large.pdf", "application/pdf", new byte[9]))
+            mvc.perform(multipart("/api/materials").file(file("large.pdf", "application/pdf", new byte[257]))
                             .with(authenticatedAs(users.userA())).with(csrf()))
                     .andExpect(status().isPayloadTooLarge()).andExpect(jsonPath("$.code").value("UPLOAD_TOO_LARGE"));
             assertThat(context.getBean(SpringDataMaterialRepository.class).count()).isZero();
             assertThat(context.getBean(SpringDataMaterialVersionRepository.class).count()).isZero();
+            assertNoStoredObjects(context.getBean("uploadTestStorageRoot", Path.class));
+        }
+    }
+
+    @Test
+    void rejectsDisguisedMimeCorruptContentAndPathLikeFilenameWithoutUnsafeSideEffects() throws Exception {
+        try (ConfigurableApplicationContext context = context()) {
+            OwnershipTestUsers users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "material-upload-fixtures");
+            MockMvc mvc = mvc(context);
+
+            mvc.perform(multipart("/api/materials").file(file("notes.pdf", "application/pdf", MaterialUploadFixtures.text()))
+                            .with(authenticatedAs(users.userA())).with(csrf()))
+                    .andExpect(status().isUnsupportedMediaType())
+                    .andExpect(jsonPath("$.code").value("UPLOAD_TYPE_MISMATCH"));
+            mvc.perform(multipart("/api/materials").file(file("corrupt.pdf", "application/pdf", MaterialUploadFixtures.corruptPdf()))
+                            .with(authenticatedAs(users.userA())).with(csrf()))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("UPLOAD_CONTENT_INVALID"));
+
+            assertThat(context.getBean(SpringDataMaterialRepository.class).count()).isZero();
+            assertThat(context.getBean(SpringDataMaterialVersionRepository.class).count()).isZero();
+            assertNoStoredObjects(context.getBean("uploadTestStorageRoot", Path.class));
+
+            mvc.perform(multipart("/api/materials")
+                            .file(file("../notes.pdf", "application/pdf", MaterialUploadFixtures.pdf()))
+                            .with(authenticatedAs(users.userA())).with(csrf()))
+                    .andExpect(status().isCreated());
+            assertThat(context.getBean(SpringDataMaterialRepository.class).findAll()).singleElement()
+                    .satisfies(material -> assertThat(material.getOriginalFilename()).isEqualTo("../notes.pdf"));
+            assertThat(context.getBean(SpringDataMaterialVersionRepository.class).findAll()).singleElement()
+                    .satisfies(version -> assertThat(version.getStorageKey())
+                            .matches("materials/[0-9a-f-]{36}/original")
+                            .doesNotContain("notes", "..", users.userA().userId().toString()));
         }
     }
 
@@ -127,14 +167,14 @@ class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSu
         try (ConfigurableApplicationContext context = context()) {
             OwnershipTestUsers users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "material-upload-security");
             MockMvc mvc = mvc(context);
-            MockMultipartFile file = file("same.pdf", "application/pdf", new byte[] {1});
+            MockMultipartFile file = file("same.pdf", "application/pdf", MaterialUploadFixtures.pdf());
             mvc.perform(multipart("/api/materials").file(file).with(csrf())).andExpect(status().isUnauthorized());
             mvc.perform(multipart("/api/materials").file(file).with(authenticatedAs(users.userA())))
                     .andExpect(status().isForbidden());
-            mvc.perform(multipart("/api/materials").file(file("same.pdf", "application/pdf", new byte[] {1}))
+            mvc.perform(multipart("/api/materials").file(file("same.pdf", "application/pdf", MaterialUploadFixtures.pdf()))
                             .with(authenticatedAs(users.userA())).with(csrf()))
                     .andExpect(status().isCreated());
-            mvc.perform(multipart("/api/materials").file(file("same.pdf", "application/pdf", new byte[] {1}))
+            mvc.perform(multipart("/api/materials").file(file("same.pdf", "application/pdf", MaterialUploadFixtures.pdf()))
                             .with(authenticatedAs(users.userB())).with(csrf()))
                     .andExpect(status().isCreated());
             assertThat(context.getBean(SpringDataMaterialRepository.class).findAll())
@@ -179,8 +219,13 @@ class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSu
 
     @Configuration(proxyBeanMethods = false)
     static class StorageTestConfiguration {
-        @Bean BinaryObjectStore binaryObjectStore() throws Exception {
-            return new FileSystemBinaryObjectStore(Files.createTempDirectory("hippocampus-upload-test-"));
+        @Bean("uploadTestStorageRoot")
+        Path uploadTestStorageRoot() throws Exception {
+            return Files.createTempDirectory("hippocampus-upload-test-");
+        }
+
+        @Bean BinaryObjectStore binaryObjectStore(@Qualifier("uploadTestStorageRoot") Path root) {
+            return new FileSystemBinaryObjectStore(root);
         }
     }
 
@@ -198,4 +243,20 @@ class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSu
             return new JpaMaterialUploadPersistence(materials, failingVersions);
         }
     }
+
+    private static List<Fixture> supportedFixtures() {
+        return List.of(
+                new Fixture("application/pdf", "application/pdf", "PDF", MaterialUploadFixtures.pdf()),
+                new Fixture("image/jpeg", "image/jpeg", "IMAGE", MaterialUploadFixtures.jpeg()),
+                new Fixture("image/png", "image/png", "IMAGE", MaterialUploadFixtures.png()),
+                new Fixture("text/plain", "text/plain", "TEXT", MaterialUploadFixtures.text()));
+    }
+
+    private static void assertNoStoredObjects(Path root) throws IOException {
+        try (java.util.stream.Stream<Path> paths = Files.walk(root)) {
+            assertThat(paths.filter(Files::isRegularFile)).isEmpty();
+        }
+    }
+
+    private record Fixture(String declaredMimeType, String detectedMimeType, String materialType, byte[] bytes) {}
 }

@@ -14,6 +14,8 @@ import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.materials.port.BinaryObjectKey;
 import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.BinaryObjectStoreException;
+import com.hippocampus.materials.port.MaterialContentInspectionException;
+import com.hippocampus.materials.port.MaterialContentInspector;
 import com.hippocampus.materials.port.MaterialUploadPersistence;
 import com.hippocampus.materials.port.MaterialUploadPersistence.CreatedMaterial;
 import com.hippocampus.materials.port.MaterialUploadPersistence.InitialMaterial;
@@ -29,16 +31,19 @@ public final class UploadMaterial {
             "text/plain", "TEXT");
 
     private final CurrentUser currentUser;
+    private final MaterialContentInspector contentInspector;
     private final BinaryObjectStore objectStore;
     private final MaterialUploadPersistence persistence;
     private final long maxFileSizeBytes;
 
     public UploadMaterial(
             CurrentUser currentUser,
+            MaterialContentInspector contentInspector,
             BinaryObjectStore objectStore,
             MaterialUploadPersistence persistence,
             long maxFileSizeBytes) {
         this.currentUser = Objects.requireNonNull(currentUser);
+        this.contentInspector = Objects.requireNonNull(contentInspector);
         this.objectStore = Objects.requireNonNull(objectStore);
         this.persistence = Objects.requireNonNull(persistence);
         if (maxFileSizeBytes <= 0) {
@@ -50,11 +55,12 @@ public final class UploadMaterial {
     public MaterialUploadResult execute(Command command) {
         Objects.requireNonNull(command, "command must not be null");
         validateSize(command.fileSizeBytes());
-        String mimeType = normalizeMimeType(command.declaredMimeType());
+        String mimeType = inspectContent(command);
         String materialType = MATERIAL_TYPES.get(mimeType);
         if (materialType == null) {
             throw new MaterialUploadException(MaterialUploadException.Kind.TYPE_UNSUPPORTED);
         }
+        validateDeclaredMimeType(command.declaredMimeType(), mimeType);
 
         UUID ownerId = currentUser.authenticatedUser().userId();
         String originalFilename = blankToNull(command.originalFilename());
@@ -71,6 +77,24 @@ public final class UploadMaterial {
         } catch (RuntimeException persistenceFailure) {
             compensate(key, persistenceFailure);
             throw new MaterialUploadException(MaterialUploadException.Kind.PERSISTENCE_FAILED, persistenceFailure);
+        }
+    }
+
+    private String inspectContent(Command command) {
+        try (InputStream source = command.content().openStream()) {
+            return normalizeMimeType(contentInspector.inspect(source, command.fileSizeBytes()).mimeType());
+        } catch (IOException | MaterialContentInspectionException exception) {
+            throw new MaterialUploadException(MaterialUploadException.Kind.CONTENT_INVALID, exception);
+        }
+    }
+
+    private static void validateDeclaredMimeType(String declaredMimeType, String detectedMimeType) {
+        String normalizedDeclared = normalizeOptionalMimeType(declaredMimeType);
+        if (normalizedDeclared == null || normalizedDeclared.equals("application/octet-stream")) {
+            return;
+        }
+        if (!normalizedDeclared.equals(detectedMimeType)) {
+            throw new MaterialUploadException(MaterialUploadException.Kind.TYPE_MISMATCH);
         }
     }
 
@@ -107,7 +131,22 @@ public final class UploadMaterial {
         if (declaredMimeType == null || declaredMimeType.isBlank()) {
             throw new MaterialUploadException(MaterialUploadException.Kind.TYPE_UNSUPPORTED);
         }
-        return declaredMimeType.strip().toLowerCase(Locale.ROOT);
+        String baseType = declaredMimeType.split(";", 2)[0];
+        if (baseType.isBlank()) {
+            throw new MaterialUploadException(MaterialUploadException.Kind.TYPE_UNSUPPORTED);
+        }
+        return baseType.strip().toLowerCase(Locale.ROOT);
+    }
+
+    private static String normalizeOptionalMimeType(String declaredMimeType) {
+        if (declaredMimeType == null || declaredMimeType.isBlank()) {
+            return null;
+        }
+        String baseType = declaredMimeType.split(";", 2)[0];
+        if (baseType.isBlank()) {
+            return null;
+        }
+        return baseType.strip().toLowerCase(Locale.ROOT);
     }
 
     private static String blankToNull(String value) {
@@ -122,6 +161,7 @@ public final class UploadMaterial {
 
     @FunctionalInterface
     public interface UploadContent {
+        /** Returns a fresh stream for each call; upload intake inspects before storing. */
         InputStream openStream() throws IOException;
     }
 }

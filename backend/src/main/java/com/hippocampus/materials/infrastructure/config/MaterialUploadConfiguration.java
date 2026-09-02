@@ -1,7 +1,9 @@
 package com.hippocampus.materials.infrastructure.config;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.apache.tika.Tika;
+
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.servlet.autoconfigure.MultipartProperties;
 import org.springframework.context.annotation.Bean;
@@ -9,7 +11,9 @@ import org.springframework.context.annotation.Bean;
 import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.materials.api.MaterialUploadController;
 import com.hippocampus.materials.application.UploadMaterial;
+import com.hippocampus.materials.infrastructure.inspection.TikaMaterialContentInspector;
 import com.hippocampus.materials.port.BinaryObjectStore;
+import com.hippocampus.materials.port.MaterialContentInspector;
 import com.hippocampus.materials.port.MaterialUploadPersistence;
 
 @AutoConfiguration(after = MaterialUploadPersistenceConfiguration.class)
@@ -18,14 +22,21 @@ import com.hippocampus.materials.port.MaterialUploadPersistence;
 public class MaterialUploadConfiguration {
 
     @Bean
+    MaterialContentInspector materialContentInspector() {
+        return new TikaMaterialContentInspector(new Tika());
+    }
+
+    @Bean
     UploadMaterial uploadMaterial(
             CurrentUser currentUser,
+            MaterialContentInspector contentInspector,
             BinaryObjectStore objectStore,
             MaterialUploadPersistence persistence,
             MaterialUploadProperties properties,
             MultipartProperties multipartProperties) {
         properties.validateTransport(multipartProperties);
-        return new UploadMaterial(currentUser, objectStore, persistence, properties.maxFileSize().toBytes());
+        return new UploadMaterial(
+                currentUser, contentInspector, objectStore, persistence, properties.maxFileSize().toBytes());
     }
 
     @Bean

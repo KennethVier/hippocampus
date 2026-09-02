@@ -23,15 +23,16 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.hippocampus.materials.MaterialUploadFixtures;
 import com.hippocampus.materials.port.BinaryObjectKey;
 import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.MaterialUploadPersistence;
 import com.hippocampus.testing.security.OwnershipTestUser;
 
 @SpringBootTest(properties = {
-        "hippocampus.materials.upload.max-file-size=8B",
-        "spring.servlet.multipart.max-file-size=8B",
-        "spring.servlet.multipart.max-request-size=32B"
+        "hippocampus.materials.upload.max-file-size=256B",
+        "spring.servlet.multipart.max-file-size=256B",
+        "spring.servlet.multipart.max-request-size=512B"
 })
 @AutoConfigureMockMvc
 @Import(MaterialUploadControllerWebTests.TestInfrastructure.class)
@@ -52,11 +53,12 @@ class MaterialUploadControllerWebTests {
     @Test
     void validUploadReturnsCreatedWithoutLocationOrPrivateMetadata() throws Exception {
         mvc.perform(multipart("/api/materials")
-                        .file(file("source.pdf", "application/pdf", new byte[] {1, 2, 3}))
+                        .file(file("source.pdf", "application/pdf", MaterialUploadFixtures.pdf()))
                         .with(authenticatedAs(USER)).with(csrf()))
                 .andExpect(status().isCreated())
                 .andExpect(header().doesNotExist(HttpHeaders.LOCATION))
                 .andExpect(jsonPath("$.materialType").value("PDF"))
+                .andExpect(jsonPath("$.mimeType").value("application/pdf"))
                 .andExpect(jsonPath("$.materialStatus").value("UPLOADED"))
                 .andExpect(jsonPath("$.processingStatus").value("UPLOADED"))
                 .andExpect(jsonPath("$.storageKey").doesNotExist())
@@ -70,17 +72,18 @@ class MaterialUploadControllerWebTests {
         mvc.perform(multipart("/api/materials").with(authenticatedAs(USER)).with(csrf()))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("UPLOAD_FILE_REQUIRED"));
         mvc.perform(multipart("/api/materials")
-                        .file(file("a.pdf", "application/pdf", new byte[] {1}))
-                        .file(file("b.pdf", "application/pdf", new byte[] {2}))
+                        .file(file("a.pdf", "application/pdf", MaterialUploadFixtures.pdf()))
+                        .file(file("b.pdf", "application/pdf", MaterialUploadFixtures.pdf()))
                         .with(authenticatedAs(USER)).with(csrf()))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("UPLOAD_SINGLE_FILE_REQUIRED"));
         mvc.perform(multipart("/api/materials").file(file("empty.pdf", "application/pdf", new byte[0]))
                         .with(authenticatedAs(USER)).with(csrf()))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("UPLOAD_EMPTY"));
-        mvc.perform(multipart("/api/materials").file(file("bad.zip", "application/zip", new byte[] {1}))
+        mvc.perform(multipart("/api/materials").file(file("bad.zip", "application/pdf", MaterialUploadFixtures.zipLikeUnsupported()))
                         .with(authenticatedAs(USER)).with(csrf()))
-                .andExpect(status().isUnsupportedMediaType());
-        mvc.perform(multipart("/api/materials").file(file("large.pdf", "application/pdf", new byte[9]))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.code").value("UPLOAD_TYPE_UNSUPPORTED"));
+        mvc.perform(multipart("/api/materials").file(file("large.pdf", "application/pdf", new byte[257]))
                         .with(authenticatedAs(USER)).with(csrf()))
                 .andExpect(status().isPayloadTooLarge());
         assertThat(store.calls).isZero();
@@ -88,10 +91,46 @@ class MaterialUploadControllerWebTests {
     }
 
     @Test
+    void rejectsDisguisedAndBasicInvalidContentWithSanitizedErrors() throws Exception {
+        mvc.perform(multipart("/api/materials").file(file("notes.pdf", "application/pdf", MaterialUploadFixtures.text()))
+                        .with(authenticatedAs(USER)).with(csrf()))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.code").value("UPLOAD_TYPE_MISMATCH"))
+                .andExpect(jsonPath("$.details").isMap())
+                .andExpect(jsonPath("$.message").value("The upload content type could not be verified."));
+
+        mvc.perform(multipart("/api/materials").file(file("corrupt.pdf", "application/pdf", MaterialUploadFixtures.corruptPdf()))
+                        .with(authenticatedAs(USER)).with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("UPLOAD_CONTENT_INVALID"))
+                .andExpect(jsonPath("$.message").value("The upload content could not be verified."));
+
+        assertThat(store.calls).isZero();
+        assertThat(persistence.calls).isZero();
+    }
+
+    @Test
+    void acceptsSupportedContentWithGenericOrMissingDeclaration() throws Exception {
+        mvc.perform(multipart("/api/materials")
+                        .file(file("notes.bin", "application/octet-stream", MaterialUploadFixtures.text()))
+                        .with(authenticatedAs(USER)).with(csrf()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.materialType").value("TEXT"))
+                .andExpect(jsonPath("$.mimeType").value("text/plain"));
+
+        mvc.perform(multipart("/api/materials")
+                        .file(file("source.bin", null, MaterialUploadFixtures.pdf()))
+                        .with(authenticatedAs(USER)).with(csrf()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.materialType").value("PDF"))
+                .andExpect(jsonPath("$.mimeType").value("application/pdf"));
+    }
+
+    @Test
     void requiresAuthenticationAndCsrf() throws Exception {
-        mvc.perform(multipart("/api/materials").file(file("source.pdf", "application/pdf", new byte[] {1})).with(csrf()))
+        mvc.perform(multipart("/api/materials").file(file("source.pdf", "application/pdf", MaterialUploadFixtures.pdf())).with(csrf()))
                 .andExpect(status().isUnauthorized());
-        mvc.perform(multipart("/api/materials").file(file("source.pdf", "application/pdf", new byte[] {1}))
+        mvc.perform(multipart("/api/materials").file(file("source.pdf", "application/pdf", MaterialUploadFixtures.pdf()))
                         .with(authenticatedAs(USER)))
                 .andExpect(status().isForbidden());
     }

@@ -7,14 +7,20 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import com.hippocampus.identity.domain.AuthenticatedUser;
 import com.hippocampus.identity.port.CurrentUser;
+import com.hippocampus.materials.MaterialUploadFixtures;
 import com.hippocampus.materials.port.BinaryObjectKey;
 import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.BinaryObjectStoreException;
+import com.hippocampus.materials.port.MaterialContentInspectionException;
+import com.hippocampus.materials.port.MaterialContentInspector;
 import com.hippocampus.materials.port.MaterialUploadPersistence;
 
 class UploadMaterialTests {
@@ -25,12 +31,14 @@ class UploadMaterialTests {
     void streamsOriginalAndPersistsAuthenticatedUploadedVersionWithOpaqueKey() {
         RecordingStore store = new RecordingStore();
         RecordingPersistence persistence = new RecordingPersistence();
-        UploadMaterial upload = upload(store, persistence, 100);
-        byte[] bytes = "pdf-data".getBytes();
+        UploadMaterial upload = upload(store, persistence, 100, "application/pdf");
+        byte[] bytes = MaterialUploadFixtures.pdf();
+        RepeatableContent content = new RepeatableContent(bytes);
 
-        MaterialUploadResult result = upload.execute(command("../../same-name.pdf", "application/pdf", bytes));
+        MaterialUploadResult result = upload.execute(command("../../same-name.pdf", "application/pdf", content));
 
         assertThat(result.materialType()).isEqualTo("PDF");
+        assertThat(result.mimeType()).isEqualTo("application/pdf");
         assertThat(result.materialStatus()).isEqualTo("UPLOADED");
         assertThat(result.processingStatus()).isEqualTo("UPLOADED");
         assertThat(persistence.upload.ownerId()).isEqualTo(OWNER_ID);
@@ -42,34 +50,79 @@ class UploadMaterialTests {
         assertThat(store.putCalls).isOne();
         assertThat(store.received).containsExactly(bytes);
         assertThat(store.declaredLength).isEqualTo(bytes.length);
+        assertThat(content.openCalls).isEqualTo(2);
+    }
+
+    @ParameterizedTest
+    @MethodSource("supportedDetectedTypes")
+    void mapsSupportedDetectedTypesAndUsesUntitledFallback(String detectedType, String materialType) {
+        RecordingPersistence persistence = new RecordingPersistence();
+        MaterialUploadResult result = upload(new RecordingStore(), persistence, 100, detectedType)
+                .execute(command(" ", "application/octet-stream", new byte[] {1}));
+
+        assertThat(result.materialType()).isEqualTo(materialType);
+        assertThat(result.mimeType()).isEqualTo(detectedType);
+        assertThat(result.title()).isEqualTo("Untitled material");
+        assertThat(result.originalFilename()).isNull();
     }
 
     @Test
-    void mapsSupportedDeclaredTypesAndUsesUntitledFallback() {
-        for (String[] type : new String[][] {
-                {"image/jpeg", "IMAGE"}, {"image/png", "IMAGE"}, {"text/plain", "TEXT"}}) {
+    void acceptsSupportedContentWithMissingOrGenericDeclaration() {
+        for (String declared : new String[] {null, "", "application/octet-stream"}) {
             RecordingPersistence persistence = new RecordingPersistence();
-            MaterialUploadResult result = upload(new RecordingStore(), persistence, 10)
-                    .execute(command(" ", type[0], new byte[] {1}));
-            assertThat(result.materialType()).isEqualTo(type[1]);
-            assertThat(result.title()).isEqualTo("Untitled material");
-            assertThat(result.originalFilename()).isNull();
+            MaterialUploadResult result = upload(new RecordingStore(), persistence, 100, "text/plain")
+                    .execute(command("notes.pdf", declared, MaterialUploadFixtures.text()));
+            assertThat(result.materialType()).isEqualTo("TEXT");
+            assertThat(result.mimeType()).isEqualTo("text/plain");
         }
     }
 
     @Test
-    void rejectsEmptyUnsupportedAndOversizedBeforeStorageOrPersistence() {
-        for (UploadMaterial.Command command : new UploadMaterial.Command[] {
-                command("empty.pdf", "application/pdf", new byte[0]),
-                command("archive.zip", "application/zip", new byte[] {1}),
-                command("large.pdf", "application/pdf", new byte[9])}) {
+    void rejectsAnySpecificDeclarationThatContradictsDetectedContentBeforeStorageOrPersistence() {
+        for (String declared : new String[] {"application/pdf", "application/zip"}) {
             RecordingStore store = new RecordingStore();
             RecordingPersistence persistence = new RecordingPersistence();
-            assertThatThrownBy(() -> upload(store, persistence, 8).execute(command))
+
+            assertThatThrownBy(() -> upload(store, persistence, 100, "text/plain")
+                            .execute(command("notes.pdf", declared, MaterialUploadFixtures.text())))
+                    .isInstanceOfSatisfying(MaterialUploadException.class,
+                            failure -> assertThat(failure.kind()).isEqualTo(MaterialUploadException.Kind.TYPE_MISMATCH));
+            assertThat(store.putCalls).isZero();
+            assertThat(persistence.calls).isZero();
+        }
+    }
+
+    @Test
+    void rejectsEmptyUnsupportedOversizedAndInvalidContentBeforeStorageOrPersistence() {
+        for (UploadMaterial.Command command : new UploadMaterial.Command[] {
+                command("empty.pdf", "application/pdf", new byte[0]),
+                command("large.pdf", "application/pdf", new byte[101])}) {
+            RecordingStore store = new RecordingStore();
+            RecordingPersistence persistence = new RecordingPersistence();
+            assertThatThrownBy(() -> upload(store, persistence, 100, "application/pdf").execute(command))
                     .isInstanceOf(MaterialUploadException.class);
             assertThat(store.putCalls).isZero();
             assertThat(persistence.calls).isZero();
         }
+
+        RecordingStore unsupportedStore = new RecordingStore();
+        RecordingPersistence unsupportedPersistence = new RecordingPersistence();
+        assertThatThrownBy(() -> upload(unsupportedStore, unsupportedPersistence, 100, "application/zip")
+                        .execute(command("archive.zip", "application/pdf", MaterialUploadFixtures.zipLikeUnsupported())))
+                .isInstanceOfSatisfying(MaterialUploadException.class,
+                        failure -> assertThat(failure.kind()).isEqualTo(MaterialUploadException.Kind.TYPE_UNSUPPORTED));
+        assertThat(unsupportedStore.putCalls).isZero();
+        assertThat(unsupportedPersistence.calls).isZero();
+
+        RecordingStore invalidStore = new RecordingStore();
+        RecordingPersistence invalidPersistence = new RecordingPersistence();
+        FailingInspector inspector = new FailingInspector();
+        assertThatThrownBy(() -> upload(invalidStore, invalidPersistence, inspector, 100)
+                        .execute(command("corrupt.pdf", "application/pdf", MaterialUploadFixtures.corruptPdf())))
+                .isInstanceOfSatisfying(MaterialUploadException.class,
+                        failure -> assertThat(failure.kind()).isEqualTo(MaterialUploadException.Kind.CONTENT_INVALID));
+        assertThat(invalidStore.putCalls).isZero();
+        assertThat(invalidPersistence.calls).isZero();
     }
 
     @Test
@@ -77,8 +130,8 @@ class UploadMaterialTests {
         RecordingStore store = new RecordingStore();
         store.failPut = true;
         RecordingPersistence persistence = new RecordingPersistence();
-        assertThatThrownBy(() -> upload(store, persistence, 10)
-                        .execute(command("source.pdf", "application/pdf", new byte[] {1})))
+        assertThatThrownBy(() -> upload(store, persistence, 100, "application/pdf")
+                        .execute(command("source.pdf", "application/pdf", MaterialUploadFixtures.pdf())))
                 .isInstanceOfSatisfying(MaterialUploadException.class,
                         failure -> assertThat(failure.kind()).isEqualTo(MaterialUploadException.Kind.STORAGE_UNAVAILABLE));
         assertThat(persistence.calls).isZero();
@@ -91,21 +144,74 @@ class UploadMaterialTests {
             store.failDelete = failDelete;
             RecordingPersistence persistence = new RecordingPersistence();
             persistence.fail = true;
-            assertThatThrownBy(() -> upload(store, persistence, 10)
-                            .execute(command("source.pdf", "application/pdf", new byte[] {1})))
+            assertThatThrownBy(() -> upload(store, persistence, 100, "application/pdf")
+                            .execute(command("source.pdf", "application/pdf", MaterialUploadFixtures.pdf())))
                     .isInstanceOfSatisfying(MaterialUploadException.class,
                             failure -> assertThat(failure.kind()).isEqualTo(MaterialUploadException.Kind.PERSISTENCE_FAILED));
             assertThat(store.deleteCalls).isOne();
         }
     }
 
-    private static UploadMaterial upload(BinaryObjectStore store, MaterialUploadPersistence persistence, long max) {
+    private static UploadMaterial upload(
+            BinaryObjectStore store, MaterialUploadPersistence persistence, long max, String detectedMimeType) {
+        return upload(store, persistence, new FixedInspector(detectedMimeType), max);
+    }
+
+    private static UploadMaterial upload(
+            BinaryObjectStore store,
+            MaterialUploadPersistence persistence,
+            MaterialContentInspector inspector,
+            long max) {
         CurrentUser currentUser = () -> new AuthenticatedUser(OWNER_ID);
-        return new UploadMaterial(currentUser, store, persistence, max);
+        return new UploadMaterial(currentUser, inspector, store, persistence, max);
     }
 
     private static UploadMaterial.Command command(String name, String type, byte[] bytes) {
-        return new UploadMaterial.Command(name, type, bytes.length, () -> new ByteArrayInputStream(bytes));
+        return command(name, type, new RepeatableContent(bytes));
+    }
+
+    private static UploadMaterial.Command command(String name, String type, RepeatableContent content) {
+        return new UploadMaterial.Command(name, type, content.bytes.length, content);
+    }
+
+    private static Stream<String[]> supportedDetectedTypes() {
+        return Stream.of(
+                new String[] {"application/pdf", "PDF"},
+                new String[] {"image/jpeg", "IMAGE"},
+                new String[] {"image/png", "IMAGE"},
+                new String[] {"text/plain", "TEXT"});
+    }
+
+    private static final class FixedInspector implements MaterialContentInspector {
+        private final String mimeType;
+
+        private FixedInspector(String mimeType) {
+            this.mimeType = mimeType;
+        }
+
+        @Override public Inspection inspect(InputStream source, long contentLength) {
+            return new Inspection(mimeType);
+        }
+    }
+
+    private static final class FailingInspector implements MaterialContentInspector {
+        @Override public Inspection inspect(InputStream source, long contentLength) {
+            throw new MaterialContentInspectionException("synthetic invalid content");
+        }
+    }
+
+    private static final class RepeatableContent implements UploadMaterial.UploadContent {
+        private final byte[] bytes;
+        private int openCalls;
+
+        private RepeatableContent(byte[] bytes) {
+            this.bytes = bytes;
+        }
+
+        @Override public InputStream openStream() {
+            openCalls++;
+            return new ByteArrayInputStream(bytes);
+        }
     }
 
     private static final class RecordingStore implements BinaryObjectStore {
