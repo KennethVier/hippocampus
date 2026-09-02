@@ -791,7 +791,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Processing
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Prevent duplicate worker execution.
 - **Build:** Implement PostgreSQL FOR UPDATE SKIP LOCKED claim transaction.
 - **How it works:** Worker marks RUNNING/lock fields then commits before work.
@@ -800,7 +800,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Only one worker claims a job.
 - **Definition of Done:** Concurrency test passes.
 - **Authority:** Documents 21,25
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** P3-02 atomic PostgreSQL job claiming is implemented in PR [#99](https://github.com/KennethVier/hippocampus/pull/99) at implementation head `ae8b0b968fa9203060b141bb151d67cc3e6d74ef`. The candidate adds the internal `ClaimNextProcessingJob` application use case with a proxy-safe short transaction, an immutable `ClaimedProcessingJob` domain result, a narrow `ProcessingJobClaimRepository` port, and a `JdbcProcessingJobClaimRepository` using one parameterized PostgreSQL CTE with `FOR UPDATE ... SKIP LOCKED` to claim only eligible `PENDING` jobs, transition them to `RUNNING`, increment `attempt_count` exactly once, set lock metadata and first `started_at`, preserve heartbeat, exclude jobs for already-`DELETED` Materials, and use deterministic `created_at ASC, id ASC` FIFO selection. Additive Flyway V9 creates the PENDING/attempt-eligible FIFO claim index; V8 is unchanged. Real PostgreSQL/Testcontainers coverage separately proves exactly-one ownership under a two-worker same-job race and genuine `SKIP LOCKED` forward progress by holding the first candidate locked while another worker claims the next row, plus ineligible-state, attempt-limit, deleted-Material, null-version, FIFO, worker-ID validation, migration/index, and failure-propagation behavior. Exact implementation-head quality run [#239](https://github.com/KennethVier/hippocampus/actions/runs/33664972846) (ID `33664972846`) succeeded with `backend-quality`, `frontend-quality`, `security`, `auth-e2e`, `phase1-gate`, and `phase2-gate` successful; the PR security job passed explicit commit-range secret scanning and introduced-dependency review. External general implementation review at that head returned **APPROVED WITH REQUIRED CHANGES** (review ID `5093407288`) requiring tracker/PR evidence corrections only; no production-code change was required. Independent security review is still pending and no `SECURITY PASS`, merge, `Done`, or Phase 3 PASS is claimed. P3-02 remains a `Ready for Review` candidate pending clean general re-review, independent security review, final-head validation, merge, and final completion evidence. No new dependency, top-level module, dispatcher, worker loop, retry/backoff, heartbeat-recovery behavior, parser, AI/RAG behavior, frontend, or undocumented architecture deviation was introduced; ADR is not required under the approved modular-monolith/PostgreSQL design.
 - **Notes / blockers:** _None_
 
 ## P3-03 — Implement processing dispatcher and stage handlers
