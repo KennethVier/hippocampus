@@ -93,7 +93,7 @@ public final class UploadMaterial {
         if (normalizedDeclared == null || normalizedDeclared.equals("application/octet-stream")) {
             return;
         }
-        if (MATERIAL_TYPES.containsKey(normalizedDeclared) && !normalizedDeclared.equals(detectedMimeType)) {
+        if (!normalizedDeclared.equals(detectedMimeType)) {
             throw new MaterialUploadException(MaterialUploadException.Kind.TYPE_MISMATCH);
         }
     }
