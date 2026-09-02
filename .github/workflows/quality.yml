@@ -298,3 +298,29 @@ jobs:
           test "$FRONTEND_RESULT" = success
           test "$AUTH_E2E_RESULT" = success
           test "$SECURITY_RESULT" = success
+
+  phase2-gate:
+    name: phase2-gate
+    if: ${{ always() }}
+    needs:
+      - backend-quality
+      - frontend-quality
+      - auth-e2e
+      - security
+      - phase1-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every Phase 2 acceptance input
+        env:
+          BACKEND_RESULT: ${{ needs.backend-quality.result }}
+          FRONTEND_RESULT: ${{ needs.frontend-quality.result }}
+          AUTH_E2E_RESULT: ${{ needs.auth-e2e.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+          PHASE1_GATE_RESULT: ${{ needs.phase1-gate.result }}
+        run: |
+          set -euo pipefail
+          test "$BACKEND_RESULT" = success
+          test "$FRONTEND_RESULT" = success
+          test "$AUTH_E2E_RESULT" = success
+          test "$SECURITY_RESULT" = success
+          test "$PHASE1_GATE_RESULT" = success
