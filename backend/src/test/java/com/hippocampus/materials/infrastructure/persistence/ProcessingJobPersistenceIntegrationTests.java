@@ -3,6 +3,7 @@ package com.hippocampus.materials.infrastructure.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -76,6 +77,35 @@ class ProcessingJobPersistenceIntegrationTests extends PostgresIntegrationTestSu
             assertThat(reloaded.getCompletedAt()).isEqualTo(completedAt);
             assertThat(reloaded.getCreatedAt()).isNotNull();
             assertThat(reloaded.getUpdatedAt()).isNotNull();
+        }
+    }
+
+    @Test
+    void durableIdentityIsNotUpdatedAfterPersistence() {
+        try (var context = startApplicationWithFlyway()) {
+            Fixture original = fixture(context, "immutable-identity-original");
+            Fixture replacement = fixture(context, "immutable-identity-replacement");
+            ProcessingJobEntity job = new ProcessingJobEntity(
+                    original.userId(), original.materialVersionId(), ProcessingJobType.MATERIAL_EXTRACT,
+                    ProcessingJobStatus.PENDING, 1, null, 0, 3, "parser-v1");
+            UUID jobId = persist(context, job);
+            EntityManager entityManager = context.getBean(EntityManager.class);
+            TransactionTemplate transactions = new TransactionTemplate(
+                    context.getBean(org.springframework.transaction.PlatformTransactionManager.class));
+
+            transactions.executeWithoutResult(ignored -> {
+                ProcessingJobEntity persisted = entityManager.find(ProcessingJobEntity.class, jobId);
+                setField(persisted, "materialVersionId", replacement.materialVersionId());
+                setField(persisted, "jobType", ProcessingJobType.CHUNK);
+                setField(persisted, "processingVersion", "parser-v2");
+                entityManager.flush();
+            });
+            entityManager.clear();
+
+            ProcessingJobEntity reloaded = find(context, jobId);
+            assertThat(reloaded.getMaterialVersionId()).isEqualTo(original.materialVersionId());
+            assertThat(reloaded.getJobType()).isEqualTo(ProcessingJobType.MATERIAL_EXTRACT);
+            assertThat(reloaded.getProcessingVersion()).isEqualTo("parser-v1");
         }
     }
 
@@ -206,6 +236,16 @@ class ProcessingJobPersistenceIntegrationTests extends PostgresIntegrationTestSu
         TransactionTemplate transactions = new TransactionTemplate(
                 context.getBean(org.springframework.transaction.PlatformTransactionManager.class));
         return transactions.execute(ignored -> entityManager.find(ProcessingJobEntity.class, jobId));
+    }
+
+    private static void setField(ProcessingJobEntity job, String fieldName, Object value) {
+        try {
+            Field field = ProcessingJobEntity.class.getDeclaredField(fieldName);
+            field.setAccessible(true);
+            field.set(job, value);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("Could not exercise persisted identity mapping", exception);
+        }
     }
 
     private static void assertInvalidJob(
