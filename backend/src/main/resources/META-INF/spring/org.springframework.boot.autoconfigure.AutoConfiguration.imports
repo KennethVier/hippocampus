@@ -4,3 +4,4 @@ com.hippocampus.materials.infrastructure.config.MaterialManagementConfiguration
 com.hippocampus.materials.infrastructure.config.MaterialUploadPersistenceConfiguration
 com.hippocampus.materials.infrastructure.config.MaterialUploadConfiguration
 com.hippocampus.materials.infrastructure.config.MaterialTopicLinkConfiguration
+com.hippocampus.materials.infrastructure.config.ProcessingJobClaimConfiguration
