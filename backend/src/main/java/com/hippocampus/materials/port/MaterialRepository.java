@@ -9,9 +9,5 @@ public interface MaterialRepository {
 
     Optional<MaterialMetadata> findVisibleOwnedById(UUID materialId, UUID ownerId);
 
-    /**
-     * Marks the owner's material deleted. Returns true when the material belongs to
-     * the owner, including when it was already deleted, so deletion is idempotent.
-     */
-    boolean markDeletedOwned(UUID materialId, UUID ownerId);
+    MaterialDeletionOutcome markDeletedOwned(UUID materialId, UUID ownerId);
 }

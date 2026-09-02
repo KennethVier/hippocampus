@@ -8,6 +8,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -15,6 +16,9 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -29,8 +33,16 @@ import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialVe
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 import com.hippocampus.testing.security.OwnershipTestUser;
 import com.hippocampus.testing.security.OwnershipTestUsers;
+import com.hippocampus.shared.infrastructure.web.CorrelationIdFilter;
 
+import io.micrometer.core.instrument.MeterRegistry;
+
+@ExtendWith(OutputCaptureExtension.class)
 class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport {
+
+    private static final String MATERIAL_DELETED_METRIC = "hippocampus.materials.deleted";
+    private static final String STATUS_TRANSITIONS_METRIC = "hippocampus.materials.status.transitions";
+    private static final String DELETE_CORRELATION_ID = "fa23fa40-e03c-46d5-909f-f42cba83c829";
 
     @BeforeEach
     void resetDatabase() throws Exception {
@@ -117,7 +129,8 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
     }
 
     @Test
-    void deleteIsOwnerScopedCsrfProtectedIdempotentAndImmediatelyHidesMaterial() throws Exception {
+    void deleteIsOwnerScopedCsrfProtectedIdempotentAndImmediatelyHidesMaterial(CapturedOutput output)
+            throws Exception {
         try (ConfigurableApplicationContext context = startApplicationWithFlyway()) {
             OwnershipTestUsers users = OwnershipTestUsers.persistWith(
                     context.getBean(UserRepository.class), "material-management-delete");
@@ -127,6 +140,7 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
             var originalUpdatedAt = own.getUpdatedAt();
             MaterialEntity csrfProtected = createMaterial(materials, users.userA().userId(), "csrf.pdf", "UPLOADED");
             MaterialEntity foreign = createMaterial(materials, users.userB().userId(), "foreign.pdf", "UPLOADED");
+            MeterRegistry meterRegistry = context.getBean(MeterRegistry.class);
 
             MockMvc mvc = mvc(context);
             mvc.perform(delete("/api/materials/{id}", csrfProtected.getId())
@@ -141,8 +155,10 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
             assertThat(materials.findById(foreign.getId()).orElseThrow().getStatus()).isEqualTo("UPLOADED");
 
             mvc.perform(delete("/api/materials/{id}", own.getId())
+                            .header("X-Correlation-ID", DELETE_CORRELATION_ID)
                             .with(authenticatedAs(users.userA())).with(csrf()))
-                    .andExpect(status().isNoContent());
+                    .andExpect(status().isNoContent())
+                    .andExpect(header().string("X-Correlation-ID", DELETE_CORRELATION_ID));
             MaterialEntity deleted = materials.findById(own.getId()).orElseThrow();
             assertThat(deleted.getStatus()).isEqualTo("DELETED");
             assertThat(deleted.getActiveVersionId()).isNull();
@@ -165,7 +181,25 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
                     .andExpect(jsonPath("$.code").value("MATERIAL_NOT_FOUND"));
             mvc.perform(delete("/api/materials/{id}", csrfProtected.getId()).with(csrf()))
                     .andExpect(status().isUnauthorized());
+
+            assertThat(counterValue(meterRegistry, MATERIAL_DELETED_METRIC)).isEqualTo(1);
+            assertThat(counterValue(
+                    meterRegistry, STATUS_TRANSITIONS_METRIC, "scope", "MATERIAL", "status", "DELETED"))
+                    .isEqualTo(1);
+            assertThat(occurrences(output.getOut(), "\"event\":\"material_deleted\"")).isEqualTo(1);
+            assertThat(output.getOut())
+                    .contains("\"correlationId\":\"" + DELETE_CORRELATION_ID + "\"")
+                    .doesNotContain("delete-me.pdf", users.userA().userId().toString(), users.userA().email());
         }
+    }
+
+    private static double counterValue(MeterRegistry meterRegistry, String name, String... tags) {
+        var counter = meterRegistry.find(name).tags(tags).counter();
+        return counter == null ? 0 : counter.count();
+    }
+
+    private static int occurrences(String value, String needle) {
+        return (value.length() - value.replace(needle, "").length()) / needle.length();
     }
 
     private static void assertNotFound(MockMvc mvc, UUID materialId, OwnershipTestUser user, String protectedMarker)
@@ -196,6 +230,9 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
     }
 
     private static MockMvc mvc(ConfigurableApplicationContext context) {
-        return MockMvcBuilders.webAppContextSetup((WebApplicationContext) context).apply(springSecurity()).build();
+        return MockMvcBuilders.webAppContextSetup((WebApplicationContext) context)
+                .addFilters(context.getBean(CorrelationIdFilter.class))
+                .apply(springSecurity())
+                .build();
     }
 }

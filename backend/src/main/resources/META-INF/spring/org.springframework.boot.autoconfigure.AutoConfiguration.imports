@@ -1,3 +1,4 @@
+com.hippocampus.materials.infrastructure.config.MaterialLifecycleTelemetryConfiguration
 com.hippocampus.materials.infrastructure.config.MaterialManagementPersistenceConfiguration
 com.hippocampus.materials.infrastructure.config.MaterialManagementConfiguration
 com.hippocampus.materials.infrastructure.config.MaterialUploadPersistenceConfiguration

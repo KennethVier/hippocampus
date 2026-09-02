@@ -2,7 +2,6 @@ package com.hippocampus.materials.api;
 
 import static com.hippocampus.testing.security.OwnershipTestRequests.authenticatedAs;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -48,7 +47,13 @@ import com.hippocampus.materials.port.MaterialUploadPersistence;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 import com.hippocampus.testing.security.OwnershipTestUsers;
 
+import io.micrometer.core.instrument.MeterRegistry;
+
 class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSupport {
+
+    private static final String UPLOAD_ACCEPTED_METRIC = "hippocampus.materials.upload.accepted";
+    private static final String UPLOAD_FAILED_METRIC = "hippocampus.materials.upload.failed";
+    private static final String STATUS_TRANSITIONS_METRIC = "hippocampus.materials.status.transitions";
 
     private static final String[] UPLOAD_ARGUMENTS = {
             "--hippocampus.materials.upload.max-file-size=256B",
@@ -100,6 +105,14 @@ class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSu
                 context.getBean(BinaryObjectStore.class).get(new BinaryObjectKey(version.getStorageKey()), retrieved);
                 assertThat(Base64.getEncoder().encodeToString(retrieved.toByteArray())).isIn(expectedObjects);
             });
+            MeterRegistry meterRegistry = context.getBean(MeterRegistry.class);
+            assertThat(counterValue(meterRegistry, UPLOAD_ACCEPTED_METRIC)).isEqualTo(4);
+            assertThat(counterValue(
+                    meterRegistry, STATUS_TRANSITIONS_METRIC, "scope", "MATERIAL", "status", "UPLOADED"))
+                    .isEqualTo(4);
+            assertThat(counterValue(
+                    meterRegistry, STATUS_TRANSITIONS_METRIC, "scope", "MATERIAL_VERSION", "status", "UPLOADED"))
+                    .isEqualTo(4);
         }
     }
 
@@ -127,6 +140,7 @@ class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSu
             assertThat(context.getBean(SpringDataMaterialRepository.class).count()).isZero();
             assertThat(context.getBean(SpringDataMaterialVersionRepository.class).count()).isZero();
             assertNoStoredObjects(context.getBean("uploadTestStorageRoot", Path.class));
+            assertThat(counterValue(context.getBean(MeterRegistry.class), UPLOAD_ACCEPTED_METRIC)).isZero();
         }
     }
 
@@ -181,32 +195,44 @@ class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSu
                     .extracting(material -> material.getUserId()).containsExactlyInAnyOrder(users.userA().userId(), users.userB().userId());
             assertThat(context.getBean(SpringDataMaterialVersionRepository.class).findAll())
                     .extracting(version -> version.getStorageKey()).doesNotHaveDuplicates();
+            assertThat(counterValue(context.getBean(MeterRegistry.class), UPLOAD_ACCEPTED_METRIC)).isEqualTo(2);
         }
     }
 
     @Test
-    void rollsBackMaterialWhenVersionPersistenceFailsInsideTransactionalAdapter() throws Exception {
+    void persistenceFailureRollsBackRowsCleansStorageAndDoesNotEmitAcceptedTelemetry() throws Exception {
         try (ConfigurableApplicationContext context = startApplicationWithFlywayAndArguments(
                 new Class<?>[] {StorageTestConfiguration.class, RollbackTestConfiguration.class}, UPLOAD_ARGUMENTS)) {
             OwnershipTestUsers users = OwnershipTestUsers.persistWith(
                     context.getBean(UserRepository.class), "material-upload-rollback");
-            MaterialUploadPersistence persistence = context.getBean(
-                    "rollbackMaterialUploadPersistence", MaterialUploadPersistence.class);
+            MockMvc mvc = mvc(context);
 
-            assertThatThrownBy(() -> persistence.createInitialMaterial(new MaterialUploadPersistence.InitialMaterial(
-                    users.userA().userId(), "Rollback source", "PDF", "rollback.pdf", "application/pdf",
-                    "materials/" + java.util.UUID.randomUUID() + "/original", 3)))
-                    .isInstanceOf(DataIntegrityViolationException.class);
+            mvc.perform(multipart("/api/materials")
+                            .file(file("rollback.pdf", "application/pdf", MaterialUploadFixtures.pdf()))
+                            .with(authenticatedAs(users.userA())).with(csrf()))
+                    .andExpect(status().isInternalServerError())
+                    .andExpect(jsonPath("$.code").value("UPLOAD_PERSISTENCE_FAILED"));
 
             assertThat(context.getBean(SpringDataMaterialRepository.class).count()).isZero();
             SpringDataMaterialVersionRepository actualVersions = context.getBean(
                     "springDataMaterialVersionRepository", SpringDataMaterialVersionRepository.class);
             assertThat(actualVersions.count()).isZero();
+            assertNoStoredObjects(context.getBean("uploadTestStorageRoot", Path.class));
+            MeterRegistry meterRegistry = context.getBean(MeterRegistry.class);
+            assertThat(counterValue(meterRegistry, UPLOAD_ACCEPTED_METRIC)).isZero();
+            assertThat(counterValue(
+                    meterRegistry, UPLOAD_FAILED_METRIC, "reason", "UPLOAD_PERSISTENCE_FAILED"))
+                    .isEqualTo(1);
         }
     }
 
     private static MockMultipartFile file(String name, String type, byte[] content) {
         return new MockMultipartFile("file", name, type, content);
+    }
+
+    private static double counterValue(MeterRegistry meterRegistry, String name, String... tags) {
+        var counter = meterRegistry.find(name).tags(tags).counter();
+        return counter == null ? 0 : counter.count();
     }
 
     private static ConfigurableApplicationContext context() {

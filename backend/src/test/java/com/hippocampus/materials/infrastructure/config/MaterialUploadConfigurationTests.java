@@ -21,6 +21,7 @@ import com.hippocampus.materials.application.UploadMaterial;
 import com.hippocampus.materials.infrastructure.storage.filesystem.FileSystemStorageConfiguration;
 import com.hippocampus.materials.port.BinaryObjectKey;
 import com.hippocampus.materials.port.BinaryObjectStore;
+import com.hippocampus.materials.port.MaterialLifecycleTelemetry;
 import com.hippocampus.materials.port.MaterialUploadPersistence;
 
 class MaterialUploadConfigurationTests {
@@ -30,7 +31,7 @@ class MaterialUploadConfigurationTests {
 
     private final WebApplicationContextRunner runner = new WebApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(MultipartAutoConfiguration.class, MaterialUploadConfiguration.class))
-            .withUserConfiguration(IdentityConfiguration.class)
+            .withUserConfiguration(IdentityConfiguration.class, TelemetryConfiguration.class)
             .withPropertyValues(
                     "hippocampus.materials.upload.max-file-size=8B",
                     "spring.servlet.multipart.max-file-size=8B",
@@ -51,7 +52,11 @@ class MaterialUploadConfigurationTests {
     void rejectsDriftingOrMissingUploadLimitsWhenFeatureIsAvailable() {
         new WebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(MultipartAutoConfiguration.class, MaterialUploadConfiguration.class))
-                .withUserConfiguration(IdentityConfiguration.class, StorageConfiguration.class, PersistenceConfiguration.class)
+                .withUserConfiguration(
+                        IdentityConfiguration.class,
+                        StorageConfiguration.class,
+                        PersistenceConfiguration.class,
+                        TelemetryConfiguration.class)
                 .withPropertyValues(
                         "hippocampus.materials.upload.max-file-size=8B",
                         "spring.servlet.multipart.max-file-size=7B",
@@ -63,7 +68,10 @@ class MaterialUploadConfigurationTests {
     void requiresCurrentUserAndKeepsPilotFilesystemAndUploadUnavailable() {
         new WebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(MultipartAutoConfiguration.class, MaterialUploadConfiguration.class))
-                .withUserConfiguration(StorageConfiguration.class, PersistenceConfiguration.class)
+                .withUserConfiguration(
+                        StorageConfiguration.class,
+                        PersistenceConfiguration.class,
+                        TelemetryConfiguration.class)
                 .withPropertyValues(
                         "hippocampus.materials.upload.max-file-size=8B",
                         "spring.servlet.multipart.max-file-size=8B",
@@ -104,6 +112,18 @@ class MaterialUploadConfigurationTests {
         @Bean MaterialUploadPersistence persistence() {
             return upload -> new MaterialUploadPersistence.CreatedMaterial(
                     UUID.randomUUID(), UUID.randomUUID(), Instant.now());
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class TelemetryConfiguration {
+        @Bean MaterialLifecycleTelemetry materialLifecycleTelemetry() {
+            return new MaterialLifecycleTelemetry() {
+                @Override public void uploadAccepted(UUID materialId, UUID materialVersionId) {}
+                @Override public void uploadRejected(UploadRejectionReason reason) {}
+                @Override public void uploadFailed(UploadFailureReason reason) {}
+                @Override public void materialDeleted(UUID materialId) {}
+            };
         }
     }
 }
