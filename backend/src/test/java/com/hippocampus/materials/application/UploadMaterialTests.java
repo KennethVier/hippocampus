@@ -78,16 +78,18 @@ class UploadMaterialTests {
     }
 
     @Test
-    void rejectsSpecificSupportedDeclarationThatContradictsDetectedContentBeforeStorageOrPersistence() {
-        RecordingStore store = new RecordingStore();
-        RecordingPersistence persistence = new RecordingPersistence();
+    void rejectsAnySpecificDeclarationThatContradictsDetectedContentBeforeStorageOrPersistence() {
+        for (String declared : new String[] {"application/pdf", "application/zip"}) {
+            RecordingStore store = new RecordingStore();
+            RecordingPersistence persistence = new RecordingPersistence();
 
-        assertThatThrownBy(() -> upload(store, persistence, 100, "text/plain")
-                        .execute(command("notes.pdf", "application/pdf", MaterialUploadFixtures.text())))
-                .isInstanceOfSatisfying(MaterialUploadException.class,
-                        failure -> assertThat(failure.kind()).isEqualTo(MaterialUploadException.Kind.TYPE_MISMATCH));
-        assertThat(store.putCalls).isZero();
-        assertThat(persistence.calls).isZero();
+            assertThatThrownBy(() -> upload(store, persistence, 100, "text/plain")
+                            .execute(command("notes.pdf", declared, MaterialUploadFixtures.text())))
+                    .isInstanceOfSatisfying(MaterialUploadException.class,
+                            failure -> assertThat(failure.kind()).isEqualTo(MaterialUploadException.Kind.TYPE_MISMATCH));
+            assertThat(store.putCalls).isZero();
+            assertThat(persistence.calls).isZero();
+        }
     }
 
     @Test
