@@ -13,6 +13,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -21,6 +22,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.hippocampus.materials.MaterialUploadFixtures;
@@ -29,6 +32,9 @@ import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.MaterialUploadPersistence;
 import com.hippocampus.testing.security.OwnershipTestUser;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.servlet.http.Cookie;
+
 @SpringBootTest(properties = {
         "hippocampus.materials.upload.max-file-size=256B",
         "spring.servlet.multipart.max-file-size=256B",
@@ -36,13 +42,18 @@ import com.hippocampus.testing.security.OwnershipTestUser;
 })
 @AutoConfigureMockMvc
 @Import(MaterialUploadControllerWebTests.TestInfrastructure.class)
+@ExtendWith(OutputCaptureExtension.class)
 class MaterialUploadControllerWebTests {
 
-    private static final OwnershipTestUser USER = new OwnershipTestUser(UUID.randomUUID(), "upload@example.test");
+    private static final OwnershipTestUser USER =
+            new OwnershipTestUser(UUID.randomUUID(), "PRIVATE_EMAIL_SENTINEL@example.test");
+    private static final String UPLOAD_ACCEPTED_METRIC = "hippocampus.materials.upload.accepted";
+    private static final String CORRELATION_ID = "d24a60eb-c5a0-4f4f-8fd2-1a7653f50bd4";
 
     @Autowired MockMvc mvc;
     @Autowired RecordingStore store;
     @Autowired RecordingPersistence persistence;
+    @Autowired MeterRegistry meterRegistry;
 
     @BeforeEach
     void reset() {
@@ -52,6 +63,7 @@ class MaterialUploadControllerWebTests {
 
     @Test
     void validUploadReturnsCreatedWithoutLocationOrPrivateMetadata() throws Exception {
+        double acceptedBefore = counterValue(UPLOAD_ACCEPTED_METRIC);
         mvc.perform(multipart("/api/materials")
                         .file(file("source.pdf", "application/pdf", MaterialUploadFixtures.pdf()))
                         .with(authenticatedAs(USER)).with(csrf()))
@@ -65,6 +77,33 @@ class MaterialUploadControllerWebTests {
                 .andExpect(jsonPath("$.userId").doesNotExist());
         assertThat(store.calls).isOne();
         assertThat(persistence.upload.ownerId()).isEqualTo(USER.userId());
+        assertThat(counterValue(UPLOAD_ACCEPTED_METRIC)).isEqualTo(acceptedBefore + 1);
+    }
+
+    @Test
+    void lifecycleLogUsesExistingCorrelationAndExcludesPrivateUploadData(CapturedOutput output) throws Exception {
+        String privateFilename = "PRIVATE_FILENAME_SENTINEL.txt";
+        String privateContent = "PRIVATE_CONTENT_SENTINEL";
+
+        mvc.perform(multipart("/api/materials")
+                        .file(file(privateFilename, "text/plain", privateContent.getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                        .header("X-Correlation-ID", CORRELATION_ID)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer PRIVATE_AUTHORIZATION_SENTINEL")
+                        .cookie(new Cookie("PRIVATE_SESSION_SENTINEL", "PRIVATE_SESSION_SENTINEL"))
+                        .with(authenticatedAs(USER)).with(csrf()))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("X-Correlation-ID", CORRELATION_ID));
+
+        assertThat(output.getOut())
+                .contains("\"event\":\"material_upload_accepted\"")
+                .contains("\"correlationId\":\"" + CORRELATION_ID + "\"")
+                .doesNotContain(
+                        privateFilename,
+                        privateContent,
+                        "PRIVATE_AUTHORIZATION_SENTINEL",
+                        "PRIVATE_SESSION_SENTINEL",
+                        USER.userId().toString(),
+                        USER.email());
     }
 
     @Test
@@ -128,11 +167,18 @@ class MaterialUploadControllerWebTests {
 
     @Test
     void requiresAuthenticationAndCsrf() throws Exception {
+        double acceptedBefore = counterValue(UPLOAD_ACCEPTED_METRIC);
         mvc.perform(multipart("/api/materials").file(file("source.pdf", "application/pdf", MaterialUploadFixtures.pdf())).with(csrf()))
                 .andExpect(status().isUnauthorized());
         mvc.perform(multipart("/api/materials").file(file("source.pdf", "application/pdf", MaterialUploadFixtures.pdf()))
                         .with(authenticatedAs(USER)))
                 .andExpect(status().isForbidden());
+        assertThat(counterValue(UPLOAD_ACCEPTED_METRIC)).isEqualTo(acceptedBefore);
+    }
+
+    private double counterValue(String name) {
+        var counter = meterRegistry.find(name).counter();
+        return counter == null ? 0 : counter.count();
     }
 
     private static MockMultipartFile file(String name, String type, byte[] content) {

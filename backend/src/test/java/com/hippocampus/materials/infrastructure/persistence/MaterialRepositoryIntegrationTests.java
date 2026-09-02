@@ -9,8 +9,12 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.hippocampus.identity.infrastructure.persistence.UserRepository;
+import com.hippocampus.materials.port.MaterialDeletionOutcome;
+import com.hippocampus.materials.port.MaterialRepository;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 import com.hippocampus.testing.security.OwnershipTestUsers;
 
@@ -101,6 +105,49 @@ class MaterialRepositoryIntegrationTests extends PostgresIntegrationTestSupport 
                 userRepository.deleteById(users.userA().userId());
                 userRepository.flush();
             }).isInstanceOf(DataIntegrityViolationException.class);
+        }
+    }
+
+    @Test
+    void reportsActualAlreadyDeletedForeignAndMissingOutcomesWithoutChangingForeignState() {
+        try (var context = startApplicationWithFlyway()) {
+            var users = OwnershipTestUsers.persistWith(context.getBean(UserRepository.class), "material-delete-outcome");
+            var materials = context.getBean(SpringDataMaterialRepository.class);
+            var versions = context.getBean(SpringDataMaterialVersionRepository.class);
+            MaterialEntity owned = materials.saveAndFlush(
+                    new MaterialEntity(users.userA().userId(), "Owned", "PDF", "UPLOADED"));
+            MaterialVersionEntity version = versions.saveAndFlush(
+                    new MaterialVersionEntity(owned.getId(), 1, "UPLOADED"));
+            owned.setActiveVersionId(version.getId());
+            owned = materials.saveAndFlush(owned);
+            UUID ownedId = owned.getId();
+            MaterialEntity foreign = materials.saveAndFlush(
+                    new MaterialEntity(users.userB().userId(), "Foreign", "PDF", "UPLOADED"));
+            var originalUpdatedAt = owned.getUpdatedAt();
+
+            MaterialRepository repository = context.getBean(MaterialRepository.class);
+            TransactionTemplate transactions = new TransactionTemplate(context.getBean(PlatformTransactionManager.class));
+            MaterialDeletionOutcome first = transactions.execute(
+                    ignored -> repository.markDeletedOwned(ownedId, users.userA().userId()));
+            MaterialEntity deleted = materials.findById(ownedId).orElseThrow();
+            var deletedAt = deleted.getUpdatedAt();
+            MaterialDeletionOutcome repeated = transactions.execute(
+                    ignored -> repository.markDeletedOwned(ownedId, users.userA().userId()));
+            MaterialDeletionOutcome foreignOutcome = transactions.execute(
+                    ignored -> repository.markDeletedOwned(foreign.getId(), users.userA().userId()));
+            MaterialDeletionOutcome missing = transactions.execute(
+                    ignored -> repository.markDeletedOwned(UUID.randomUUID(), users.userA().userId()));
+
+            assertThat(first).isEqualTo(MaterialDeletionOutcome.DELETED);
+            assertThat(repeated).isEqualTo(MaterialDeletionOutcome.ALREADY_DELETED);
+            assertThat(foreignOutcome).isEqualTo(MaterialDeletionOutcome.NOT_FOUND);
+            assertThat(missing).isEqualTo(MaterialDeletionOutcome.NOT_FOUND);
+            assertThat(deleted.getStatus()).isEqualTo("DELETED");
+            assertThat(deleted.getActiveVersionId()).isNull();
+            assertThat(deletedAt).isAfter(originalUpdatedAt);
+            assertThat(materials.findById(ownedId).orElseThrow().getUpdatedAt()).isEqualTo(deletedAt);
+            assertThat(materials.findById(foreign.getId()).orElseThrow().getStatus()).isEqualTo("UPLOADED");
+            assertThat(versions.findAll()).extracting(MaterialVersionEntity::getId).containsExactly(version.getId());
         }
     }
 }

@@ -9,6 +9,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
+import com.hippocampus.materials.port.MaterialDeletionOutcome;
 import com.hippocampus.materials.port.MaterialMetadata;
 import com.hippocampus.materials.port.MaterialPage;
 import com.hippocampus.materials.port.MaterialPageRequest;
@@ -42,12 +43,14 @@ public final class JpaMaterialRepository implements MaterialRepository {
     }
 
     @Override
-    public boolean markDeletedOwned(UUID materialId, UUID ownerId) {
+    public MaterialDeletionOutcome markDeletedOwned(UUID materialId, UUID ownerId) {
         int updated = materials.markDeletedOwned(materialId, ownerId, Instant.now());
         if (updated == 1) {
-            return true;
+            return MaterialDeletionOutcome.DELETED;
         }
-        return materials.existsByIdAndUserId(materialId, ownerId);
+        return materials.existsByIdAndUserId(materialId, ownerId)
+                ? MaterialDeletionOutcome.ALREADY_DELETED
+                : MaterialDeletionOutcome.NOT_FOUND;
     }
 
     private static MaterialMetadata metadata(MaterialEntity entity) {

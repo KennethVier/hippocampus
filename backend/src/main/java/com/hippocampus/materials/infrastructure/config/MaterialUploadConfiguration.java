@@ -14,9 +14,13 @@ import com.hippocampus.materials.application.UploadMaterial;
 import com.hippocampus.materials.infrastructure.inspection.TikaMaterialContentInspector;
 import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.MaterialContentInspector;
+import com.hippocampus.materials.port.MaterialLifecycleTelemetry;
 import com.hippocampus.materials.port.MaterialUploadPersistence;
 
-@AutoConfiguration(after = MaterialUploadPersistenceConfiguration.class)
+@AutoConfiguration(after = {
+        MaterialLifecycleTelemetryConfiguration.class,
+        MaterialUploadPersistenceConfiguration.class
+})
 @ConditionalOnBean({CurrentUser.class, BinaryObjectStore.class, MaterialUploadPersistence.class})
 @EnableConfigurationProperties(MaterialUploadProperties.class)
 public class MaterialUploadConfiguration {
@@ -32,11 +36,12 @@ public class MaterialUploadConfiguration {
             MaterialContentInspector contentInspector,
             BinaryObjectStore objectStore,
             MaterialUploadPersistence persistence,
+            MaterialLifecycleTelemetry telemetry,
             MaterialUploadProperties properties,
             MultipartProperties multipartProperties) {
         properties.validateTransport(multipartProperties);
         return new UploadMaterial(
-                currentUser, contentInspector, objectStore, persistence, properties.maxFileSize().toBytes());
+                currentUser, contentInspector, objectStore, persistence, telemetry, properties.maxFileSize().toBytes());
     }
 
     @Bean

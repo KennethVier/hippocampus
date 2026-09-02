@@ -9,9 +9,13 @@ import com.hippocampus.materials.api.MaterialController;
 import com.hippocampus.materials.application.DeleteMaterial;
 import com.hippocampus.materials.application.GetMaterial;
 import com.hippocampus.materials.application.ListMaterials;
+import com.hippocampus.materials.port.MaterialLifecycleTelemetry;
 import com.hippocampus.materials.port.MaterialRepository;
 
-@AutoConfiguration(after = MaterialManagementPersistenceConfiguration.class)
+@AutoConfiguration(after = {
+        MaterialLifecycleTelemetryConfiguration.class,
+        MaterialManagementPersistenceConfiguration.class
+})
 @ConditionalOnBean({CurrentUser.class, MaterialRepository.class})
 public class MaterialManagementConfiguration {
 
@@ -26,8 +30,11 @@ public class MaterialManagementConfiguration {
     }
 
     @Bean
-    DeleteMaterial deleteMaterial(CurrentUser currentUser, MaterialRepository materials) {
-        return new DeleteMaterial(currentUser, materials);
+    DeleteMaterial deleteMaterial(
+            CurrentUser currentUser,
+            MaterialRepository materials,
+            MaterialLifecycleTelemetry telemetry) {
+        return new DeleteMaterial(currentUser, materials, telemetry);
     }
 
     @Bean

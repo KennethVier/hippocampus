@@ -16,6 +16,7 @@ import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.BinaryObjectStoreException;
 import com.hippocampus.materials.port.MaterialContentInspectionException;
 import com.hippocampus.materials.port.MaterialContentInspector;
+import com.hippocampus.materials.port.MaterialLifecycleTelemetry;
 import com.hippocampus.materials.port.MaterialUploadPersistence;
 import com.hippocampus.materials.port.MaterialUploadPersistence.CreatedMaterial;
 import com.hippocampus.materials.port.MaterialUploadPersistence.InitialMaterial;
@@ -34,6 +35,7 @@ public final class UploadMaterial {
     private final MaterialContentInspector contentInspector;
     private final BinaryObjectStore objectStore;
     private final MaterialUploadPersistence persistence;
+    private final MaterialLifecycleTelemetry telemetry;
     private final long maxFileSizeBytes;
 
     public UploadMaterial(
@@ -41,11 +43,13 @@ public final class UploadMaterial {
             MaterialContentInspector contentInspector,
             BinaryObjectStore objectStore,
             MaterialUploadPersistence persistence,
+            MaterialLifecycleTelemetry telemetry,
             long maxFileSizeBytes) {
         this.currentUser = Objects.requireNonNull(currentUser);
         this.contentInspector = Objects.requireNonNull(contentInspector);
         this.objectStore = Objects.requireNonNull(objectStore);
         this.persistence = Objects.requireNonNull(persistence);
+        this.telemetry = Objects.requireNonNull(telemetry);
         if (maxFileSizeBytes <= 0) {
             throw new IllegalArgumentException("maxFileSizeBytes must be positive");
         }
@@ -68,16 +72,20 @@ public final class UploadMaterial {
         BinaryObjectKey key = new BinaryObjectKey("materials/" + UUID.randomUUID() + "/original");
 
         store(command, key);
+        CreatedMaterial created;
         try {
-            CreatedMaterial created = persistence.createInitialMaterial(new InitialMaterial(
+            created = persistence.createInitialMaterial(new InitialMaterial(
                     ownerId, title, materialType, originalFilename, mimeType, key.value(), command.fileSizeBytes()));
-            return new MaterialUploadResult(
-                    created.materialId(), created.versionId(), title, materialType, originalFilename, mimeType,
-                    command.fileSizeBytes(), UPLOADED, UPLOADED, created.createdAt());
         } catch (RuntimeException persistenceFailure) {
             compensate(key, persistenceFailure);
             throw new MaterialUploadException(MaterialUploadException.Kind.PERSISTENCE_FAILED, persistenceFailure);
         }
+
+        MaterialUploadResult result = new MaterialUploadResult(
+                created.materialId(), created.versionId(), title, materialType, originalFilename, mimeType,
+                command.fileSizeBytes(), UPLOADED, UPLOADED, created.createdAt());
+        publishAcceptedSafely(created);
+        return result;
     }
 
     private String inspectContent(Command command) {
@@ -122,8 +130,18 @@ public final class UploadMaterial {
             persistenceFailure.addSuppressed(cleanupFailure);
             LOG.atError()
                     .addKeyValue("event", "upload_compensation_failed")
-                    .addKeyValue("failureType", cleanupFailure.getClass().getSimpleName())
+                    .addKeyValue("domain", "materials")
+                    .addKeyValue("operation", "upload")
+                    .addKeyValue("errorCode", "UPLOAD_COMPENSATION_FAILED")
                     .log("Upload compensation could not remove the stored object");
+        }
+    }
+
+    private void publishAcceptedSafely(CreatedMaterial created) {
+        try {
+            telemetry.uploadAccepted(created.materialId(), created.versionId());
+        } catch (RuntimeException ignored) {
+            // The telemetry port contract is non-disruptive; preserve durable upload success.
         }
     }
 

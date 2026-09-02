@@ -21,6 +21,7 @@ import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.BinaryObjectStoreException;
 import com.hippocampus.materials.port.MaterialContentInspectionException;
 import com.hippocampus.materials.port.MaterialContentInspector;
+import com.hippocampus.materials.port.MaterialLifecycleTelemetry;
 import com.hippocampus.materials.port.MaterialUploadPersistence;
 
 class UploadMaterialTests {
@@ -31,7 +32,8 @@ class UploadMaterialTests {
     void streamsOriginalAndPersistsAuthenticatedUploadedVersionWithOpaqueKey() {
         RecordingStore store = new RecordingStore();
         RecordingPersistence persistence = new RecordingPersistence();
-        UploadMaterial upload = upload(store, persistence, 100, "application/pdf");
+        RecordingTelemetry telemetry = new RecordingTelemetry();
+        UploadMaterial upload = upload(store, persistence, telemetry, 100, "application/pdf");
         byte[] bytes = MaterialUploadFixtures.pdf();
         RepeatableContent content = new RepeatableContent(bytes);
 
@@ -51,6 +53,9 @@ class UploadMaterialTests {
         assertThat(store.received).containsExactly(bytes);
         assertThat(store.declaredLength).isEqualTo(bytes.length);
         assertThat(content.openCalls).isEqualTo(2);
+        assertThat(telemetry.acceptedCalls).isOne();
+        assertThat(telemetry.materialId).isEqualTo(result.materialId());
+        assertThat(telemetry.materialVersionId).isEqualTo(result.versionId());
     }
 
     @ParameterizedTest
@@ -79,27 +84,30 @@ class UploadMaterialTests {
 
     @Test
     void rejectsAnySpecificDeclarationThatContradictsDetectedContentBeforeStorageOrPersistence() {
+        RecordingTelemetry telemetry = new RecordingTelemetry();
         for (String declared : new String[] {"application/pdf", "application/zip"}) {
             RecordingStore store = new RecordingStore();
             RecordingPersistence persistence = new RecordingPersistence();
 
-            assertThatThrownBy(() -> upload(store, persistence, 100, "text/plain")
+            assertThatThrownBy(() -> upload(store, persistence, telemetry, 100, "text/plain")
                             .execute(command("notes.pdf", declared, MaterialUploadFixtures.text())))
                     .isInstanceOfSatisfying(MaterialUploadException.class,
                             failure -> assertThat(failure.kind()).isEqualTo(MaterialUploadException.Kind.TYPE_MISMATCH));
             assertThat(store.putCalls).isZero();
             assertThat(persistence.calls).isZero();
         }
+        assertThat(telemetry.acceptedCalls).isZero();
     }
 
     @Test
     void rejectsEmptyUnsupportedOversizedAndInvalidContentBeforeStorageOrPersistence() {
+        RecordingTelemetry telemetry = new RecordingTelemetry();
         for (UploadMaterial.Command command : new UploadMaterial.Command[] {
                 command("empty.pdf", "application/pdf", new byte[0]),
                 command("large.pdf", "application/pdf", new byte[101])}) {
             RecordingStore store = new RecordingStore();
             RecordingPersistence persistence = new RecordingPersistence();
-            assertThatThrownBy(() -> upload(store, persistence, 100, "application/pdf").execute(command))
+            assertThatThrownBy(() -> upload(store, persistence, telemetry, 100, "application/pdf").execute(command))
                     .isInstanceOf(MaterialUploadException.class);
             assertThat(store.putCalls).isZero();
             assertThat(persistence.calls).isZero();
@@ -107,7 +115,8 @@ class UploadMaterialTests {
 
         RecordingStore unsupportedStore = new RecordingStore();
         RecordingPersistence unsupportedPersistence = new RecordingPersistence();
-        assertThatThrownBy(() -> upload(unsupportedStore, unsupportedPersistence, 100, "application/zip")
+        assertThatThrownBy(() -> upload(
+                        unsupportedStore, unsupportedPersistence, telemetry, 100, "application/zip")
                         .execute(command("archive.zip", "application/pdf", MaterialUploadFixtures.zipLikeUnsupported())))
                 .isInstanceOfSatisfying(MaterialUploadException.class,
                         failure -> assertThat(failure.kind()).isEqualTo(MaterialUploadException.Kind.TYPE_UNSUPPORTED));
@@ -117,12 +126,13 @@ class UploadMaterialTests {
         RecordingStore invalidStore = new RecordingStore();
         RecordingPersistence invalidPersistence = new RecordingPersistence();
         FailingInspector inspector = new FailingInspector();
-        assertThatThrownBy(() -> upload(invalidStore, invalidPersistence, inspector, 100)
+        assertThatThrownBy(() -> upload(invalidStore, invalidPersistence, telemetry, inspector, 100)
                         .execute(command("corrupt.pdf", "application/pdf", MaterialUploadFixtures.corruptPdf())))
                 .isInstanceOfSatisfying(MaterialUploadException.class,
                         failure -> assertThat(failure.kind()).isEqualTo(MaterialUploadException.Kind.CONTENT_INVALID));
         assertThat(invalidStore.putCalls).isZero();
         assertThat(invalidPersistence.calls).isZero();
+        assertThat(telemetry.acceptedCalls).isZero();
     }
 
     @Test
@@ -130,11 +140,13 @@ class UploadMaterialTests {
         RecordingStore store = new RecordingStore();
         store.failPut = true;
         RecordingPersistence persistence = new RecordingPersistence();
-        assertThatThrownBy(() -> upload(store, persistence, 100, "application/pdf")
+        RecordingTelemetry telemetry = new RecordingTelemetry();
+        assertThatThrownBy(() -> upload(store, persistence, telemetry, 100, "application/pdf")
                         .execute(command("source.pdf", "application/pdf", MaterialUploadFixtures.pdf())))
                 .isInstanceOfSatisfying(MaterialUploadException.class,
                         failure -> assertThat(failure.kind()).isEqualTo(MaterialUploadException.Kind.STORAGE_UNAVAILABLE));
         assertThat(persistence.calls).isZero();
+        assertThat(telemetry.acceptedCalls).isZero();
     }
 
     @Test
@@ -144,17 +156,46 @@ class UploadMaterialTests {
             store.failDelete = failDelete;
             RecordingPersistence persistence = new RecordingPersistence();
             persistence.fail = true;
-            assertThatThrownBy(() -> upload(store, persistence, 100, "application/pdf")
+            RecordingTelemetry telemetry = new RecordingTelemetry();
+            assertThatThrownBy(() -> upload(store, persistence, telemetry, 100, "application/pdf")
                             .execute(command("source.pdf", "application/pdf", MaterialUploadFixtures.pdf())))
                     .isInstanceOfSatisfying(MaterialUploadException.class,
                             failure -> assertThat(failure.kind()).isEqualTo(MaterialUploadException.Kind.PERSISTENCE_FAILED));
             assertThat(store.deleteCalls).isOne();
+            assertThat(telemetry.acceptedCalls).isZero();
         }
+    }
+
+    @Test
+    void telemetryFailureDoesNotCompensateOrChangeDurableUploadSuccess() {
+        RecordingStore store = new RecordingStore();
+        RecordingPersistence persistence = new RecordingPersistence();
+        MaterialLifecycleTelemetry telemetry = new RecordingTelemetry() {
+            @Override public void uploadAccepted(UUID materialId, UUID materialVersionId) {
+                throw new IllegalStateException("PRIVATE_EXCEPTION_SENTINEL");
+            }
+        };
+
+        MaterialUploadResult result = upload(store, persistence, telemetry, 100, "application/pdf")
+                .execute(command("PRIVATE_FILENAME_SENTINEL.pdf", "application/pdf", MaterialUploadFixtures.pdf()));
+
+        assertThat(result.materialId()).isNotNull();
+        assertThat(persistence.calls).isOne();
+        assertThat(store.deleteCalls).isZero();
     }
 
     private static UploadMaterial upload(
             BinaryObjectStore store, MaterialUploadPersistence persistence, long max, String detectedMimeType) {
-        return upload(store, persistence, new FixedInspector(detectedMimeType), max);
+        return upload(store, persistence, new RecordingTelemetry(), max, detectedMimeType);
+    }
+
+    private static UploadMaterial upload(
+            BinaryObjectStore store,
+            MaterialUploadPersistence persistence,
+            MaterialLifecycleTelemetry telemetry,
+            long max,
+            String detectedMimeType) {
+        return upload(store, persistence, telemetry, new FixedInspector(detectedMimeType), max);
     }
 
     private static UploadMaterial upload(
@@ -162,8 +203,17 @@ class UploadMaterialTests {
             MaterialUploadPersistence persistence,
             MaterialContentInspector inspector,
             long max) {
+        return upload(store, persistence, new RecordingTelemetry(), inspector, max);
+    }
+
+    private static UploadMaterial upload(
+            BinaryObjectStore store,
+            MaterialUploadPersistence persistence,
+            MaterialLifecycleTelemetry telemetry,
+            MaterialContentInspector inspector,
+            long max) {
         CurrentUser currentUser = () -> new AuthenticatedUser(OWNER_ID);
-        return new UploadMaterial(currentUser, inspector, store, persistence, max);
+        return new UploadMaterial(currentUser, inspector, store, persistence, telemetry, max);
     }
 
     private static UploadMaterial.Command command(String name, String type, byte[] bytes) {
@@ -249,5 +299,20 @@ class UploadMaterialTests {
             if (fail) throw new IllegalStateException("database unavailable");
             return new CreatedMaterial(UUID.randomUUID(), UUID.randomUUID(), Instant.parse("2026-08-31T00:00:00Z"));
         }
+    }
+
+    private static class RecordingTelemetry implements MaterialLifecycleTelemetry {
+        int acceptedCalls;
+        UUID materialId;
+        UUID materialVersionId;
+
+        @Override public void uploadAccepted(UUID materialId, UUID materialVersionId) {
+            acceptedCalls++;
+            this.materialId = materialId;
+            this.materialVersionId = materialVersionId;
+        }
+        @Override public void uploadRejected(UploadRejectionReason reason) {}
+        @Override public void uploadFailed(UploadFailureReason reason) {}
+        @Override public void materialDeleted(UUID materialId) {}
     }
 }
