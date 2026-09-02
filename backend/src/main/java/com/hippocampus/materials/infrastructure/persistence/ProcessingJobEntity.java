@@ -32,11 +32,11 @@ public class ProcessingJobEntity {
     @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;
 
-    @Column(name = "material_version_id")
+    @Column(name = "material_version_id", updatable = false)
     private UUID materialVersionId;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "job_type", nullable = false)
+    @Column(name = "job_type", nullable = false, updatable = false)
     private ProcessingJobType jobType;
 
     @Enumerated(EnumType.STRING)
@@ -67,7 +67,7 @@ public class ProcessingJobEntity {
     @Column(name = "last_heartbeat_at")
     private Instant lastHeartbeatAt;
 
-    @Column(name = "processing_version", nullable = false)
+    @Column(name = "processing_version", nullable = false, updatable = false)
     private String processingVersion;
 
     @Column(name = "error_code")
@@ -117,7 +117,6 @@ public class ProcessingJobEntity {
     public UUID getUserId() { return userId; }
     public UUID getMaterialVersionId() { return materialVersionId; }
     public ProcessingJobType getJobType() { return jobType; }
-    public void setJobType(ProcessingJobType jobType) { this.jobType = jobType; }
     public ProcessingJobStatus getStatus() { return status; }
     public void setStatus(ProcessingJobStatus status) { this.status = status; }
     public int getPriority() { return priority; }
@@ -137,7 +136,6 @@ public class ProcessingJobEntity {
     public Instant getLastHeartbeatAt() { return lastHeartbeatAt; }
     public void setLastHeartbeatAt(Instant lastHeartbeatAt) { this.lastHeartbeatAt = lastHeartbeatAt; }
     public String getProcessingVersion() { return processingVersion; }
-    public void setProcessingVersion(String processingVersion) { this.processingVersion = processingVersion; }
     public String getErrorCode() { return errorCode; }
     public void setErrorCode(String errorCode) { this.errorCode = errorCode; }
     public String getErrorMessage() { return errorMessage; }
