@@ -44,6 +44,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("5");
         assertSuccessfulFlywayVersion("6");
         assertSuccessfulFlywayVersion("7");
+        assertSuccessfulFlywayVersion("8");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -57,6 +58,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertLearningOrganizationSchema();
         assertMaterialFoundationSchema();
         assertMaterialTopicLinkSchema();
+        assertProcessingJobSchema();
 
         try (var secondContext = startApplicationWithFlyway()) {
             assertThat(secondContext.isActive()).isTrue();
@@ -69,12 +71,14 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("5");
         assertSuccessfulFlywayVersion("6");
         assertSuccessfulFlywayVersion("7");
+        assertSuccessfulFlywayVersion("8");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
         assertLearningOrganizationSchema();
         assertMaterialFoundationSchema();
         assertMaterialTopicLinkSchema();
+        assertProcessingJobSchema();
     }
 
     private static void assertDatabaseIsEmpty() throws SQLException {
@@ -171,6 +175,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
             }
             assertThat(actual).containsExactly(
                     "material_topic_links", "material_versions", "materials",
+                    "processing_jobs",
                     "spring_session", "spring_session_attributes",
                     "subjects", "subtopics", "topics",
                     "user_password_credentials", "users");
@@ -290,6 +295,49 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertMaterialTopicLinkVocabularyChecks();
     }
 
+    private static void assertProcessingJobSchema() throws SQLException {
+        assertColumnsMatch("processing_jobs", Map.ofEntries(
+                Map.entry("id", "uuid:NO"),
+                Map.entry("user_id", "uuid:NO"),
+                Map.entry("material_version_id", "uuid:YES"),
+                Map.entry("job_type", "character varying:NO"),
+                Map.entry("status", "character varying:NO"),
+                Map.entry("priority", "integer:NO"),
+                Map.entry("progress", "numeric:YES"),
+                Map.entry("attempt_count", "integer:NO"),
+                Map.entry("max_attempts", "integer:NO"),
+                Map.entry("locked_at", "timestamp with time zone:YES"),
+                Map.entry("locked_by", "character varying:YES"),
+                Map.entry("next_attempt_at", "timestamp with time zone:YES"),
+                Map.entry("last_heartbeat_at", "timestamp with time zone:YES"),
+                Map.entry("processing_version", "character varying:NO"),
+                Map.entry("error_code", "character varying:YES"),
+                Map.entry("error_message", "text:YES"),
+                Map.entry("created_at", "timestamp with time zone:NO"),
+                Map.entry("started_at", "timestamp with time zone:YES"),
+                Map.entry("completed_at", "timestamp with time zone:YES"),
+                Map.entry("updated_at", "timestamp with time zone:NO")));
+        assertNumericPrecision("processing_jobs", "progress", 5, 2);
+        assertColumnDefault("processing_jobs", "attempt_count", "0");
+        assertNamedConstraint("processing_jobs", "pk_processing_jobs", "PRIMARY KEY (id)", null);
+        assertNamedConstraint("processing_jobs", "fk_processing_jobs_user",
+                "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT", "r");
+        assertNamedConstraint("processing_jobs", "fk_processing_jobs_material_version",
+                "FOREIGN KEY (material_version_id) REFERENCES material_versions(id) ON DELETE RESTRICT", "r");
+        assertCheckConstraintContains("processing_jobs", "chk_processing_jobs_status",
+                "PENDING", "RUNNING", "RETRY", "COMPLETED", "FAILED", "CANCELLED");
+        assertCheckConstraintContains("processing_jobs", "chk_processing_jobs_job_type",
+                "MATERIAL_VALIDATE", "MATERIAL_EXTRACT", "STRUCTURE_DETECT", "VISUAL_EXTRACT",
+                "NORMALIZE", "CHUNK", "EMBED", "INDEX", "ACTIVATE", "REINDEX", "CLEANUP");
+        assertCheckConstraintContains("processing_jobs", "chk_processing_jobs_progress", "progress");
+        assertCheckConstraintContains("processing_jobs", "chk_processing_jobs_attempt_count", "attempt_count");
+        assertCheckConstraintContains("processing_jobs", "chk_processing_jobs_max_attempts", "max_attempts");
+        assertCheckConstraintContains("processing_jobs", "chk_processing_jobs_attempt_limit",
+                "attempt_count", "max_attempts");
+        assertIndex("processing_jobs", "uq_processing_jobs_active_material_version_stage", true,
+                "material_version_id", "job_type", "processing_version", "PENDING", "RUNNING", "RETRY");
+    }
+
     private static void assertMaterialTopicLinkVocabularyChecks() throws SQLException {
         try (var connection = openPostgresConnection();
                 var statement = connection.prepareStatement("""
@@ -325,6 +373,42 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 assertThat(result.next()).isTrue();
                 assertThat(result.getInt("numeric_precision")).isEqualTo(precision);
                 assertThat(result.getInt("numeric_scale")).isEqualTo(scale);
+                assertThat(result.next()).isFalse();
+            }
+        }
+    }
+
+    private static void assertColumnDefault(String tableName, String columnName, String expectedFragment)
+            throws SQLException {
+        try (var connection = openPostgresConnection();
+                var statement = connection.prepareStatement("""
+                        SELECT column_default
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = ? AND column_name = ?
+                        """)) {
+            statement.setString(1, tableName);
+            statement.setString(2, columnName);
+            try (var result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString("column_default")).contains(expectedFragment);
+                assertThat(result.next()).isFalse();
+            }
+        }
+    }
+
+    private static void assertCheckConstraintContains(
+            String tableName, String constraintName, String... definitionFragments) throws SQLException {
+        try (var connection = openPostgresConnection();
+                var statement = connection.prepareStatement("""
+                        SELECT pg_get_constraintdef(oid) AS definition
+                        FROM pg_constraint
+                        WHERE conrelid = ('public.' || ?)::regclass AND conname = ? AND contype = 'c'
+                        """)) {
+            statement.setString(1, tableName);
+            statement.setString(2, constraintName);
+            try (var result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString("definition")).contains(definitionFragments);
                 assertThat(result.next()).isFalse();
             }
         }

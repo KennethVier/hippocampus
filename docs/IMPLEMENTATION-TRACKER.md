@@ -775,7 +775,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Database
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Persist durable pipeline state.
 - **Build:** Create processing_jobs table/entity with type,status,priority,progress,attempts,locks,next_attempt,heartbeat/error fields.
 - **How it works:** Worker state survives restarts.
@@ -784,8 +784,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Jobs can be claimed/retried durably.
 - **Definition of Done:** Schema tests pass.
 - **Authority:** Documents 18,21
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Implementation candidate is present on branch `feat/p3-01-processing-job-schema`, based on authorized `main` at `18a88f1a3ecde8b9015dce9b8732fdd8b1a94d75`, and adds only the additive Flyway `V8__create_processing_jobs.sql`, framework-free `ProcessingJobStatus` / `ProcessingJobType` enums, the scalar-ID `ProcessingJobEntity`, and PostgreSQL/JPA integration coverage. The schema includes the approved job/status vocabularies, numeric and attempt-count checks, restrictive `users` / `material_versions` foreign keys, and the active-only `(material_version_id, job_type, processing_version)` uniqueness rule; no lifecycle cross-field checks, claim index, repository, worker, API, raw source payload, or new dependency was introduced. Local validation completed at implementation head `d767fe1092800a9ce7210d613d7afa8d2c7c130b` with `mvn.cmd -Dtest=FlywayMigrationApplicationTests,ProcessingJobPersistenceIntegrationTests test` (7 tests, 0 failures/errors/skips), `mvn.cmd -Dtest=HippocampusArchitectureTests test` (8 tests, 0 failures/errors/skips), and `mvn.cmd clean verify` (264 tests, 0 failures/errors, 4 skips; `BUILD SUCCESS`; Docker/Testcontainers PostgreSQL 18.6 available). GitHub Actions quality run #234 (run ID `33645199524`) completed successfully for that exact implementation head. General implementation review: **APPROVED WITH REQUIRED CHANGES** (review ID `5091438827`). The required identity-immutability correction and regression coverage are implemented in the remediation candidate; general re-review, independent security review, exact-final-head CI, merge/post-merge evidence, and separate tracker completion remain pending. No ADR or undocumented architecture deviation is currently identified. This remains a review candidate, not `Done`, and Phase 3 remains unevaluated.
+- **Notes / blockers:** No known implementation blocker remains after remediation; external general re-review is pending.
 
 ## P3-02 — Implement atomic job claiming
 
