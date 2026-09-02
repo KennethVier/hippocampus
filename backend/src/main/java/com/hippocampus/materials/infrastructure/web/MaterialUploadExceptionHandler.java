@@ -30,7 +30,9 @@ public final class MaterialUploadExceptionHandler {
             case SINGLE_FILE_REQUIRED -> problem(HttpStatus.BAD_REQUEST, "UPLOAD_SINGLE_FILE_REQUIRED", "Exactly one upload file is required.", request);
             case EMPTY -> problem(HttpStatus.BAD_REQUEST, "UPLOAD_EMPTY", "The upload file must not be empty.", request);
             case TOO_LARGE -> problem(HttpStatus.CONTENT_TOO_LARGE, "UPLOAD_TOO_LARGE", "The upload file exceeds the configured limit.", request);
-            case TYPE_UNSUPPORTED -> problem(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UPLOAD_TYPE_UNSUPPORTED", "The declared upload type is not supported.", request);
+            case TYPE_UNSUPPORTED -> problem(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UPLOAD_TYPE_UNSUPPORTED", "The upload content type is not supported.", request);
+            case TYPE_MISMATCH -> problem(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UPLOAD_TYPE_MISMATCH", "The upload content type could not be verified.", request);
+            case CONTENT_INVALID -> problem(HttpStatus.BAD_REQUEST, "UPLOAD_CONTENT_INVALID", "The upload content could not be verified.", request);
             case STORAGE_UNAVAILABLE -> problem(HttpStatus.SERVICE_UNAVAILABLE, "UPLOAD_STORAGE_UNAVAILABLE", "The upload could not be stored.", request);
             case PERSISTENCE_FAILED -> problem(HttpStatus.INTERNAL_SERVER_ERROR, "UPLOAD_PERSISTENCE_FAILED", "The upload could not be completed.", request);
         };

@@ -714,7 +714,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Security
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Reject obvious malicious/invalid input before parsing.
 - **Build:** Validate filename as metadata, MIME via Tika/content, size and supported types; safe generated storage keys.
 - **How it works:** Input cannot select paths or bypass type checks.
@@ -723,8 +723,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Unsafe intake is rejected safely.
 - **Definition of Done:** Security fixture tests pass.
 - **Authority:** Documents 21,22,25
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Local implementation on branch `feat/p2-11-upload-intake-hardening` adds byte-content upload inspection before storage using `org.apache.tika:tika-core:4.0.0`, with a `MaterialContentInspector` port and Tika adapter behind the existing materials application boundary. Actual detected MIME is authoritative for accepted material type, while a specific browser-declared supported MIME that contradicts detected content fails closed with sanitized `415 UPLOAD_TYPE_MISMATCH`; missing, blank, and generic `application/octet-stream` declarations remain acceptable when actual content is supported. Intake rejects empty and oversized uploads before inspection, unsupported detected content with `415 UPLOAD_TYPE_UNSUPPORTED`, basic invalid/readability failures such as PDF content missing required intake markers with sanitized `400 UPLOAD_CONTENT_INVALID`, and stream length/read failures without leaking parser internals. Original filenames remain metadata only, including path-like names, and storage continues to use opaque server-generated `materials/{uuid}/original` keys. Added fixtures and focused tests for valid PDF/JPEG/PNG/text, generic/missing declarations, disguised MIME, corrupt PDF, unsupported ZIP-like content, empty/oversized limits, path traversal filename metadata, repeatable stream inspection/store behavior, auth/CSRF preservation, safe error bodies, configuration wiring, and dependency resolution. Local validation passed: `.\mvnw.cmd '-Dtest=UploadMaterialTests,MaterialUploadControllerWebTests,MaterialUploadExceptionHandlerTests,MaterialUploadConfigurationTests,TikaMaterialContentInspectorTests' test` (27 tests, 0 failures); `.\mvnw.cmd '-Dtest=BinaryObjectKeyTests,FileSystemBinaryObjectStoreTests,HippocampusArchitectureTests' test` (48 tests, 0 failures, 3 environment/capability skips); `.\mvnw.cmd dependency:tree '-Dincludes=org.apache.tika:tika-core,commons-io:commons-io,org.commonmark:*'` resolved Tika 4.0.0, commons-io 2.22.0, and existing CommonMark dependencies successfully. `.\mvnw.cmd '-Dtest=MaterialUploadControllerIntegrationTests' test` could not execute in this local environment because Testcontainers could not find a valid Docker environment; this is not counted as passing and must be validated in Docker-capable CI or another authoritative environment before `Done`. No Phase 3 parser, ingestion job, OCR, RAG, AI, frontend, schema, object-storage configuration, or upload-and-chat scope was introduced. No ADR or undocumented architecture deviation is required. This is an implementation review candidate only; external implementation review, independent security vulnerability review, authoritative Docker-backed integration/CI evidence, and final completion evidence remain pending before `Done`.
+- **Notes / blockers:** Environment limitation: local Docker/Testcontainers unavailable for `MaterialUploadControllerIntegrationTests`; run the integration suite in Docker-capable CI or another authoritative environment before final completion.
 
 ## P2-12 — Add material lifecycle telemetry
 

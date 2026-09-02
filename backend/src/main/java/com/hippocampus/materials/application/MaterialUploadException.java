@@ -24,6 +24,8 @@ public final class MaterialUploadException extends RuntimeException {
         EMPTY,
         TOO_LARGE,
         TYPE_UNSUPPORTED,
+        TYPE_MISMATCH,
+        CONTENT_INVALID,
         STORAGE_UNAVAILABLE,
         PERSISTENCE_FAILED
     }
