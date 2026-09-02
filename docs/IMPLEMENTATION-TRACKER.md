@@ -807,7 +807,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Processing
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Make pipeline explicit.
 - **Build:** Create dispatcher plus VALIDATE/EXTRACT/STRUCTURE/VISUAL/NORMALIZE/CHUNK handlers.
 - **How it works:** Each stage is independent, observable and retryable.
@@ -816,8 +816,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Jobs execute correct handler and next stage.
 - **Definition of Done:** Handler contract tests pass.
 - **Authority:** Documents 21
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Implementation candidate on `feat/p3-03-processing-dispatcher` adds a framework-free six-stage dispatcher/handler contract, central `MATERIAL_VALIDATE → MATERIAL_EXTRACT → STRUCTURE_DETECT → VISUAL_EXTRACT → NORMALIZE → CHUNK → EMBED` graph, fail-closed route validation, a separate transaction-proxied successful-stage completion use case, and a narrow PostgreSQL adapter that atomically changes the matching `RUNNING` job to `COMPLETED` and creates the next Phase 3 `PENDING` job from authoritative row data. `CHUNK` completes without creating Phase 4 `EMBED` work. Focused dispatcher, orchestration, configuration, and existing P3-02 unit/configuration tests pass locally (39 tests); ArchUnit passes (8 tests); the backend packages successfully with tests skipped. Six PostgreSQL lifecycle tests are implemented for success/copying, rollback, concurrent duplicate completion, wrong status, wrong type, and the CHUNK boundary, but local execution is blocked because this environment has no Docker socket for Testcontainers. No migration or dependency was added, and no P3-04/P3-15 algorithm or recovery behavior was introduced. External implementation and security reviews, exact-final-head CI, merge, and completion evidence remain pending.
+- **Notes / blockers:** PostgreSQL/Testcontainers lifecycle validation and the full backend verification require an environment with Docker; external review gates remain pending.
 
 ## P3-04 — Implement PDF metadata/native text extraction
 
