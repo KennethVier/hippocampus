@@ -174,7 +174,28 @@ class ProcessingJobClaimIntegrationTests extends PostgresIntegrationTestSupport 
     }
 
     @Test
-    void claimsPendingJobWithoutMaterialVersion() throws SQLException {
+void skipsCrossOwnerMaterialJobAndClaimsValidSameOwnerJob() throws SQLException {
+    try (var context = startApplicationWithFlyway()) {
+        UUID materialVersionId = insertMaterialVersion("PROCESSING");
+        UUID crossOwnerJob = insertCrossOwnerJob(materialVersionId, OLD_TIME);
+        UUID validSameOwnerJob = insertJob(
+                materialVersionId, ProcessingJobStatus.PENDING, 0, 3,
+                OLD_TIME.plusSeconds(1), null, null);
+
+        assertThat(context.getBean(ClaimNextProcessingJob.class).execute("worker-owner-qualified"))
+                .get()
+                .extracting(ClaimedProcessingJob::jobId)
+                .isEqualTo(validSameOwnerJob);
+
+        JobState malformed = loadJob(crossOwnerJob);
+        assertThat(malformed.status()).isEqualTo(ProcessingJobStatus.PENDING);
+        assertThat(malformed.attemptCount()).isZero();
+        assertThat(malformed.lockedBy()).isNull();
+    }
+}
+
+@Test
+void claimsPendingJobWithoutMaterialVersion() throws SQLException {
         try (var context = startApplicationWithFlyway()) {
             UUID jobId = insertJob(null, ProcessingJobStatus.PENDING, 0, 3, OLD_TIME, null, null);
 
@@ -329,7 +350,38 @@ class ProcessingJobClaimIntegrationTests extends PostgresIntegrationTestSupport 
         return id;
     }
 
-    private static UUID loadVersionOwner(UUID materialVersionId) throws SQLException {
+    private static UUID insertCrossOwnerJob(UUID materialVersionId, Instant createdAt) throws SQLException {
+    UUID foreignUserId = UUID.randomUUID();
+    UUID jobId = UUID.randomUUID();
+    try (Connection connection = openPostgresConnection()) {
+        try (PreparedStatement user = connection.prepareStatement("""
+                INSERT INTO users (id, email, status, created_at, updated_at)
+                VALUES (?, ?, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """)) {
+            user.setObject(1, foreignUserId);
+            user.setString(2, "cross-owner-" + foreignUserId + "@example.test");
+            user.executeUpdate();
+        }
+        try (PreparedStatement job = connection.prepareStatement("""
+                INSERT INTO processing_jobs (
+                    id, user_id, material_version_id, job_type, status, priority,
+                    attempt_count, max_attempts, processing_version, created_at, updated_at
+                ) VALUES (?, ?, ?, 'MATERIAL_VALIDATE', 'PENDING', 99,
+                          0, 3, 'processor-cross-owner', ?, ?)
+                """)) {
+            OffsetDateTime created = OffsetDateTime.ofInstant(createdAt, ZoneOffset.UTC);
+            job.setObject(1, jobId);
+            job.setObject(2, foreignUserId);
+            job.setObject(3, materialVersionId);
+            job.setObject(4, created);
+            job.setObject(5, created);
+            job.executeUpdate();
+        }
+    }
+    return jobId;
+}
+
+private static UUID loadVersionOwner(UUID materialVersionId) throws SQLException {
         try (Connection connection = openPostgresConnection();
                 PreparedStatement statement = connection.prepareStatement("""
                         SELECT m.user_id
