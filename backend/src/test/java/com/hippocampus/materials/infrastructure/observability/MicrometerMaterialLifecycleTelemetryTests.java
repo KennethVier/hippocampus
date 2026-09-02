@@ -108,6 +108,20 @@ class MicrometerMaterialLifecycleTelemetryTests {
     }
 
     @Test
+    void activeTransactionWithoutSynchronizationDoesNotPublishBeforeCommit() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        MicrometerMaterialLifecycleTelemetry telemetry = new MicrometerMaterialLifecycleTelemetry(registry);
+        ListAppender<ILoggingEvent> logs = captureLogs();
+        TransactionSynchronizationManager.setActualTransactionActive(true);
+
+        assertThatCode(() -> telemetry.materialDeleted(MATERIAL_ID)).doesNotThrowAnyException();
+
+        assertThat(registry.find(MicrometerMaterialLifecycleTelemetry.MATERIAL_DELETED_METRIC).counter()).isNull();
+        assertThat(logs.list).noneMatch(log -> "material_deleted".equals(fields(log).get("event")));
+        assertThat(logs.list).anyMatch(log -> "material_lifecycle_telemetry_failed".equals(fields(log).get("event")));
+    }
+
+    @Test
     void postCommitMetricFailureDoesNotEscapeTheCallback() {
         MeterRegistry registry = mock(MeterRegistry.class);
         when(registry.counter(anyString(), org.mockito.ArgumentMatchers.<Iterable<Tag>>any()))
