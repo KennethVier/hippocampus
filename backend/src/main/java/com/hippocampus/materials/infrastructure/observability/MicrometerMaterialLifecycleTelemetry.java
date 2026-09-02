@@ -111,9 +111,12 @@ public final class MicrometerMaterialLifecycleTelemetry implements MaterialLifec
     }
 
     private void publishAfterCommitOrNow(String telemetryOperation, Runnable publication) {
-        if (!TransactionSynchronizationManager.isActualTransactionActive()
-                || !TransactionSynchronizationManager.isSynchronizationActive()) {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
             publishSafely(telemetryOperation, publication);
+            return;
+        }
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            warnSafely(telemetryOperation);
             return;
         }
 
