@@ -25,6 +25,7 @@ public final class JdbcProcessingJobClaimRepository implements ProcessingJobClai
                           FROM material_versions mv
                           JOIN materials m ON m.id = mv.material_id
                           WHERE mv.id = pj.material_version_id
+                            AND m.user_id = pj.user_id
                             AND m.status <> 'DELETED'
                       )
                 )

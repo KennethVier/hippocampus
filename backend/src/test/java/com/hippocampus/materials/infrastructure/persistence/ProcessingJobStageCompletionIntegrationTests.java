@@ -13,6 +13,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -83,11 +84,12 @@ class ProcessingJobStageCompletionIntegrationTests extends PostgresIntegrationTe
                 Future<Boolean> second = executor.submit(() -> attemptCompletion(completion, fixture, start));
                 start.countDown();
 
-                assertThat(first.get() ^ second.get()).isTrue();
+                assertThat(first.get(10, TimeUnit.SECONDS) ^ second.get(10, TimeUnit.SECONDS)).isTrue();
                 assertThat(loadJob(fixture.jobId()).status()).isEqualTo(ProcessingJobStatus.COMPLETED);
                 assertThat(countJobs(ProcessingJobType.MATERIAL_EXTRACT)).isEqualTo(1);
             } finally {
                 executor.shutdownNow();
+                assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
             }
         }
     }
