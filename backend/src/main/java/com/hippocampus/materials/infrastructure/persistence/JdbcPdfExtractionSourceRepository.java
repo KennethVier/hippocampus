@@ -4,10 +4,10 @@ import java.util.UUID;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-import com.hippocampus.materials.application.PdfExtractionException;
 import com.hippocampus.materials.port.BinaryObjectKey;
-import com.hippocampus.materials.port.PdfExtractionSourceRepository;
+import com.hippocampus.materials.port.PdfExtractionException;
 import com.hippocampus.materials.port.PdfExtractionSource;
+import com.hippocampus.materials.port.PdfExtractionSourceRepository;
 
 public final class JdbcPdfExtractionSourceRepository implements PdfExtractionSourceRepository {
     private static final String FIND_SOURCE = """
