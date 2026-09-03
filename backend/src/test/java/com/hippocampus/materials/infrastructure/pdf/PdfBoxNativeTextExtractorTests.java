@@ -24,7 +24,6 @@ import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.tika.Tika;
 import org.junit.jupiter.api.Test;
 
-import com.hippocampus.materials.application.PdfExtractionException;
 import com.hippocampus.materials.domain.PdfDocumentMetadata;
 import com.hippocampus.materials.domain.PdfNativePage;
 import com.hippocampus.materials.domain.PdfPageBatch;
@@ -32,6 +31,7 @@ import com.hippocampus.materials.infrastructure.inspection.TikaMaterialContentIn
 import com.hippocampus.materials.port.BinaryObjectKey;
 import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.BinaryObjectStoreException;
+import com.hippocampus.materials.port.PdfExtractionException;
 import com.hippocampus.materials.port.PdfExtractionSource;
 
 class PdfBoxNativeTextExtractorTests {
