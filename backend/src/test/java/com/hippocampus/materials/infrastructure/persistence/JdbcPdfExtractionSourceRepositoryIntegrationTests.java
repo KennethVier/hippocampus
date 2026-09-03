@@ -12,7 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-import com.hippocampus.materials.application.PdfExtractionException;
+import com.hippocampus.materials.port.PdfExtractionException;
 import com.hippocampus.materials.port.PdfExtractionSource;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 
