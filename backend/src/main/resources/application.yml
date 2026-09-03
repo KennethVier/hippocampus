@@ -14,6 +14,12 @@ spring:
       initialize-schema: never
 
 hippocampus:
+  materials:
+    processing:
+      pdf:
+        page-batch-size: ${HIPPOCAMPUS_PDF_PAGE_BATCH_SIZE:20}
+        max-pages: ${HIPPOCAMPUS_MAX_PDF_PAGES:2000}
+        max-native-text-chars-per-page: ${HIPPOCAMPUS_PDF_MAX_NATIVE_TEXT_CHARS_PER_PAGE:1000000}
   security:
     login:
       max-attempts: 60

@@ -30,7 +30,10 @@ class MaterialUploadConfigurationTests {
     Path temporaryDirectory;
 
     private final WebApplicationContextRunner runner = new WebApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(MultipartAutoConfiguration.class, MaterialUploadConfiguration.class))
+            .withConfiguration(AutoConfigurations.of(
+                    MultipartAutoConfiguration.class,
+                    MaterialContentInspectionConfiguration.class,
+                    MaterialUploadConfiguration.class))
             .withUserConfiguration(IdentityConfiguration.class, TelemetryConfiguration.class)
             .withPropertyValues(
                     "hippocampus.materials.upload.max-file-size=8B",
@@ -51,7 +54,10 @@ class MaterialUploadConfigurationTests {
     @Test
     void rejectsDriftingOrMissingUploadLimitsWhenFeatureIsAvailable() {
         new WebApplicationContextRunner()
-                .withConfiguration(AutoConfigurations.of(MultipartAutoConfiguration.class, MaterialUploadConfiguration.class))
+                .withConfiguration(AutoConfigurations.of(
+                        MultipartAutoConfiguration.class,
+                        MaterialContentInspectionConfiguration.class,
+                        MaterialUploadConfiguration.class))
                 .withUserConfiguration(
                         IdentityConfiguration.class,
                         StorageConfiguration.class,
@@ -67,7 +73,10 @@ class MaterialUploadConfigurationTests {
     @Test
     void requiresCurrentUserAndKeepsPilotFilesystemAndUploadUnavailable() {
         new WebApplicationContextRunner()
-                .withConfiguration(AutoConfigurations.of(MultipartAutoConfiguration.class, MaterialUploadConfiguration.class))
+                .withConfiguration(AutoConfigurations.of(
+                        MultipartAutoConfiguration.class,
+                        MaterialContentInspectionConfiguration.class,
+                        MaterialUploadConfiguration.class))
                 .withUserConfiguration(
                         StorageConfiguration.class,
                         PersistenceConfiguration.class,

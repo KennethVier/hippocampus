@@ -1,4 +1,5 @@
 com.hippocampus.materials.infrastructure.config.MaterialLifecycleTelemetryConfiguration
+com.hippocampus.materials.infrastructure.config.MaterialContentInspectionConfiguration
 com.hippocampus.materials.infrastructure.config.MaterialManagementPersistenceConfiguration
 com.hippocampus.materials.infrastructure.config.MaterialManagementConfiguration
 com.hippocampus.materials.infrastructure.config.MaterialUploadPersistenceConfiguration
@@ -6,3 +7,4 @@ com.hippocampus.materials.infrastructure.config.MaterialUploadConfiguration
 com.hippocampus.materials.infrastructure.config.MaterialTopicLinkConfiguration
 com.hippocampus.materials.infrastructure.config.ProcessingJobClaimConfiguration
 com.hippocampus.materials.infrastructure.config.ProcessingJobDispatchConfiguration
+com.hippocampus.materials.infrastructure.config.PdfExtractionConfiguration

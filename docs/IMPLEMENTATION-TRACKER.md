@@ -823,7 +823,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Parsing
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Read native PDFs in batches.
 - **Build:** Use Tika/PDFBox to detect page count, metadata, extract ordered page text without whole-file string.
 - **How it works:** Persist bounded batch output.
@@ -832,8 +832,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Native PDFs become page/text blocks with progress.
 - **Definition of Done:** Fixture output matches expected.
 - **Authority:** Documents 21,25
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Local implementation on branch `feat/p3-04-pdf-native-extraction` adds a framework-free `ExtractPdfNativeText` capability, authoritative MaterialVersion source resolution, provider-neutral `BinaryObjectStore` temporary-file staging, staged-file Tika MIME reinspection, PDFBox 3.0.8 file-backed loading, immutable 1-based page/batch contracts, configurable page/batch/native-text limits, and bounded-writer enforcement while PDFBox emits each page. Deterministic tests cover a five-page native PDF including a blank page and final partial batch, a runtime-generated 601-page PDF consumed by scalar-only counters in 19 batches at batch size 32 with a final 25-page batch, per-page native-text resource exhaustion, page-limit rejection, password protection, malformed PDF, staged MIME mismatch, missing object, partial download, sink abort, and cleanup success/failure precedence. Focused P3-04, existing non-PostgreSQL materials/P3-02/P3-03, upload-regression, configuration, and architecture tests pass locally. The resolved dependency tree contains existing `org.apache.tika:tika-core:4.0.0` plus direct `org.apache.pdfbox:pdfbox:3.0.8` and its `pdfbox-io`/`fontbox` 3.0.8 transitives only. PostgreSQL source-resolution integration tests and the full Maven verification were attempted but cannot execute in this environment because Testcontainers cannot find `/var/run/docker.sock`; this is not counted as passing and remains required in Docker-capable CI. No migration, page-count persistence, raw extraction artifact, DocumentNode/TextBlock schema, OCR/classification/normalization/visual/chunk/progress work, or production `MATERIAL_EXTRACT` handler was introduced. Durable TextBlock persistence and production `MATERIAL_EXTRACT` registration remain P3-05-owned; P3-04 does not claim end-to-end durable extraction-stage success. External general implementation review, independent security review, exact-final-head CI, merge, and post-merge validation remain pending and are not claimed.
+- **Notes / blockers:** Docker-capable CI is required to execute the PostgreSQL source-resolution integration tests and full verification before completion. P3-05 remains responsible for durable TextBlock output and production `MATERIAL_EXTRACT` handler registration.
 
 ## P3-05 — Create DocumentNode/TextBlock schema
 
