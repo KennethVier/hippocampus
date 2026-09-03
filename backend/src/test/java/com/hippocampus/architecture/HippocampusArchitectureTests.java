@@ -71,6 +71,16 @@ class HippocampusArchitectureTests {
             .because("application code may depend inward on domain and ports but not outward on API or infrastructure")
             .allowEmptyShould(true);
 
+    static final ArchRule INFRASTRUCTURE_ADAPTER_DIRECTION_RULE = noClasses()
+            .that().resideInAnyPackage(
+                    BASE_PACKAGE + "..infrastructure.persistence..",
+                    BASE_PACKAGE + "..infrastructure.pdf..",
+                    BASE_PACKAGE + "..infrastructure.inspection..",
+                    BASE_PACKAGE + "..infrastructure.storage..")
+            .should().dependOnClassesThat().resideInAPackage(BASE_PACKAGE + "..application..")
+            .because("infrastructure adapters must implement inward-facing domain/port contracts; configuration may compose application use cases separately")
+            .allowEmptyShould(true);
+
     static final ArchRule API_APPLICATION_BOUNDARY_RULE = noClasses()
             .that().resideInAPackage(BASE_PACKAGE + "..api..")
             .or().areAnnotatedWith(RestController.class)
@@ -126,6 +136,11 @@ class HippocampusArchitectureTests {
     @Test
     void applicationCodeDependsInward() {
         APPLICATION_DIRECTION_RULE.check(PRODUCTION_CLASSES);
+    }
+
+    @Test
+    void infrastructureAdaptersDependOnlyInward() {
+        INFRASTRUCTURE_ADAPTER_DIRECTION_RULE.check(PRODUCTION_CLASSES);
     }
 
     @Test
