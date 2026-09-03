@@ -19,7 +19,6 @@ import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.hippocampus.materials.application.PdfExtractionException;
 import com.hippocampus.materials.domain.PdfDocumentMetadata;
 import com.hippocampus.materials.domain.PdfNativePage;
 import com.hippocampus.materials.domain.PdfPageBatch;
@@ -28,8 +27,9 @@ import com.hippocampus.materials.port.BinaryObjectNotFoundException;
 import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.MaterialContentInspectionException;
 import com.hippocampus.materials.port.MaterialContentInspector;
-import com.hippocampus.materials.port.PdfNativeTextExtractor;
+import com.hippocampus.materials.port.PdfExtractionException;
 import com.hippocampus.materials.port.PdfExtractionSource;
+import com.hippocampus.materials.port.PdfNativeTextExtractor;
 import com.hippocampus.materials.port.PdfPageBatchSink;
 
 public final class PdfBoxNativeTextExtractor implements PdfNativeTextExtractor {
