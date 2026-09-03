@@ -1,0 +1,59 @@
+name: P3-04 review evidence remediation
+
+on:
+  push:
+    branches:
+      - codex/plan-pdf-metadata/native-text-extraction
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout remediation branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: codex/plan-pdf-metadata/native-text-extraction
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync P3-04 tracker review evidence
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("docs/IMPLEMENTATION-TRACKER.md")
+          text = path.read_text()
+
+          replacements = {
+              "Local implementation on branch `feat/p3-04-pdf-native-extraction`":
+                  "Implementation PR [#103](https://github.com/KennethVier/hippocampus/pull/103) on branch `codex/plan-pdf-metadata/native-text-extraction`",
+              "PostgreSQL source-resolution integration tests and the full Maven verification were attempted but cannot execute in this environment because Testcontainers cannot find `/var/run/docker.sock`; this is not counted as passing and remains required in Docker-capable CI.":
+                  "The initial implementation head `e7065dc3d2dce6b74b046891fd62cfbc0500a6df` passed authoritative PR quality run [#255](https://github.com/KennethVier/hippocampus/actions/runs/33736021060) (ID `33736021060`) with `backend-quality`, `frontend-quality`, `security`, `auth-e2e`, `phase1-gate`, and `phase2-gate` all successful; `backend-quality` executed the PostgreSQL/Testcontainers source-resolution integration tests, migrations, architecture tests, and backend build, resolving the implementation-time Docker limitation, and the PR `security` job passed explicit commit-range secret scanning plus introduced-dependency review for PDFBox. Initial external general implementation review verdict was **APPROVED WITH REQUIRED CHANGES** (review ID `5099918168`): it required moving `PdfExtractionException` from `materials.application` to the inward `materials.port` contract and correcting this evidence. The remediation moves the exception contract inward, updates production/test imports, and adds a permanent ArchUnit rule preventing `persistence`, `pdf`, `inspection`, and `storage` infrastructure adapters from depending upward on application while allowing infrastructure configuration to compose application use cases.",
+              "External general implementation review, independent security review, exact-final-head CI, merge, and post-merge validation remain pending and are not claimed.":
+                  "Final general re-review, independent security review, exact-remediation-head CI, merge, and post-merge validation remain pending and are not claimed.",
+              "Docker-capable CI is required to execute the PostgreSQL source-resolution integration tests and full verification before completion. P3-05 remains responsible for durable TextBlock output and production `MATERIAL_EXTRACT` handler registration.":
+                  "No current environment blocker remains; final general re-review, independent security review, and exact-remediation-head CI remain pending completion gates rather than blockers. P3-05 remains responsible for durable TextBlock output and production `MATERIAL_EXTRACT` handler registration."
+          }
+
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one tracker occurrence, found {count}: {old[:80]}")
+              text = text.replace(old, new, 1)
+
+          path.write_text(text)
+
+      - name: Commit tracker remediation and remove helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/p3-04-review-remediation.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/IMPLEMENTATION-TRACKER.md .github/workflows/p3-04-review-remediation.yml
+          git commit -m "docs: sync P3-04 review evidence"
+          git push origin HEAD:codex/plan-pdf-metadata/native-text-extraction
