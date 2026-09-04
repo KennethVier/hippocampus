@@ -839,7 +839,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Database
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Persist source structure before chunking.
 - **Build:** Create document_nodes/text_blocks tables/entities/repos with source order/page/extraction quality.
 - **How it works:** Blocks retain hierarchy and provenance.
@@ -848,7 +848,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Normalized source structure is queryable.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 18,21
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Implementation candidate on `feat/p3-05-document-structure` adds additive Flyway `V10__create_document_structure.sql`, JPA mappings and bounded query repositories for `DocumentNode`/`TextBlock`, lifecycle-qualified JDBC batch/finalization persistence, and a production `MATERIAL_EXTRACT` handler composed through the existing P3-03 dispatcher. Native P3-04 pages persist exactly once as globally ordered `PAGE_TEXT` blocks (`ordinal = page_number`, `extraction_method = NATIVE`, nullable quality), including blank pages. Composite foreign keys reject cross-MaterialVersion hierarchy/provenance, while exact replay preserves row identity/timestamps and conflicting replay fails closed. Finalization verifies the complete durable page range and idempotently records only the exact P3-04 `page_count` and DOCUMENT root range; version-level extraction method/quality remain unchanged. Tests cover migration/schema metadata, PostgreSQL constraints, bounded multi-batch atomicity, partial/finalized replay, lifecycle deletion, transaction topology, and real P3-04 extraction followed by unchanged P3-03 completion. Local compile, unit handler, focused configuration, and ArchUnit checks pass; PostgreSQL/Testcontainers execution requires Docker and is expected to run in CI because this checkout exposes no Docker socket. This task establishes durable/queryable raw source structure only; semantic normalization remains P3-13. External implementation and independent security review are still required; P3-05 is not Done and Phase 3 remains unevaluated.
 - **Notes / blockers:** _None_
 
 ## P3-06 — Classify pages by extraction type
