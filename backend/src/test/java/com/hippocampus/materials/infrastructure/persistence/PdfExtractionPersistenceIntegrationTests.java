@@ -272,7 +272,7 @@ class PdfExtractionPersistenceIntegrationTests extends PostgresIntegrationTestSu
                 });
             };
             ExtractPdfNativeText extraction = new ExtractPdfNativeText(
-                    new JdbcPdfExtractionSourceRepository(jdbc),
+                    context.getBean(com.hippocampus.materials.port.PdfExtractionSourceRepository.class),
                     transactionCheckingExtractor);
             ExtractMaterialStageHandler handler = new ExtractMaterialStageHandler(
                     extraction, context.getBean(PersistPdfPageBatch.class), context.getBean(FinalizePdfExtraction.class));

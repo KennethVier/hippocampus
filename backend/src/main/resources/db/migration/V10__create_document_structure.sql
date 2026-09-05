@@ -42,6 +42,56 @@ CREATE TABLE document_nodes (
     )
 );
 
+CREATE FUNCTION enforce_document_nodes_acyclic()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF EXISTS (
+        WITH RECURSIVE ancestry AS (
+            SELECT
+                node.id,
+                node.parent_id,
+                ARRAY[node.id] AS path,
+                FALSE AS cycle
+            FROM document_nodes node
+            WHERE node.id = NEW.id
+              AND node.material_version_id = NEW.material_version_id
+
+            UNION ALL
+
+            SELECT
+                parent.id,
+                parent.parent_id,
+                ancestry.path || parent.id,
+                parent.id = ANY(ancestry.path) AS cycle
+            FROM document_nodes parent
+            JOIN ancestry
+              ON parent.id = ancestry.parent_id
+             AND parent.material_version_id = NEW.material_version_id
+            WHERE NOT ancestry.cycle
+        )
+        SELECT 1
+        FROM ancestry
+        WHERE cycle
+    ) THEN
+        RAISE EXCEPTION 'document_nodes hierarchy must be acyclic'
+            USING ERRCODE = '23514',
+                  CONSTRAINT = 'chk_document_nodes_acyclic',
+                  TABLE = 'document_nodes';
+    END IF;
+
+    RETURN NULL;
+END;
+$$;
+
+CREATE CONSTRAINT TRIGGER chk_document_nodes_acyclic
+    AFTER INSERT OR UPDATE OF parent_id, material_version_id
+    ON document_nodes
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW
+    EXECUTE FUNCTION enforce_document_nodes_acyclic();
+
 CREATE UNIQUE INDEX uq_document_nodes_document_root
     ON document_nodes (material_version_id)
     WHERE node_type = 'DOCUMENT' AND parent_id IS NULL;
