@@ -46,6 +46,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("7");
         assertSuccessfulFlywayVersion("8");
         assertSuccessfulFlywayVersion("9");
+        assertSuccessfulFlywayVersion("10");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -60,6 +61,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertMaterialFoundationSchema();
         assertMaterialTopicLinkSchema();
         assertProcessingJobSchema();
+        assertDocumentStructureSchema();
 
         try (var secondContext = startApplicationWithFlyway()) {
             assertThat(secondContext.isActive()).isTrue();
@@ -74,6 +76,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("7");
         assertSuccessfulFlywayVersion("8");
         assertSuccessfulFlywayVersion("9");
+        assertSuccessfulFlywayVersion("10");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -81,6 +84,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertMaterialFoundationSchema();
         assertMaterialTopicLinkSchema();
         assertProcessingJobSchema();
+        assertDocumentStructureSchema();
     }
 
     private static void assertDatabaseIsEmpty() throws SQLException {
@@ -176,12 +180,58 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 actual.add(result.getString("table_name"));
             }
             assertThat(actual).containsExactly(
-                    "material_topic_links", "material_versions", "materials",
+                    "document_nodes", "material_topic_links", "material_versions", "materials",
                     "processing_jobs",
                     "spring_session", "spring_session_attributes",
-                    "subjects", "subtopics", "topics",
+                    "subjects", "subtopics", "text_blocks", "topics",
                     "user_password_credentials", "users");
         }
+    }
+
+    private static void assertDocumentStructureSchema() throws SQLException {
+        assertColumnsMatch("document_nodes", Map.ofEntries(
+                Map.entry("id", "uuid:NO"), Map.entry("material_version_id", "uuid:NO"),
+                Map.entry("parent_id", "uuid:YES"), Map.entry("node_type", "character varying:NO"),
+                Map.entry("title", "character varying:YES"), Map.entry("ordinal", "integer:YES"),
+                Map.entry("start_page", "integer:YES"), Map.entry("end_page", "integer:YES"),
+                Map.entry("start_offset", "bigint:YES"), Map.entry("end_offset", "bigint:YES"),
+                Map.entry("detection_origin", "character varying:NO"),
+                Map.entry("detection_confidence", "character varying:YES"),
+                Map.entry("created_at", "timestamp with time zone:NO")));
+        assertColumnsMatch("text_blocks", Map.ofEntries(
+                Map.entry("id", "uuid:NO"), Map.entry("material_version_id", "uuid:NO"),
+                Map.entry("document_node_id", "uuid:YES"), Map.entry("page_number", "integer:YES"),
+                Map.entry("block_type", "character varying:NO"), Map.entry("ordinal", "integer:NO"),
+                Map.entry("content", "text:NO"), Map.entry("extraction_method", "character varying:NO"),
+                Map.entry("quality", "character varying:YES"),
+                Map.entry("created_at", "timestamp with time zone:NO")));
+        assertNamedConstraint("document_nodes", "uq_document_nodes_id_material_version",
+                "UNIQUE (id, material_version_id)", null);
+        assertNamedConstraint("document_nodes", "fk_document_nodes_material_version",
+                "FOREIGN KEY (material_version_id) REFERENCES material_versions(id) ON DELETE CASCADE", "c");
+        assertNamedConstraint("document_nodes", "fk_document_nodes_parent_same_version",
+                "FOREIGN KEY (parent_id, material_version_id) REFERENCES document_nodes(id, material_version_id) DEFERRABLE INITIALLY DEFERRED", "a");
+        assertNamedConstraint("text_blocks", "fk_text_blocks_material_version",
+                "FOREIGN KEY (material_version_id) REFERENCES material_versions(id) ON DELETE CASCADE", "c");
+        assertNamedConstraint("text_blocks", "fk_text_blocks_node_same_version",
+                "FOREIGN KEY (document_node_id, material_version_id) REFERENCES document_nodes(id, material_version_id) DEFERRABLE INITIALLY DEFERRED", "a");
+        assertNamedConstraint("text_blocks", "uq_text_blocks_material_version_ordinal",
+                "UNIQUE (material_version_id, ordinal)", null);
+        assertIndex("document_nodes", "uq_document_nodes_document_root", true,
+                "material_version_id", "DOCUMENT", "parent_id", "IS NULL");
+        assertIndex("document_nodes", "uq_document_nodes_sibling_ordinal", true,
+                "material_version_id", "parent_id", "ordinal", "NULLS NOT DISTINCT", "ordinal IS NOT NULL");
+        assertIndex("text_blocks", "idx_text_blocks_material_version_page", false,
+                "material_version_id", "page_number");
+        assertCheckConstraintContains("document_nodes", "chk_document_nodes_node_type",
+                "DOCUMENT", "CHAPTER", "SECTION", "SUBSECTION", "HEADING", "PAGE_GROUP",
+                "TRANSCRIPT_SEGMENT_GROUP");
+        assertCheckConstraintContains("document_nodes", "chk_document_nodes_detection_origin",
+                "NATIVE", "HEURISTIC", "AI_ASSISTED", "USER_CONFIRMED");
+        assertCheckConstraintContains("text_blocks", "chk_text_blocks_block_type",
+                "PAGE_TEXT", "HEADING", "PARAGRAPH", "LIST", "CAPTION", "TABLE_TEXT", "TRANSCRIPT");
+        assertCheckConstraintContains("text_blocks", "chk_text_blocks_extraction_method", "NATIVE", "OCR");
+        assertCheckConstraintContains("text_blocks", "chk_text_blocks_quality", "STRONG", "LIMITED", "POOR");
     }
 
     private static void assertLearningOrganizationSchema() throws SQLException {
