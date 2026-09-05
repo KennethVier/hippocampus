@@ -19,7 +19,7 @@ import com.hippocampus.materials.port.DocumentStructureRepository;
 import com.hippocampus.materials.port.PdfExtractionPersistence;
 
 @AutoConfiguration(after = PdfExtractionConfiguration.class)
-@ConditionalOnBean({JdbcClient.class, PlatformTransactionManager.class, ExtractPdfNativeText.class})
+@ConditionalOnBean({JdbcClient.class, PlatformTransactionManager.class})
 public class DocumentStructurePersistenceConfiguration {
     @Bean
     PdfExtractionPersistence pdfExtractionPersistence(JdbcClient jdbcClient) {
@@ -27,6 +27,7 @@ public class DocumentStructurePersistenceConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean({SpringDataDocumentNodeRepository.class, SpringDataTextBlockRepository.class})
     DocumentStructureRepository documentStructureRepository(
             SpringDataDocumentNodeRepository nodes,
             SpringDataTextBlockRepository blocks) {
@@ -44,6 +45,7 @@ public class DocumentStructurePersistenceConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(ExtractPdfNativeText.class)
     ProcessingStageHandler extractMaterialStageHandler(
             ExtractPdfNativeText extraction,
             PersistPdfPageBatch batches,
