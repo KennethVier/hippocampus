@@ -23,6 +23,14 @@ class PdfPageClassifierTests {
     }
 
     @Test
+    void ignoresUnicodeSeparatorSpacesWithAndWithoutPaintedImages() {
+        String separatorSpaces = "\u00A0\u202F";
+
+        assertThat(classifier.classify(separatorSpaces, false)).isEqualTo(PdfPageExtractionType.UNREADABLE);
+        assertThat(classifier.classify(separatorSpaces, true)).isEqualTo(PdfPageExtractionType.IMAGE_ONLY);
+    }
+
+    @Test
     void appliesTheImagePageHeuristicImmediatelyBelowAtAndAboveItsBoundary() {
         int threshold = PdfPageClassifier.MINIMUM_USEFUL_CODE_POINTS_ON_IMAGE_PAGE;
 

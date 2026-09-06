@@ -28,7 +28,7 @@ public final class PdfPageClassifier {
     }
 
     private static boolean isMeaningful(int codePoint) {
-        if (Character.isWhitespace(codePoint)) {
+        if (Character.isWhitespace(codePoint) || Character.isSpaceChar(codePoint)) {
             return false;
         }
         return switch (Character.getType(codePoint)) {
