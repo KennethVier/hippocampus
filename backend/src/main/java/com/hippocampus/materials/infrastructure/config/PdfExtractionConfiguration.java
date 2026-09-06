@@ -14,8 +14,10 @@ import com.hippocampus.materials.port.MaterialContentInspector;
 import com.hippocampus.materials.port.PdfExtractionSourceRepository;
 import com.hippocampus.materials.port.PdfNativeTextExtractor;
 
-@AutoConfiguration(after = MaterialContentInspectionConfiguration.class)
-@ConditionalOnBean({BinaryObjectStore.class, MaterialContentInspector.class, JdbcClient.class})
+@AutoConfiguration(
+        after = MaterialContentInspectionConfiguration.class,
+        afterName = "org.springframework.boot.jdbc.autoconfigure.JdbcClientAutoConfiguration")
+@ConditionalOnBean(JdbcClient.class)
 @EnableConfigurationProperties(PdfExtractionProperties.class)
 public class PdfExtractionConfiguration {
     @Bean
@@ -24,6 +26,7 @@ public class PdfExtractionConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean({BinaryObjectStore.class, MaterialContentInspector.class})
     PdfNativeTextExtractor pdfNativeTextExtractor(
             BinaryObjectStore objectStore,
             MaterialContentInspector contentInspector,
@@ -37,6 +40,7 @@ public class PdfExtractionConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean({BinaryObjectStore.class, MaterialContentInspector.class})
     ExtractPdfNativeText extractPdfNativeText(
             PdfExtractionSourceRepository sources,
             PdfNativeTextExtractor extractor) {
