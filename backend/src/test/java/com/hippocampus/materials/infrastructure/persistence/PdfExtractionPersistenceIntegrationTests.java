@@ -412,15 +412,17 @@ class PdfExtractionPersistenceIntegrationTests extends PostgresIntegrationTestSu
     private static Integer pageCount(JdbcClient jdbc, UUID versionId) {
         return jdbc.sql("SELECT page_count FROM material_versions WHERE id = ?")
                 .param(versionId)
-                .query((result, rowNumber) -> result.getObject(1, Integer.class))
-                .single();
+                .query((result, rowNumber) -> new NullableInteger(result.getObject(1, Integer.class)))
+                .single()
+                .value();
     }
 
     private static Integer rootEndPage(JdbcClient jdbc, UUID versionId) {
         return jdbc.sql("SELECT end_page FROM document_nodes WHERE material_version_id = ?")
                 .param(versionId)
-                .query((result, rowNumber) -> result.getObject(1, Integer.class))
-                .single();
+                .query((result, rowNumber) -> new NullableInteger(result.getObject(1, Integer.class)))
+                .single()
+                .value();
     }
 
     private static List<BlockIdentity> identities(JdbcClient jdbc, UUID versionId) {
@@ -466,6 +468,8 @@ class PdfExtractionPersistenceIntegrationTests extends PostgresIntegrationTestSu
             throw exception.getCause();
         }
     }
+
+    private record NullableInteger(Integer value) {}
 
     private record BlockIdentity(UUID id, int ordinal, OffsetDateTime createdAt) {}
 }
