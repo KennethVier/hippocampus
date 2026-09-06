@@ -7,14 +7,14 @@ import com.hippocampus.materials.domain.PdfDocumentMetadata;
 import com.hippocampus.materials.domain.ProcessingJobType;
 import com.hippocampus.materials.port.PdfExtractionSourceRepository;
 import com.hippocampus.materials.port.PdfExtractionSource;
-import com.hippocampus.materials.port.PdfNativeTextExtractor;
+import com.hippocampus.materials.port.PdfPageExtractor;
 import com.hippocampus.materials.port.PdfPageBatchSink;
 
-public final class ExtractPdfNativeText {
+public final class ExtractPdfPages {
     private final PdfExtractionSourceRepository sources;
-    private final PdfNativeTextExtractor extractor;
+    private final PdfPageExtractor extractor;
 
-    public ExtractPdfNativeText(PdfExtractionSourceRepository sources, PdfNativeTextExtractor extractor) {
+    public ExtractPdfPages(PdfExtractionSourceRepository sources, PdfPageExtractor extractor) {
         this.sources = Objects.requireNonNull(sources);
         this.extractor = Objects.requireNonNull(extractor);
     }

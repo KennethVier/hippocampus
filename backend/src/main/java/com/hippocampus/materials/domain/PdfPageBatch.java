@@ -2,7 +2,7 @@ package com.hippocampus.materials.domain;
 
 import java.util.List;
 
-public record PdfPageBatch(int firstPage, int lastPage, List<PdfNativePage> pages) {
+public record PdfPageBatch(int firstPage, int lastPage, List<PdfExtractedPage> pages) {
     public PdfPageBatch {
         pages = List.copyOf(pages);
         if (firstPage < 1 || lastPage < firstPage || pages.isEmpty()) {

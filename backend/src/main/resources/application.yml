@@ -20,6 +20,19 @@ hippocampus:
         page-batch-size: ${HIPPOCAMPUS_PDF_PAGE_BATCH_SIZE:20}
         max-pages: ${HIPPOCAMPUS_MAX_PDF_PAGES:2000}
         max-native-text-chars-per-page: ${HIPPOCAMPUS_PDF_MAX_NATIVE_TEXT_CHARS_PER_PAGE:1000000}
+        ocr-executable: ${HIPPOCAMPUS_TESSERACT_EXECUTABLE:/usr/bin/tesseract}
+        ocr-render-dpi: ${HIPPOCAMPUS_OCR_RENDER_DPI:300}
+        ocr-max-width-pixels: ${HIPPOCAMPUS_OCR_MAX_WIDTH_PIXELS:10000}
+        ocr-max-height-pixels: ${HIPPOCAMPUS_OCR_MAX_HEIGHT_PIXELS:10000}
+        ocr-max-pixels: ${HIPPOCAMPUS_OCR_MAX_PIXELS:40000000}
+        ocr-max-input-bytes: ${HIPPOCAMPUS_OCR_MAX_INPUT_BYTES:25000000}
+        ocr-max-stdout-bytes: ${HIPPOCAMPUS_OCR_MAX_STDOUT_BYTES:8000000}
+        ocr-max-stderr-bytes: ${HIPPOCAMPUS_OCR_MAX_STDERR_BYTES:65536}
+        ocr-max-tsv-rows: ${HIPPOCAMPUS_OCR_MAX_TSV_ROWS:200000}
+        ocr-max-tsv-field-chars: ${HIPPOCAMPUS_OCR_MAX_TSV_FIELD_CHARS:100000}
+        ocr-max-text-chars: ${HIPPOCAMPUS_OCR_MAX_TEXT_CHARS:1000000}
+        ocr-timeout: ${HIPPOCAMPUS_OCR_TIMEOUT:PT30S}
+        ocr-termination-grace: ${HIPPOCAMPUS_OCR_TERMINATION_GRACE:PT2S}
   security:
     login:
       max-attempts: 60

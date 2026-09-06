@@ -871,7 +871,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** OCR
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Support scanned pages without coupling pipeline.
 - **Build:** Define OcrPort/OcrResult and select practical initial implementation for local/pilot; persist method/quality.
 - **How it works:** OCR uncertainty remains metadata.
@@ -880,8 +880,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Scanned pages yield text or explicit limitation.
 - **Definition of Done:** Adapter tests pass; engine documented.
 - **Authority:** Documents 21,27
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Local implementation from exact `main` base `ab37df67d28b98478186d0b9f3d1cc2cfc275013` adds the provider-neutral `OcrPort`, defensive bounded `OcrInput`, finite recognized/no-usable-text `OcrResult`, immutable final PDF page method/quality invariants, conservative P3-06 routing, bounded grayscale PDFBox page rasterization, and a local Tesseract CLI adapter using fixed `stdin stdout -l eng tsv` arguments. Tesseract-specific TSV parsing and mean word-confidence classification remain infrastructure-local; named heuristic thresholds are `STRONG >= 85.0`, `LIMITED >= 60.0`, otherwise `POOR`, and raw confidence is not persisted. The child process receives only controlled locale variables, has concurrent bounded stdout/stderr drains, deadline/forced termination, bounded TSV/text, and sanitized typed failures. JDBC persistence now stores and replay-verifies content/method/quality, retains one `PAGE_TEXT` per physical page, and finalizes complete valid mixed native/OCR sets without a migration. The documented, locally validated Ubuntu runtime is Tesseract `5.3.4-1build5` (`tesseract 5.3.4`), `libtesseract5 5.3.4-1build5`, and `tesseract-ocr-eng 1:4.1.0-2`; `eng` availability was verified. Non-skipped real-engine strong/degraded/no-text validation passed 3 tests with 0 failures/errors/skips. Final focused OCR, configuration, PDF extraction, classification, application orchestration, and architecture validation passed 57 tests with 0 failures/errors/skips. Architecture and non-PostgreSQL P3-04/P3-06 regressions passed in the focused regression run; the same run reported 10 PostgreSQL persistence-test errors solely because this environment has no Docker socket. A broader local run executed 263 tests: 253 passed and 10 Docker/Testcontainers-dependent tests errored during shared PostgreSQL harness initialization; no test failed and no test was skipped. The new OCR persistence/replay/finalization tests compile but require Docker-capable authoritative CI execution. Exact-head external general review, independent vulnerability review, PR CI, merge, and post-merge validation have not occurred and are not claimed.
+- **Notes / blockers:** Docker/Testcontainers is unavailable locally (`/var/run/docker.sock` missing), so the PostgreSQL OCR persistence/replay/finalization tests require Docker-capable CI validation before completion. P3-07 remains `Ready for Review`, not `Done`.
 
 ## P3-08 — Implement structure detection heuristics
 

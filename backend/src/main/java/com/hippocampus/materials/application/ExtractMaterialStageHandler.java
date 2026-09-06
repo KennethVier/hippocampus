@@ -7,12 +7,12 @@ import com.hippocampus.materials.domain.PdfDocumentMetadata;
 import com.hippocampus.materials.domain.ProcessingJobType;
 
 public final class ExtractMaterialStageHandler implements ProcessingStageHandler {
-    private final ExtractPdfNativeText extraction;
+    private final ExtractPdfPages extraction;
     private final PersistPdfPageBatch batches;
     private final FinalizePdfExtraction finalization;
 
     public ExtractMaterialStageHandler(
-            ExtractPdfNativeText extraction,
+            ExtractPdfPages extraction,
             PersistPdfPageBatch batches,
             FinalizePdfExtraction finalization) {
         this.extraction = Objects.requireNonNull(extraction);

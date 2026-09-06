@@ -31,24 +31,24 @@ import com.hippocampus.materials.application.FinalizePdfExtraction;
 import com.hippocampus.materials.application.CompleteProcessingStage;
 import com.hippocampus.materials.application.ExecuteClaimedProcessingJob;
 import com.hippocampus.materials.application.ExtractMaterialStageHandler;
-import com.hippocampus.materials.application.ExtractPdfNativeText;
+import com.hippocampus.materials.application.ExtractPdfPages;
 import com.hippocampus.materials.application.ProcessingDispatcher;
 import com.hippocampus.materials.application.ProcessingStageCompletionException;
 import com.hippocampus.materials.application.PersistPdfPageBatch;
 import com.hippocampus.materials.domain.DocumentNode;
-import com.hippocampus.materials.domain.PdfNativePage;
-import com.hippocampus.materials.domain.PdfPageExtractionType;
+import com.hippocampus.materials.domain.PdfExtractedPage;
 import com.hippocampus.materials.domain.PdfPageBatch;
 import com.hippocampus.materials.domain.TextBlock;
 import com.hippocampus.materials.domain.TextBlockExtractionMethod;
+import com.hippocampus.materials.domain.TextBlockQuality;
 import com.hippocampus.materials.domain.TextBlockType;
 import com.hippocampus.materials.domain.ClaimedProcessingJob;
 import com.hippocampus.materials.domain.ProcessingJobType;
-import com.hippocampus.materials.infrastructure.pdf.PdfBoxNativeTextExtractor;
+import com.hippocampus.materials.infrastructure.pdf.PdfBoxPdfPageExtractor;
 import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.DocumentStructureRepository;
 import com.hippocampus.materials.port.PdfExtractionPersistenceException;
-import com.hippocampus.materials.port.PdfNativeTextExtractor;
+import com.hippocampus.materials.port.PdfPageExtractor;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 
 class PdfExtractionPersistenceIntegrationTests extends PostgresIntegrationTestSupport {
@@ -118,6 +118,67 @@ class PdfExtractionPersistenceIntegrationTests extends PostgresIntegrationTestSu
             assertThat(identities(jdbc, versionId)).isEqualTo(before);
             assertThat(jdbc.sql("SELECT count(*) FROM text_blocks WHERE material_version_id = ?")
                     .param(versionId).query(Integer.class).single()).isEqualTo(2);
+        }
+    }
+
+    @Test
+    void persistsReplaysAndFinalizesMixedNativeAndOcrPagesWithoutDuplicates() {
+        try (var context = startApplicationWithFlyway()) {
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            UUID versionId = insertPdf(jdbc, "PROCESSING");
+            PersistPdfPageBatch batches = context.getBean(PersistPdfPageBatch.class);
+            FinalizePdfExtraction finalization = context.getBean(FinalizePdfExtraction.class);
+            PdfPageBatch pageBatch = batch(
+                    page(1, "native"), ocrPage(2, "recognized", TextBlockQuality.STRONG),
+                    ocrPage(3, "", TextBlockQuality.POOR));
+
+            batches.execute(versionId, pageBatch);
+            List<BlockIdentity> before = identities(jdbc, versionId);
+            batches.execute(versionId, pageBatch);
+            finalization.execute(versionId, 3);
+
+            List<TextBlock> blocks = context.getBean(DocumentStructureRepository.class)
+                    .findTextBlocksByOrdinalRange(versionId, 1, 3);
+            assertThat(blocks).extracting(TextBlock::extractionMethod).containsExactly(
+                    TextBlockExtractionMethod.NATIVE, TextBlockExtractionMethod.OCR,
+                    TextBlockExtractionMethod.OCR);
+            assertThat(blocks).extracting(TextBlock::quality).containsExactly(
+                    null, TextBlockQuality.STRONG, TextBlockQuality.POOR);
+            assertThat(blocks.get(2).content()).isEmpty();
+            assertThat(identities(jdbc, versionId)).isEqualTo(before);
+        }
+    }
+
+    @Test
+    void rejectsOcrContentMethodAndQualityReplayConflictsAndInvalidFinalizationShapes() {
+        try (var context = startApplicationWithFlyway()) {
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            PersistPdfPageBatch batches = context.getBean(PersistPdfPageBatch.class);
+            UUID versionId = insertPdf(jdbc, "PROCESSING");
+            batches.execute(versionId, batch(ocrPage(1, "text", TextBlockQuality.STRONG)));
+
+            assertThatThrownBy(() -> batches.execute(
+                    versionId, batch(ocrPage(1, "changed", TextBlockQuality.STRONG))))
+                    .isInstanceOf(PdfExtractionPersistenceException.class);
+            assertThatThrownBy(() -> batches.execute(
+                    versionId, batch(ocrPage(1, "text", TextBlockQuality.LIMITED))))
+                    .isInstanceOf(PdfExtractionPersistenceException.class);
+            assertThatThrownBy(() -> batches.execute(versionId, batch(page(1, "text"))))
+                    .isInstanceOf(PdfExtractionPersistenceException.class);
+            assertThat(jdbc.sql("SELECT count(*) FROM text_blocks WHERE material_version_id = ?")
+                    .param(versionId).query(Integer.class).single()).isEqualTo(1);
+
+            jdbc.sql("UPDATE text_blocks SET quality = NULL WHERE material_version_id = ?")
+                    .param(versionId).update();
+            assertThatThrownBy(() -> context.getBean(FinalizePdfExtraction.class).execute(versionId, 1))
+                    .isInstanceOf(PdfExtractionPersistenceException.class);
+
+            UUID nativeVersion = insertPdf(jdbc, "PROCESSING");
+            batches.execute(nativeVersion, batch(page(1, "native")));
+            jdbc.sql("UPDATE text_blocks SET quality = 'POOR' WHERE material_version_id = ?")
+                    .param(nativeVersion).update();
+            assertThatThrownBy(() -> context.getBean(FinalizePdfExtraction.class).execute(nativeVersion, 1))
+                    .isInstanceOf(PdfExtractionPersistenceException.class);
         }
     }
 
@@ -261,10 +322,11 @@ class PdfExtractionPersistenceIntegrationTests extends PostgresIntegrationTestSu
                     throw new UnsupportedOperationException();
                 }
             };
-            PdfNativeTextExtractor realExtractor = new PdfBoxNativeTextExtractor(
+            PdfPageExtractor realExtractor = new PdfBoxPdfPageExtractor(
                     store, (input, length) -> new com.hippocampus.materials.port.MaterialContentInspector.Inspection(
-                            "application/pdf"), 2, 100, 10_000);
-            PdfNativeTextExtractor transactionCheckingExtractor = (source, sink) -> {
+                            "application/pdf"), input -> new com.hippocampus.materials.port.OcrResult.NoUsableText(),
+                    2, 100, 10_000, 72, 10_000, 10_000, 40_000_000, 25_000_000);
+            PdfPageExtractor transactionCheckingExtractor = (source, sink) -> {
                 assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
                 return realExtractor.extract(source, batch -> {
                     assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
@@ -272,7 +334,7 @@ class PdfExtractionPersistenceIntegrationTests extends PostgresIntegrationTestSu
                     assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
                 });
             };
-            ExtractPdfNativeText extraction = new ExtractPdfNativeText(
+            ExtractPdfPages extraction = new ExtractPdfPages(
                     context.getBean(com.hippocampus.materials.port.PdfExtractionSourceRepository.class),
                     transactionCheckingExtractor);
             ExtractMaterialStageHandler handler = new ExtractMaterialStageHandler(
@@ -339,14 +401,15 @@ class PdfExtractionPersistenceIntegrationTests extends PostgresIntegrationTestSu
         }
     }
 
-    private static PdfNativePage page(int number, String content) {
-        PdfPageExtractionType extractionType = content.isBlank()
-                ? PdfPageExtractionType.UNREADABLE
-                : PdfPageExtractionType.NATIVE_TEXT;
-        return new PdfNativePage(number, 612, 792, content, extractionType);
+    private static PdfExtractedPage page(int number, String content) {
+        return new PdfExtractedPage(number, content, TextBlockExtractionMethod.NATIVE, null);
     }
 
-    private static PdfPageBatch batch(PdfNativePage... pages) {
+    private static PdfExtractedPage ocrPage(int number, String content, TextBlockQuality quality) {
+        return new PdfExtractedPage(number, content, TextBlockExtractionMethod.OCR, quality);
+    }
+
+    private static PdfPageBatch batch(PdfExtractedPage... pages) {
         return new PdfPageBatch(pages[0].pageNumber(), pages[pages.length - 1].pageNumber(), List.of(pages));
     }
 

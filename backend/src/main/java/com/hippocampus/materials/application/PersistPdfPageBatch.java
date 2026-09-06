@@ -17,6 +17,6 @@ public class PersistPdfPageBatch {
 
     @Transactional
     public void execute(UUID materialVersionId, PdfPageBatch batch) {
-        persistence.persistNativePageBatch(materialVersionId, batch);
+        persistence.persistPageBatch(materialVersionId, batch);
     }
 }
