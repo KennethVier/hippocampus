@@ -22,7 +22,8 @@ import com.hippocampus.materials.port.PdfExtractionPersistence;
         after = PdfExtractionConfiguration.class,
         afterName = {
                 "org.springframework.boot.jdbc.autoconfigure.JdbcClientAutoConfiguration",
-                "org.springframework.boot.transaction.autoconfigure.TransactionAutoConfiguration"
+                "org.springframework.boot.transaction.autoconfigure.TransactionAutoConfiguration",
+                "org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration"
         })
 @ConditionalOnBean({JdbcClient.class, PlatformTransactionManager.class})
 public class DocumentStructurePersistenceConfiguration {
