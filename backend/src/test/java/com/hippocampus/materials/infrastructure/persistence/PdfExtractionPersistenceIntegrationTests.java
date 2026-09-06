@@ -37,6 +37,7 @@ import com.hippocampus.materials.application.ProcessingStageCompletionException;
 import com.hippocampus.materials.application.PersistPdfPageBatch;
 import com.hippocampus.materials.domain.DocumentNode;
 import com.hippocampus.materials.domain.PdfNativePage;
+import com.hippocampus.materials.domain.PdfPageExtractionType;
 import com.hippocampus.materials.domain.PdfPageBatch;
 import com.hippocampus.materials.domain.TextBlock;
 import com.hippocampus.materials.domain.TextBlockExtractionMethod;
@@ -339,7 +340,10 @@ class PdfExtractionPersistenceIntegrationTests extends PostgresIntegrationTestSu
     }
 
     private static PdfNativePage page(int number, String content) {
-        return new PdfNativePage(number, 612, 792, content);
+        PdfPageExtractionType extractionType = content.isBlank()
+                ? PdfPageExtractionType.UNREADABLE
+                : PdfPageExtractionType.NATIVE_TEXT;
+        return new PdfNativePage(number, 612, 792, content, extractionType);
     }
 
     private static PdfPageBatch batch(PdfNativePage... pages) {

@@ -3,6 +3,7 @@ package com.hippocampus.materials.infrastructure.pdf;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -13,20 +14,29 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDFormContentStream;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.encryption.AccessPermission;
 import org.apache.pdfbox.pdmodel.encryption.StandardProtectionPolicy;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB;
+import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
+import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
+import org.apache.pdfbox.pdmodel.graphics.image.PDInlineImage;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.tika.Tika;
 import org.junit.jupiter.api.Test;
 
 import com.hippocampus.materials.domain.PdfDocumentMetadata;
 import com.hippocampus.materials.domain.PdfNativePage;
 import com.hippocampus.materials.domain.PdfPageBatch;
+import com.hippocampus.materials.domain.PdfPageExtractionType;
 import com.hippocampus.materials.infrastructure.inspection.TikaMaterialContentInspector;
 import com.hippocampus.materials.port.BinaryObjectKey;
 import com.hippocampus.materials.port.BinaryObjectStore;
@@ -52,6 +62,14 @@ class PdfBoxNativeTextExtractorTests {
             assertThat(batches.getFirst().pages()).hasSize(2);
             assertThat(batches.getFirst().pages().getFirst().nativeText()).isEqualTo("First native page\n");
             assertThat(batches.getFirst().pages().get(1).nativeText()).isEmpty();
+            assertThat(batches.stream().flatMap(batch -> batch.pages().stream())
+                    .map(PdfNativePage::extractionType))
+                    .containsExactly(
+                            PdfPageExtractionType.NATIVE_TEXT,
+                            PdfPageExtractionType.UNREADABLE,
+                            PdfPageExtractionType.NATIVE_TEXT,
+                            PdfPageExtractionType.NATIVE_TEXT,
+                            PdfPageExtractionType.NATIVE_TEXT);
             assertThat(batches.getLast().pages().getFirst().nativeText()).isEqualTo("Last\n");
             assertThat(batches.getFirst().pages().getFirst().pageNumber()).isEqualTo(1);
             assertThat(batches.getLast().pages().getFirst().pageNumber()).isEqualTo(5);
@@ -59,6 +77,27 @@ class PdfBoxNativeTextExtractorTests {
             assertThat(batches.getFirst().pages().getFirst().heightPoints()).isEqualTo(PDRectangle.LETTER.getHeight());
             assertThatThrownBy(() -> batches.getFirst().pages().clear())
                     .isInstanceOf(UnsupportedOperationException.class);
+        }
+    }
+
+    @Test
+    void classifiesPaintedMixedScannedNestedAndUnusedImageContent() throws Exception {
+        try (StoredPdf pdf = classifiedPdf()) {
+            PdfBoxNativeTextExtractor extractor = extractor(pdf, 3, 100, 10_000);
+            List<PdfNativePage> pages = new ArrayList<>();
+
+            extractor.extract(source(pdf), batch -> pages.addAll(batch.pages()));
+
+            assertThat(pages).extracting(PdfNativePage::extractionType).containsExactly(
+                    PdfPageExtractionType.IMAGE_ONLY,
+                    PdfPageExtractionType.MIXED,
+                    PdfPageExtractionType.IMAGE_ONLY,
+                    PdfPageExtractionType.NATIVE_TEXT,
+                    PdfPageExtractionType.IMAGE_ONLY,
+                    PdfPageExtractionType.IMAGE_ONLY,
+                    PdfPageExtractionType.IMAGE_ONLY);
+            assertThat(pages.get(1).nativeText()).isEqualTo("native12\n");
+            assertThat(pages.get(2).nativeText()).isEqualTo("7\n");
         }
     }
 
@@ -313,10 +352,87 @@ class PdfBoxNativeTextExtractorTests {
                 assertThat(page.pageNumber()).isEqualTo(nextExpectedPage);
                 assertThat(page.nativeText()).isEqualTo(
                         "Hippocampus synthetic native page %04d%n".formatted(nextExpectedPage));
+                assertThat(page.extractionType()).isEqualTo(PdfPageExtractionType.NATIVE_TEXT);
                 nextExpectedPage++;
                 pageCount++;
             }
         }
+    }
+
+    private static StoredPdf classifiedPdf() throws IOException {
+        Path path = Files.createTempFile("pdf-classification-test-source-", ".pdf");
+        try (PDDocument document = new PDDocument()) {
+            PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+            BufferedImage pixel = new BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB);
+            PDImageXObject image = LosslessFactory.createFromImage(document, pixel);
+
+            PDPage imageOnly = addPage(document);
+            try (PDPageContentStream content = new PDPageContentStream(document, imageOnly)) {
+                content.drawImage(image, 72, 600, 200, 150);
+            }
+
+            PDPage mixed = addPage(document);
+            try (PDPageContentStream content = new PDPageContentStream(document, mixed)) {
+                writeText(content, font, "native12");
+                content.drawImage(image, 72, 500, 200, 150);
+            }
+
+            PDPage incidental = addPage(document);
+            try (PDPageContentStream content = new PDPageContentStream(document, incidental)) {
+                writeText(content, font, "7");
+                content.drawImage(image, 72, 500, 200, 150);
+            }
+
+            PDPage unused = addPage(document);
+            unused.setResources(new PDResources());
+            unused.getResources().add(image);
+            try (PDPageContentStream content = new PDPageContentStream(document, unused)) {
+                writeText(content, font, "ECG");
+            }
+
+            PDFormXObject form = new PDFormXObject(document);
+            form.setResources(new PDResources());
+            form.setBBox(new PDRectangle(100, 100));
+            try (PDFormContentStream formContent = new PDFormContentStream(form)) {
+                formContent.drawImage(image, 0, 0, 100, 100);
+            }
+            PDPage nested = addPage(document);
+            try (PDPageContentStream content = new PDPageContentStream(document, nested)) {
+                content.drawForm(form);
+            }
+            PDPage multiple = addPage(document);
+            try (PDPageContentStream content = new PDPageContentStream(document, multiple)) {
+                content.drawImage(image, 72, 500, 100, 100);
+                content.drawImage(image, 200, 500, 100, 100);
+            }
+
+            PDPage inline = addPage(document);
+            PDInlineImage inlineImage = new PDInlineImage(new COSDictionary(), new byte[] {0, 0, 0}, new PDResources());
+            inlineImage.setWidth(1);
+            inlineImage.setHeight(1);
+            inlineImage.setBitsPerComponent(8);
+            inlineImage.setColorSpace(PDDeviceRGB.INSTANCE);
+            try (PDPageContentStream content = new PDPageContentStream(document, inline)) {
+                content.drawImage(inlineImage, 72, 500, 100, 100);
+            }
+
+            document.save(path.toFile());
+        }
+        return new StoredPdf(path);
+    }
+
+    private static PDPage addPage(PDDocument document) {
+        PDPage page = new PDPage(PDRectangle.LETTER);
+        document.addPage(page);
+        return page;
+    }
+
+    private static void writeText(PDPageContentStream content, PDType1Font font, String text) throws IOException {
+        content.beginText();
+        content.setFont(font, 12);
+        content.newLineAtOffset(72, 720);
+        content.showText(text);
+        content.endText();
     }
 
     private static final class FileSourceObjectStore extends UnsupportedObjectStore {

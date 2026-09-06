@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import com.hippocampus.materials.domain.ClaimedProcessingJob;
 import com.hippocampus.materials.domain.PdfDocumentMetadata;
 import com.hippocampus.materials.domain.PdfNativePage;
+import com.hippocampus.materials.domain.PdfPageExtractionType;
 import com.hippocampus.materials.domain.PdfPageBatch;
 import com.hippocampus.materials.domain.ProcessingJobType;
 import com.hippocampus.materials.port.PdfExtractionPersistence;
@@ -91,7 +92,7 @@ class ExtractMaterialStageHandlerTests {
     }
 
     private static PdfNativePage page(int pageNumber, String content) {
-        return new PdfNativePage(pageNumber, 612, 792, content);
+        return new PdfNativePage(pageNumber, 612, 792, content, PdfPageExtractionType.NATIVE_TEXT);
     }
 
     private static ClaimedProcessingJob job(UUID materialVersionId) {
