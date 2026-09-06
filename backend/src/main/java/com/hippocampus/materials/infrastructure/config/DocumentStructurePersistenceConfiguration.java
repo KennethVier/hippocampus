@@ -18,7 +18,12 @@ import com.hippocampus.materials.infrastructure.persistence.SpringDataTextBlockR
 import com.hippocampus.materials.port.DocumentStructureRepository;
 import com.hippocampus.materials.port.PdfExtractionPersistence;
 
-@AutoConfiguration(after = PdfExtractionConfiguration.class)
+@AutoConfiguration(
+        after = PdfExtractionConfiguration.class,
+        afterName = {
+                "org.springframework.boot.jdbc.autoconfigure.JdbcClientAutoConfiguration",
+                "org.springframework.boot.transaction.autoconfigure.TransactionAutoConfiguration"
+        })
 @ConditionalOnBean({JdbcClient.class, PlatformTransactionManager.class})
 public class DocumentStructurePersistenceConfiguration {
     @Bean
