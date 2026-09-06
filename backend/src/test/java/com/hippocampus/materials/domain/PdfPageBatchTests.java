@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 class PdfPageBatchTests {
     @Test
     void defensivelyCopiesAnOrderedContiguousBatch() {
-        List<PdfNativePage> mutable = new ArrayList<>(List.of(page(4), page(5)));
+        List<PdfExtractedPage> mutable = new ArrayList<>(List.of(page(4), page(5)));
         PdfPageBatch batch = new PdfPageBatch(4, 5, mutable);
         mutable.clear();
 
@@ -26,7 +26,7 @@ class PdfPageBatchTests {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
-    private static PdfNativePage page(int number) {
-        return new PdfNativePage(number, 612, 792, "", PdfPageExtractionType.UNREADABLE);
+    private static PdfExtractedPage page(int number) {
+        return new PdfExtractedPage(number, "", TextBlockExtractionMethod.NATIVE, null);
     }
 }

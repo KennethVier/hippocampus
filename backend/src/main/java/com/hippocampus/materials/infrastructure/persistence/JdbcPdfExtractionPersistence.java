@@ -8,7 +8,7 @@ import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import com.hippocampus.materials.domain.PdfNativePage;
+import com.hippocampus.materials.domain.PdfExtractedPage;
 import com.hippocampus.materials.domain.PdfPageBatch;
 import com.hippocampus.materials.port.PdfExtractionPersistence;
 import com.hippocampus.materials.port.PdfExtractionPersistenceException;
@@ -56,7 +56,7 @@ public final class JdbcPdfExtractionPersistence implements PdfExtractionPersiste
                 ordinal, content, extraction_method, quality, created_at
             ) VALUES (
                 :id, :materialVersionId, :documentNodeId, :pageNumber, 'PAGE_TEXT',
-                :ordinal, :content, 'NATIVE', NULL, CURRENT_TIMESTAMP
+                :ordinal, :content, :extractionMethod, :quality, CURRENT_TIMESTAMP
             )
             """;
     private static final String PAGE_SET_SUMMARY = """
@@ -67,8 +67,8 @@ public final class JdbcPdfExtractionPersistence implements PdfExtractionPersiste
                        AND page_number = ordinal
                        AND document_node_id IS NOT DISTINCT FROM :rootId
                        AND block_type = 'PAGE_TEXT'
-                       AND extraction_method = 'NATIVE'
-                       AND quality IS NULL) AS valid_rows
+                       AND ((extraction_method = 'NATIVE' AND quality IS NULL)
+                           OR (extraction_method = 'OCR' AND quality IN ('STRONG', 'LIMITED', 'POOR')))) AS valid_rows
             FROM text_blocks
             WHERE material_version_id = :materialVersionId
             """;
@@ -96,19 +96,19 @@ public final class JdbcPdfExtractionPersistence implements PdfExtractionPersiste
     }
 
     @Override
-    public void persistNativePageBatch(UUID materialVersionId, PdfPageBatch batch) {
+    public void persistPageBatch(UUID materialVersionId, PdfPageBatch batch) {
         requireTransaction();
         Objects.requireNonNull(materialVersionId, "materialVersionId must not be null");
         Objects.requireNonNull(batch, "batch must not be null");
         lockEligibleSource(materialVersionId);
         UUID rootId = requireOrCreateCompatibleRoot(materialVersionId);
-        for (PdfNativePage page : batch.pages()) {
+        for (PdfExtractedPage page : batch.pages()) {
             persistOrVerifyPage(materialVersionId, rootId, page);
         }
     }
 
     @Override
-    public void finalizeNativePdfExtraction(UUID materialVersionId, int pageCount) {
+    public void finalizePdfExtraction(UUID materialVersionId, int pageCount) {
         requireTransaction();
         Objects.requireNonNull(materialVersionId, "materialVersionId must not be null");
         if (pageCount < 1) {
@@ -129,7 +129,7 @@ public final class JdbcPdfExtractionPersistence implements PdfExtractionPersiste
                 || !Integer.valueOf(1).equals(pages.minPage())
                 || !Integer.valueOf(pageCount).equals(pages.maxPage())
                 || !Boolean.TRUE.equals(pages.validRows())) {
-            throw conflict("Durable native page set does not match extraction metadata");
+            throw conflict("Durable page set does not match extraction metadata");
         }
         if (existingPageCount != null && existingPageCount != pageCount) {
             throw conflict("Material version page count conflicts with extraction metadata");
@@ -211,7 +211,7 @@ public final class JdbcPdfExtractionPersistence implements PdfExtractionPersiste
         }
     }
 
-    private void persistOrVerifyPage(UUID materialVersionId, UUID rootId, PdfNativePage page) {
+    private void persistOrVerifyPage(UUID materialVersionId, UUID rootId, PdfExtractedPage page) {
         BlockRow existing = jdbcClient.sql(FIND_BLOCK)
                 .param("materialVersionId", materialVersionId)
                 .param("ordinal", page.pageNumber())
@@ -222,10 +222,10 @@ public final class JdbcPdfExtractionPersistence implements PdfExtractionPersiste
             if (!rootId.equals(existing.documentNodeId())
                     || existing.pageNumber() != page.pageNumber()
                     || !"PAGE_TEXT".equals(existing.blockType())
-                    || !page.nativeText().equals(existing.content())
-                    || !"NATIVE".equals(existing.extractionMethod())
-                    || existing.quality() != null) {
-                throw conflict("Existing text block conflicts with native PDF page replay");
+                    || !page.content().equals(existing.content())
+                    || !page.extractionMethod().name().equals(existing.extractionMethod())
+                    || !Objects.equals(page.quality() == null ? null : page.quality().name(), existing.quality())) {
+                throw conflict("Existing text block conflicts with PDF page replay");
             }
             return;
         }
@@ -235,7 +235,9 @@ public final class JdbcPdfExtractionPersistence implements PdfExtractionPersiste
                 .param("documentNodeId", rootId)
                 .param("pageNumber", page.pageNumber())
                 .param("ordinal", page.pageNumber())
-                .param("content", page.nativeText())
+                .param("content", page.content())
+                .param("extractionMethod", page.extractionMethod().name())
+                .param("quality", page.quality() == null ? null : page.quality().name())
                 .update();
     }
 

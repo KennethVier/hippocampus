@@ -75,6 +75,7 @@ class HippocampusArchitectureTests {
             .that().resideInAnyPackage(
                     BASE_PACKAGE + "..infrastructure.persistence..",
                     BASE_PACKAGE + "..infrastructure.pdf..",
+                    BASE_PACKAGE + "..infrastructure.ocr..",
                     BASE_PACKAGE + "..infrastructure.inspection..",
                     BASE_PACKAGE + "..infrastructure.storage..")
             .should().dependOnClassesThat().resideInAPackage(BASE_PACKAGE + "..application..")

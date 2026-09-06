@@ -5,7 +5,7 @@ import java.util.UUID;
 import com.hippocampus.materials.domain.PdfPageBatch;
 
 public interface PdfExtractionPersistence {
-    void persistNativePageBatch(UUID materialVersionId, PdfPageBatch batch);
+    void persistPageBatch(UUID materialVersionId, PdfPageBatch batch);
 
-    void finalizeNativePdfExtraction(UUID materialVersionId, int pageCount);
+    void finalizePdfExtraction(UUID materialVersionId, int pageCount);
 }

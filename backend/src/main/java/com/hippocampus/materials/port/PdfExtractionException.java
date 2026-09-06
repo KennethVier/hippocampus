@@ -28,6 +28,7 @@ public final class PdfExtractionException extends RuntimeException {
             case PAGE_LIMIT_EXCEEDED -> "PDF page limit exceeded";
             case RESOURCE_LIMIT_EXCEEDED -> "PDF extraction resource limit exceeded";
             case EXTRACTION_FAILED -> "PDF native text extraction failed";
+            case OCR_FAILED -> "PDF OCR extraction failed";
             case OUTPUT_REJECTED -> "PDF extraction output was rejected";
             case TEMPORARY_STORAGE_FAILED -> "Temporary PDF storage failed";
             case TEMPORARY_CLEANUP_FAILED -> "Temporary PDF cleanup failed";
@@ -44,6 +45,7 @@ public final class PdfExtractionException extends RuntimeException {
         PAGE_LIMIT_EXCEEDED,
         RESOURCE_LIMIT_EXCEEDED,
         EXTRACTION_FAILED,
+        OCR_FAILED,
         OUTPUT_REJECTED,
         TEMPORARY_STORAGE_FAILED,
         TEMPORARY_CLEANUP_FAILED

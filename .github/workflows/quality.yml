@@ -19,7 +19,7 @@ concurrency:
 jobs:
   backend-quality:
     name: backend-quality
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - name: Checkout
@@ -32,6 +32,17 @@ jobs:
           java-version: '25.0.4'
           cache: maven
           cache-dependency-path: backend/pom.xml
+
+      - name: Install validated OCR runtime
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            tesseract-ocr=5.3.4-1build5 \
+            libtesseract5=5.3.4-1build5 \
+            tesseract-ocr-eng=1:4.1.0-2
+          test "$(tesseract --version | head -n 1)" = "tesseract 5.3.4"
+          tesseract --list-langs | sed '1d' | grep -Fx eng
 
       - name: Run backend tests, architecture tests, migrations, and build
         working-directory: backend

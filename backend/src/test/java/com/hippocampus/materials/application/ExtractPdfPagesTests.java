@@ -14,14 +14,14 @@ import com.hippocampus.materials.port.BinaryObjectKey;
 import com.hippocampus.materials.port.PdfPageBatchSink;
 import com.hippocampus.materials.port.PdfExtractionSource;
 
-class ExtractPdfNativeTextTests {
+class ExtractPdfPagesTests {
     @Test
     void resolvesAuthoritativeSourceAndDelegatesTheCallerOwnedSink() {
         UUID versionId = UUID.randomUUID();
         PdfExtractionSource source = new PdfExtractionSource(
                 versionId, new BinaryObjectKey("materials/test/original"), 123);
         Object[] received = new Object[2];
-        ExtractPdfNativeText useCase = new ExtractPdfNativeText(
+        ExtractPdfPages useCase = new ExtractPdfPages(
                 requestedId -> {
                     assertThat(requestedId).isEqualTo(versionId);
                     return source;
@@ -42,7 +42,7 @@ class ExtractPdfNativeTextTests {
 
     @Test
     void rejectsAnyJobOtherThanMaterialExtractWithVersionIdentity() {
-        ExtractPdfNativeText useCase = new ExtractPdfNativeText(
+        ExtractPdfPages useCase = new ExtractPdfPages(
                 ignored -> { throw new AssertionError("source must not be resolved"); },
                 (source, sink) -> { throw new AssertionError("extractor must not run"); });
 

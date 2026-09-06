@@ -12,7 +12,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import com.hippocampus.materials.application.ExtractMaterialStageHandler;
-import com.hippocampus.materials.application.ExtractPdfNativeText;
+import com.hippocampus.materials.application.ExtractPdfPages;
 import com.hippocampus.materials.application.FinalizePdfExtraction;
 import com.hippocampus.materials.application.PersistPdfPageBatch;
 import com.hippocampus.materials.application.ProcessingStageHandler;
@@ -82,8 +82,8 @@ class DocumentStructurePersistenceConfigurationTests {
     @Configuration(proxyBeanMethods = false)
     static class FullExtractionBeans extends DatabaseBeans {
         @Bean
-        ExtractPdfNativeText extractPdfNativeText() {
-            return mock(ExtractPdfNativeText.class);
+        ExtractPdfPages extractPdfNativeText() {
+            return mock(ExtractPdfPages.class);
         }
     }
 }

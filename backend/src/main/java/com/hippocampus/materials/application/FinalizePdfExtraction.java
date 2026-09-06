@@ -16,6 +16,6 @@ public class FinalizePdfExtraction {
 
     @Transactional
     public void execute(UUID materialVersionId, int pageCount) {
-        persistence.finalizeNativePdfExtraction(materialVersionId, pageCount);
+        persistence.finalizePdfExtraction(materialVersionId, pageCount);
     }
 }

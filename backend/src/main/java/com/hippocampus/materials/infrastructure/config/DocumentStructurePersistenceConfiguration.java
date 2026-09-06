@@ -7,7 +7,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import com.hippocampus.materials.application.ExtractMaterialStageHandler;
-import com.hippocampus.materials.application.ExtractPdfNativeText;
+import com.hippocampus.materials.application.ExtractPdfPages;
 import com.hippocampus.materials.application.FinalizePdfExtraction;
 import com.hippocampus.materials.application.PersistPdfPageBatch;
 import com.hippocampus.materials.application.ProcessingStageHandler;
@@ -51,9 +51,9 @@ public class DocumentStructurePersistenceConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(ExtractPdfNativeText.class)
+    @ConditionalOnBean(ExtractPdfPages.class)
     ProcessingStageHandler extractMaterialStageHandler(
-            ExtractPdfNativeText extraction,
+            ExtractPdfPages extraction,
             PersistPdfPageBatch batches,
             FinalizePdfExtraction finalization) {
         return new ExtractMaterialStageHandler(extraction, batches, finalization);
