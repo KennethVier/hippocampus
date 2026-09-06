@@ -887,7 +887,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Parsing
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Recover chapters/sections cheaply before AI.
 - **Build:** Use bookmarks/TOC/font/layout/numbering/repeated patterns to create DocumentNodes.
 - **How it works:** Native signals first; AI not required for obvious structure.
@@ -896,8 +896,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Known headings/sections detected with source order.
 - **Definition of Done:** Fixture hierarchy matches expected tolerance.
 - **Authority:** Documents 21
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Review candidate implements deterministic P3-08 structure detection from durable PAGE_TEXT evidence plus a provider-neutral, PDFBox-backed supplementary inspection boundary. It handles bounded bookmark destinations, TOC corroboration, conservative numeric font-weight/ForceBold evidence, relative font/layout/spacing, numbering, and repeated positional regions; emits only CHAPTER/SECTION/SUBSECTION nodes with NATIVE or HEURISTIC provenance and HIGH/MEDIUM/LOW confidence; preserves the DOCUMENT root and PAGE_TEXT rows; and performs exact semantic replay or fail-closed conflict detection with atomic JDBC insertion in a separate short `@Transactional` application bean. PDF download, MIME inspection, PDFBox parsing, page-local layout analysis, OCR uncertainty handling, and deterministic hierarchy calculation remain outside the write transaction. Native inspection reuses `PdfExtractionProperties.pageBatchSize()` and `maxPages()`, retains raw positions/lines for one page/batch only, and enforces outline count/depth/title/destination/cycle, text-position, line, candidate, and node ceilings; a synthetic 601-page fixture completed in batches no larger than 32. Consolidated P3-08 focused validation passed 25/25 tests, including 10 golden detector tests, four real-PDF/601-page resource tests, application/handler/configuration tests, and three PostgreSQL/Testcontainers atomic persistence/replay/conflict/rollback tests. The prescribed detector/application/pipeline group passed 38/38, and architecture plus persistence-configuration validation passed 12/12. General implementation review was APPROVED for security handoff after correcting invalid-destination outline accounting and empty-position accounting; the scoped internal adversarial security assessment found no unresolved Critical, High, or Medium finding, without claiming external or independent security approval. No new dependency, migration, ADR, provider/AI integration, rendering/OCR invocation, later parsing task, frontend, or architecture deviation was introduced.
+- **Notes / blockers:** Local `clean verify` compiled all 246 main and 93 test sources, ran 416 tests, and failed with 8 failures, 131 errors, and 4 skips because of existing Windows-incompatible test assumptions, including `/usr/bin/tesseract` being rejected as a non-absolute Windows path across application-context integration tests and PDFBox extraction assertions expecting LF while Windows PDFBox output used CRLF. The prescribed PDF regression group likewise had three pre-existing line-ending assertion failures; the prescribed persistence regression group ran the three new P3-08 tests successfully while 16 pre-existing tests errored during context startup on the OCR executable path. Authoritative CI/full-suite validation remains required before `Done`; this is an explicit environment limitation, not a claimed pass. P3-08 is not externally approved, merged, or complete.
 
 ## P3-09 — Implement bounded AI-assisted structure fallback
 
