@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import com.hippocampus.materials.domain.PdfDocumentMetadata;
 import com.hippocampus.materials.domain.PdfNativePage;
+import com.hippocampus.materials.domain.PdfPageClassifier;
 import com.hippocampus.materials.domain.PdfPageBatch;
 import com.hippocampus.materials.infrastructure.pdf.BoundedTextWriter.NativeTextLimitExceededException;
 import com.hippocampus.materials.port.BinaryObjectNotFoundException;
@@ -42,6 +43,7 @@ public final class PdfBoxNativeTextExtractor implements PdfNativeTextExtractor {
     private final int pageBatchSize;
     private final int maxPages;
     private final int maxNativeTextCharsPerPage;
+    private final PdfPageClassifier pageClassifier = new PdfPageClassifier();
 
     public PdfBoxNativeTextExtractor(
             BinaryObjectStore objectStore,
@@ -172,10 +174,17 @@ public final class PdfBoxNativeTextExtractor implements PdfNativeTextExtractor {
             stripper.writeText(document, writer);
             PDPage page = document.getPage(pageNumber - 1);
             PDRectangle box = page.getCropBox();
-            return new PdfNativePage(pageNumber, box.getWidth(), box.getHeight(), writer.text());
+            boolean hasPaintedImage = PdfBoxPaintedImageDetector.hasPaintedImage(page);
+            String nativeText = writer.text();
+            return new PdfNativePage(
+                    pageNumber,
+                    box.getWidth(),
+                    box.getHeight(),
+                    nativeText,
+                    pageClassifier.classify(nativeText, hasPaintedImage));
         } catch (NativeTextLimitExceededException exception) {
             throw new PdfExtractionException(PdfExtractionException.Kind.RESOURCE_LIMIT_EXCEEDED, exception);
-        } catch (IOException exception) {
+        } catch (IOException | RuntimeException exception) {
             throw new PdfExtractionException(PdfExtractionException.Kind.EXTRACTION_FAILED, exception);
         }
     }

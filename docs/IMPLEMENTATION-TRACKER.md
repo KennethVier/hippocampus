@@ -855,7 +855,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Parsing
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Drive OCR decisions safely.
 - **Build:** Classify NATIVE_TEXT/MIXED/IMAGE_ONLY/UNREADABLE using native extraction signals.
 - **How it works:** Only pages needing OCR go to OCR port.
@@ -864,7 +864,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Pages route correctly.
 - **Definition of Done:** Classification tests pass.
 - **Authority:** Documents 21
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Implementation PR [#112](https://github.com/KennethVier/hippocampus/pull/112) adds deterministic `NATIVE_TEXT` / `MIXED` / `IMAGE_ONLY` / `UNREADABLE` page classification to the bounded P3-04 PDF extraction stream. PDFBox infrastructure inspects actually painted raster content without page rendering, image extraction, or image persistence; provider-neutral classification remains attached to each bounded `PdfNativePage`, and P3-05 native `PAGE_TEXT` persistence behavior remains unchanged. Deterministic tests cover native, blank, mixed, scanned/image-only, tiny incidental text, Unicode text/noise boundaries, directly painted, multiple, nested-form, inline, and unused-resource image cases, plus the existing 601-page bounded extraction regression. PR quality run [#34010963975](https://github.com/KennethVier/hippocampus/actions/runs/34010963975) succeeded on original implementation head `bd1207f7ea68c375e087bd6dcc95c978b9bf44cf`, including `backend-quality` execution of backend tests, architecture tests, migrations, and build. External correction review and the independent security vulnerability review remain pending; this task is not `Done`, and no merge or post-merge evidence is claimed.
 - **Notes / blockers:** _None_
 
 ## P3-07 — Create OCR port and initial implementation

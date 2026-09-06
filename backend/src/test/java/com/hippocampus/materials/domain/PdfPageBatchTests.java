@@ -27,6 +27,6 @@ class PdfPageBatchTests {
     }
 
     private static PdfNativePage page(int number) {
-        return new PdfNativePage(number, 612, 792, "");
+        return new PdfNativePage(number, 612, 792, "", PdfPageExtractionType.UNREADABLE);
     }
 }
