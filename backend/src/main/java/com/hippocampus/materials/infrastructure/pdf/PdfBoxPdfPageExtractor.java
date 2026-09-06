@@ -18,17 +18,16 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
-import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.rendering.ImageType;
-import org.apache.pdfbox.rendering.PDFRenderer;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.hippocampus.materials.domain.PdfDocumentMetadata;
 import com.hippocampus.materials.domain.PdfExtractedPage;
 import com.hippocampus.materials.domain.PdfNativePage;
-import com.hippocampus.materials.domain.PdfPageClassifier;
 import com.hippocampus.materials.domain.PdfPageBatch;
+import com.hippocampus.materials.domain.PdfPageClassifier;
 import com.hippocampus.materials.domain.PdfPageExtractionType;
 import com.hippocampus.materials.domain.TextBlockExtractionMethod;
 import com.hippocampus.materials.domain.TextBlockQuality;
@@ -43,8 +42,8 @@ import com.hippocampus.materials.port.OcrPort;
 import com.hippocampus.materials.port.OcrResult;
 import com.hippocampus.materials.port.PdfExtractionException;
 import com.hippocampus.materials.port.PdfExtractionSource;
-import com.hippocampus.materials.port.PdfPageExtractor;
 import com.hippocampus.materials.port.PdfPageBatchSink;
+import com.hippocampus.materials.port.PdfPageExtractor;
 
 public final class PdfBoxPdfPageExtractor implements PdfPageExtractor {
     private static final Logger LOG = LoggerFactory.getLogger(PdfBoxPdfPageExtractor.class);
@@ -85,7 +84,14 @@ public final class PdfBoxPdfPageExtractor implements PdfPageExtractor {
             long maxPageSourceImagePixels,
             int maxEncodedImageBytes) {
         this(objectStore, contentInspector, new SystemPdfTemporaryFiles(), PDPage::removePageResourceFromCache,
-                PdfBoxPdfPageExtractor::renderGrayscaleWithSubsampling, ocr,
+                (document, pageIndex, dpi) -> renderGrayscaleWithSubsampling(
+                        document,
+                        pageIndex,
+                        dpi,
+                        maxSourceImageDimension,
+                        maxSourceImagePixels,
+                        maxPageSourceImagePixels),
+                ocr,
                 pageBatchSize, maxPages, maxNativeTextCharsPerPage, renderDpi,
                 maxRenderWidth, maxRenderHeight, maxRenderPixels,
                 maxSourceImageDimension, maxSourceImagePixels, maxPageSourceImagePixels, maxEncodedImageBytes);
@@ -250,7 +256,8 @@ public final class PdfBoxPdfPageExtractor implements PdfPageExtractor {
         } catch (PdfExtractionException exception) {
             throw exception;
         } catch (NativeTextLimitExceededException
-                | PdfBoxPaintedImageDetector.SourceImageLimitExceededException exception) {
+                | PdfBoxPaintedImageDetector.SourceImageLimitExceededException
+                | PdfSourceImageBudget.SourceImageLimitExceededException exception) {
             throw new PdfExtractionException(PdfExtractionException.Kind.RESOURCE_LIMIT_EXCEEDED, exception);
         } catch (IOException | RuntimeException exception) {
             throw new PdfExtractionException(PdfExtractionException.Kind.EXTRACTION_FAILED, exception);
@@ -303,9 +310,17 @@ public final class PdfBoxPdfPageExtractor implements PdfPageExtractor {
     }
 
     private static BufferedImage renderGrayscaleWithSubsampling(
-            PDDocument document, int pageIndex, int dpi) throws IOException {
-        PDFRenderer renderer = new PDFRenderer(document);
-        renderer.setSubsamplingAllowed(true);
+            PDDocument document,
+            int pageIndex,
+            int dpi,
+            int maxSourceImageDimension,
+            long maxSourceImagePixels,
+            long maxPageSourceImagePixels) throws IOException {
+        BoundedPdfRenderer renderer = new BoundedPdfRenderer(
+                document,
+                maxSourceImageDimension,
+                maxSourceImagePixels,
+                maxPageSourceImagePixels);
         return renderer.renderImageWithDPI(pageIndex, dpi, ImageType.GRAY);
     }
 
