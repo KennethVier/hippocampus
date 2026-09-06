@@ -61,7 +61,12 @@ public final class PdfBoxPdfPageExtractor implements PdfPageExtractor {
     private final int maxRenderWidth;
     private final int maxRenderHeight;
     private final long maxRenderPixels;
+    private final int maxSourceImageDimension;
+    private final long maxSourceImagePixels;
+    private final long maxPageSourceImagePixels;
     private final int maxEncodedImageBytes;
+    private final PdfPageResourceCleaner pageResourceCleaner;
+    private final PdfPageRasterizer pageRasterizer;
     private final PdfPageClassifier pageClassifier = new PdfPageClassifier();
 
     public PdfBoxPdfPageExtractor(
@@ -75,16 +80,23 @@ public final class PdfBoxPdfPageExtractor implements PdfPageExtractor {
             int maxRenderWidth,
             int maxRenderHeight,
             long maxRenderPixels,
+            int maxSourceImageDimension,
+            long maxSourceImagePixels,
+            long maxPageSourceImagePixels,
             int maxEncodedImageBytes) {
-        this(objectStore, contentInspector, new SystemPdfTemporaryFiles(), ocr,
+        this(objectStore, contentInspector, new SystemPdfTemporaryFiles(), PDPage::removePageResourceFromCache,
+                PdfBoxPdfPageExtractor::renderGrayscaleWithSubsampling, ocr,
                 pageBatchSize, maxPages, maxNativeTextCharsPerPage, renderDpi,
-                maxRenderWidth, maxRenderHeight, maxRenderPixels, maxEncodedImageBytes);
+                maxRenderWidth, maxRenderHeight, maxRenderPixels,
+                maxSourceImageDimension, maxSourceImagePixels, maxPageSourceImagePixels, maxEncodedImageBytes);
     }
 
     PdfBoxPdfPageExtractor(
             BinaryObjectStore objectStore,
             MaterialContentInspector contentInspector,
             PdfTemporaryFiles temporaryFiles,
+            PdfPageResourceCleaner pageResourceCleaner,
+            PdfPageRasterizer pageRasterizer,
             OcrPort ocr,
             int pageBatchSize,
             int maxPages,
@@ -93,14 +105,20 @@ public final class PdfBoxPdfPageExtractor implements PdfPageExtractor {
             int maxRenderWidth,
             int maxRenderHeight,
             long maxRenderPixels,
+            int maxSourceImageDimension,
+            long maxSourceImagePixels,
+            long maxPageSourceImagePixels,
             int maxEncodedImageBytes) {
         this.objectStore = Objects.requireNonNull(objectStore);
         this.contentInspector = Objects.requireNonNull(contentInspector);
         this.temporaryFiles = Objects.requireNonNull(temporaryFiles);
+        this.pageResourceCleaner = Objects.requireNonNull(pageResourceCleaner);
+        this.pageRasterizer = Objects.requireNonNull(pageRasterizer);
         this.ocr = Objects.requireNonNull(ocr);
         if (pageBatchSize <= 0 || maxPages <= 0 || maxNativeTextCharsPerPage <= 0
                 || renderDpi <= 0 || maxRenderWidth <= 0 || maxRenderHeight <= 0
-                || maxRenderPixels <= 0 || maxEncodedImageBytes <= 0) {
+                || maxRenderPixels <= 0 || maxSourceImageDimension <= 0 || maxSourceImagePixels <= 0
+                || maxPageSourceImagePixels <= 0 || maxEncodedImageBytes <= 0) {
             throw new IllegalArgumentException("PDF extraction limits must be positive");
         }
         this.pageBatchSize = pageBatchSize;
@@ -110,6 +128,9 @@ public final class PdfBoxPdfPageExtractor implements PdfPageExtractor {
         this.maxRenderWidth = maxRenderWidth;
         this.maxRenderHeight = maxRenderHeight;
         this.maxRenderPixels = maxRenderPixels;
+        this.maxSourceImageDimension = maxSourceImageDimension;
+        this.maxSourceImagePixels = maxSourceImagePixels;
+        this.maxPageSourceImagePixels = maxPageSourceImagePixels;
         this.maxEncodedImageBytes = maxEncodedImageBytes;
     }
 
@@ -214,65 +235,88 @@ public final class PdfBoxPdfPageExtractor implements PdfPageExtractor {
             stripper.writeText(document, writer);
             PDPage page = document.getPage(pageNumber - 1);
             PDRectangle box = page.getCropBox();
-            boolean hasPaintedImage = PdfBoxPaintedImageDetector.hasPaintedImage(page);
+            PdfBoxPaintedImageDetector.Inspection paintedImages = PdfBoxPaintedImageDetector.inspect(page);
             String nativeText = writer.text();
             PdfNativePage nativePage = new PdfNativePage(
                     pageNumber,
                     box.getWidth(),
                     box.getHeight(),
                     nativeText,
-                    pageClassifier.classify(nativeText, hasPaintedImage));
+                    pageClassifier.classify(nativeText, paintedImages.hasPaintedImage()));
             if (nativePage.extractionType() != PdfPageExtractionType.IMAGE_ONLY) {
                 return PdfExtractedPage.nativePage(nativePage);
             }
-            return ocrPage(document, pageNumber, nativePage);
+            return ocrPage(document, pageNumber, nativePage, page, paintedImages);
         } catch (PdfExtractionException exception) {
             throw exception;
-        } catch (NativeTextLimitExceededException exception) {
+        } catch (NativeTextLimitExceededException
+                | PdfBoxPaintedImageDetector.SourceImageLimitExceededException exception) {
             throw new PdfExtractionException(PdfExtractionException.Kind.RESOURCE_LIMIT_EXCEEDED, exception);
         } catch (IOException | RuntimeException exception) {
             throw new PdfExtractionException(PdfExtractionException.Kind.EXTRACTION_FAILED, exception);
         }
     }
 
-    private PdfExtractedPage ocrPage(PDDocument document, int pageNumber, PdfNativePage page) throws IOException {
-        calculateRenderSize(document.getPage(pageNumber - 1));
-        PDFRenderer renderer = new PDFRenderer(document);
-        BufferedImage image = renderer.renderImageWithDPI(pageNumber - 1, renderDpi, ImageType.GRAY);
-        int actualWidth = image.getWidth();
-        int actualHeight = image.getHeight();
-        if (actualWidth > maxRenderWidth || actualHeight > maxRenderHeight
-                || Math.multiplyExact((long) actualWidth, actualHeight) > maxRenderPixels) {
-            throw new PdfExtractionException(PdfExtractionException.Kind.RESOURCE_LIMIT_EXCEEDED);
-        }
-        BoundedByteArrayOutputStream encoded = new BoundedByteArrayOutputStream(maxEncodedImageBytes);
+    private PdfExtractedPage ocrPage(
+            PDDocument document,
+            int pageNumber,
+            PdfNativePage page,
+            PDPage pdfPage,
+            PdfBoxPaintedImageDetector.Inspection paintedImages) throws IOException {
         try {
-            if (!ImageIO.write(image, "png", encoded)) {
-                throw new PdfExtractionException(PdfExtractionException.Kind.EXTRACTION_FAILED);
+            paintedImages.requireWithin(
+                    maxSourceImageDimension, maxSourceImagePixels, maxPageSourceImagePixels);
+            calculateRenderSize(pdfPage);
+            BufferedImage image = pageRasterizer.renderGrayscale(document, pageNumber - 1, renderDpi);
+            int actualWidth = image.getWidth();
+            int actualHeight = image.getHeight();
+            BoundedByteArrayOutputStream encoded = new BoundedByteArrayOutputStream(maxEncodedImageBytes);
+            try {
+                if (actualWidth > maxRenderWidth || actualHeight > maxRenderHeight
+                        || Math.multiplyExact((long) actualWidth, actualHeight) > maxRenderPixels) {
+                    throw new PdfExtractionException(PdfExtractionException.Kind.RESOURCE_LIMIT_EXCEEDED);
+                }
+                if (!ImageIO.write(image, "png", encoded)) {
+                    throw new PdfExtractionException(PdfExtractionException.Kind.EXTRACTION_FAILED);
+                }
+            } catch (BoundedByteArrayOutputStream.ImageLimitExceededException exception) {
+                throw new PdfExtractionException(PdfExtractionException.Kind.RESOURCE_LIMIT_EXCEEDED, exception);
+            } finally {
+                image.flush();
             }
-        } catch (BoundedByteArrayOutputStream.ImageLimitExceededException exception) {
-            throw new PdfExtractionException(PdfExtractionException.Kind.RESOURCE_LIMIT_EXCEEDED, exception);
+            OcrResult result;
+            try {
+                result = ocr.recognize(new OcrInput(encoded.toByteArray(), actualWidth, actualHeight));
+            } catch (OcrException exception) {
+                throw new PdfExtractionException(PdfExtractionException.Kind.OCR_FAILED, exception);
+            }
+            return switch (result) {
+                case OcrResult.RecognizedText recognized -> new PdfExtractedPage(
+                        page.pageNumber(), recognized.text(),
+                        TextBlockExtractionMethod.OCR, recognized.quality());
+                case OcrResult.NoUsableText ignored -> new PdfExtractedPage(
+                        page.pageNumber(), "", TextBlockExtractionMethod.OCR, TextBlockQuality.POOR);
+            };
         } finally {
-            image.flush();
+            pageResourceCleaner.clean(pdfPage);
         }
-        OcrResult result;
-        try {
-            result = ocr.recognize(new OcrInput(encoded.toByteArray(), actualWidth, actualHeight));
-        } catch (OcrException exception) {
-            throw new PdfExtractionException(PdfExtractionException.Kind.OCR_FAILED, exception);
-        }
-        return switch (result) {
-            case OcrResult.RecognizedText recognized -> new PdfExtractedPage(
-                    page.pageNumber(), recognized.text(),
-                    TextBlockExtractionMethod.OCR, recognized.quality());
-            case OcrResult.NoUsableText ignored -> new PdfExtractedPage(
-                    page.pageNumber(), "", TextBlockExtractionMethod.OCR, TextBlockQuality.POOR);
-        };
+    }
+
+    private static BufferedImage renderGrayscaleWithSubsampling(
+            PDDocument document, int pageIndex, int dpi) throws IOException {
+        PDFRenderer renderer = new PDFRenderer(document);
+        renderer.setSubsamplingAllowed(true);
+        return renderer.renderImageWithDPI(pageIndex, dpi, ImageType.GRAY);
     }
 
     private RenderSize calculateRenderSize(PDPage page) {
         PDRectangle box = page.getCropBox();
-        double scale = page.getUserUnit() * renderDpi / 72.0;
+        double rendererScale = renderDpi / 72.0;
+        double userUnit = page.getUserUnit();
+        if (!Double.isFinite(userUnit) || userUnit <= 0) {
+            throw new PdfExtractionException(PdfExtractionException.Kind.RESOURCE_LIMIT_EXCEEDED);
+        }
+        double scale = Math.max(rendererScale, userUnit * rendererScale);
         double rawWidth = box.getWidth() * scale;
         double rawHeight = box.getHeight() * scale;
         int rotation = Math.floorMod(page.getRotation(), 360);

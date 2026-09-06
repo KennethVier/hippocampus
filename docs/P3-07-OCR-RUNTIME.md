@@ -44,15 +44,24 @@ Defaults are configured under `hippocampus.materials.processing.pdf`:
 - 300 DPI;
 - maximum 10,000-pixel width and height;
 - maximum 40,000,000 pixels;
+- maximum 8,000 pixels on either source-image dimension;
+- maximum 40,000,000 pixels per unique painted source image, including image masks;
+- maximum 80,000,000 pixels across unique painted source images on one OCR page;
 - maximum 25,000,000 encoded PNG bytes;
 - maximum 8,000,000 stdout bytes and 65,536 stderr bytes;
 - maximum 200,000 TSV rows and 100,000 characters per field;
 - maximum 1,000,000 reconstructed text characters;
 - 30-second OCR timeout and 2-second termination grace.
 
-PDF crop geometry, rotation, and `UserUnit` are included in the pre-allocation
-raster budget. Only `IMAGE_ONLY` pages are rendered, and only one page raster is
-held at a time. Raster bytes are not persisted.
+The pre-allocation canvas budget conservatively follows PDFBox 3.0.8 allocation
+semantics: crop-box width and height are scaled by DPI / 72, rounded upward, and
+swapped for normalized 90/270-degree rotation. `UserUnit` can make this guard
+stricter when greater than 1, but can never reduce it below PDFBox's allocation
+when less than 1. Painted source-image dimensions and checked pixel totals are
+also inspected before OCR rendering, and PDFBox image subsampling is enabled.
+Only `IMAGE_ONLY` pages are rendered, only one page raster is held at a time,
+and the page resource cache is cleared after successful or failed OCR page
+processing. Raster bytes are not persisted.
 
 Unavailable engines, timeouts, non-zero exits, malformed TSV, input/output
 limits, process I/O, and termination failures are distinct sanitized internal

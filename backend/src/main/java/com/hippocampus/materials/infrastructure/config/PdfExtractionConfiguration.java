@@ -53,6 +53,9 @@ public class PdfExtractionConfiguration {
                 properties.ocrMaxWidthPixels(),
                 properties.ocrMaxHeightPixels(),
                 properties.ocrMaxPixels(),
+                properties.ocrMaxSourceImageDimension(),
+                properties.ocrMaxSourceImagePixels(),
+                properties.ocrMaxPageSourceImagePixels(),
                 properties.ocrMaxInputBytes());
     }
 

@@ -16,6 +16,9 @@ public record PdfExtractionProperties(
         int ocrMaxWidthPixels,
         int ocrMaxHeightPixels,
         long ocrMaxPixels,
+        int ocrMaxSourceImageDimension,
+        long ocrMaxSourceImagePixels,
+        long ocrMaxPageSourceImagePixels,
         int ocrMaxInputBytes,
         int ocrMaxStdoutBytes,
         int ocrMaxStderrBytes,
@@ -42,12 +45,22 @@ public record PdfExtractionProperties(
         }
         if (ocrRenderDpi <= 0 || ocrMaxWidthPixels <= 0 || ocrMaxHeightPixels <= 0
                 || ocrMaxPixels <= 0 || ocrMaxInputBytes <= 0 || ocrMaxStdoutBytes <= 0
+                || ocrMaxSourceImageDimension <= 0 || ocrMaxSourceImagePixels <= 0
+                || ocrMaxPageSourceImagePixels <= 0
                 || ocrMaxStderrBytes <= 0 || ocrMaxTsvRows <= 0 || ocrMaxTsvFieldChars <= 0
                 || ocrMaxTextChars <= 0) {
             throw new IllegalArgumentException("OCR resource limits must be positive");
         }
         if (ocrMaxPixels > Math.multiplyExact((long) ocrMaxWidthPixels, ocrMaxHeightPixels)) {
             throw new IllegalArgumentException("ocr-max-pixels must not exceed the dimension product");
+        }
+        if (ocrMaxSourceImagePixels > Math.multiplyExact(
+                (long) ocrMaxSourceImageDimension, ocrMaxSourceImageDimension)) {
+            throw new IllegalArgumentException("ocr-max-source-image-pixels must not exceed the dimension product");
+        }
+        if (ocrMaxPageSourceImagePixels < ocrMaxSourceImagePixels) {
+            throw new IllegalArgumentException(
+                    "ocr-max-page-source-image-pixels must cover at least one allowed source image");
         }
         if (Objects.requireNonNull(ocrTimeout, "ocr-timeout must not be null").isZero()
                 || ocrTimeout.isNegative()

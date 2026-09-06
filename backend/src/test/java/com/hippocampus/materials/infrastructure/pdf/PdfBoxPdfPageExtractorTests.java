@@ -113,7 +113,8 @@ class PdfBoxPdfPageExtractorTests {
                         assertThat(input.widthPixels()).isPositive();
                         assertThat(input.heightPixels()).isPositive();
                         return new OcrResult.RecognizedText("recognized", TextBlockQuality.STRONG);
-                    }, 10, 100, 10_000, 72, 1_000, 1_000, 1_000_000, 1_000_000);
+                    }, 10, 100, 10_000, 72, 1_000, 1_000, 1_000_000,
+                    8_000, 40_000_000, 60_000_000, 1_000_000);
             List<PdfExtractedPage> pages = new ArrayList<>();
 
             extractor.extract(source(pdf), batch -> pages.addAll(batch.pages()));
@@ -133,6 +134,21 @@ class PdfBoxPdfPageExtractorTests {
             extractor.extract(source(rotated), batch -> {});
             assertThat(calls).hasValue(1);
         }
+        try (StoredPdf smallUserUnit = imagePdf(new PDRectangle(2_000, 100), 0, 0.5f)) {
+            AtomicInteger renders = new AtomicInteger();
+            AtomicInteger cleanups = new AtomicInteger();
+            PdfBoxPdfPageExtractor extractor = extractorWithResourceControls(
+                    smallUserUnit, input -> new OcrResult.NoUsableText(), page -> cleanups.incrementAndGet(),
+                    (document, pageIndex, dpi) -> {
+                        renders.incrementAndGet();
+                        return new BufferedImage(1, 1, BufferedImage.TYPE_BYTE_GRAY);
+                    }, 1_000, 1_000, 1_000_000, 8_000, 40_000_000, 40_000_000);
+
+            assertFailure(PdfExtractionException.Kind.RESOURCE_LIMIT_EXCEEDED,
+                    () -> extractor.extract(source(smallUserUnit), batch -> {}));
+            assertThat(renders).hasValue(0);
+            assertThat(cleanups).hasValue(1);
+        }
         try (StoredPdf tooWide = imagePdf(new PDRectangle(20_000, 100), 0, 1)) {
             AtomicInteger calls = new AtomicInteger();
             PdfBoxPdfPageExtractor extractor = boundedExtractor(tooWide, calls, 10_000, 10_000, 40_000_000);
@@ -149,13 +165,96 @@ class PdfBoxPdfPageExtractorTests {
         }
     }
 
+    @Test
+    void rejectsOversizedAndOverflowingPaintedImageSourcesBeforeRasterization() throws Exception {
+        try (StoredPdf oversized = sourceImagePdf(2_000, 2_000, 1)) {
+            AtomicInteger renders = new AtomicInteger();
+            PdfBoxPdfPageExtractor extractor = extractorWithResourceControls(
+                    oversized, input -> new OcrResult.NoUsableText(), PDPage::removePageResourceFromCache,
+                    (document, pageIndex, dpi) -> {
+                        renders.incrementAndGet();
+                        return new BufferedImage(1, 1, BufferedImage.TYPE_BYTE_GRAY);
+                    }, 1_000, 1_000, 1_000_000, 1_000, 1_000_000, 2_000_000);
+
+            assertFailure(PdfExtractionException.Kind.RESOURCE_LIMIT_EXCEEDED,
+                    () -> extractor.extract(source(oversized), batch -> {}));
+            assertThat(renders).hasValue(0);
+        }
+        try (StoredPdf overflowing = sourceImageMetadataOverflowPdf()) {
+            AtomicInteger renders = new AtomicInteger();
+            PdfBoxPdfPageExtractor extractor = extractorWithResourceControls(
+                    overflowing, input -> new OcrResult.NoUsableText(), PDPage::removePageResourceFromCache,
+                    (document, pageIndex, dpi) -> {
+                        renders.incrementAndGet();
+                        return new BufferedImage(1, 1, BufferedImage.TYPE_BYTE_GRAY);
+                    }, 1_000, 1_000, 1_000_000, Integer.MAX_VALUE, Long.MAX_VALUE, Long.MAX_VALUE);
+
+            assertFailure(PdfExtractionException.Kind.RESOURCE_LIMIT_EXCEEDED,
+                    () -> extractor.extract(source(overflowing), batch -> {}));
+            assertThat(renders).hasValue(0);
+        }
+    }
+
+    @Test
+    void cleansPageResourcesAfterSuccessfulAndFailedOcrRendering() throws Exception {
+        try (StoredPdf pdf = imagePdf(PDRectangle.LETTER, 0, 1)) {
+            AtomicInteger successfulCleanups = new AtomicInteger();
+            PdfBoxPdfPageExtractor successful = extractorWithResourceControls(
+                    pdf, input -> new OcrResult.NoUsableText(), page -> successfulCleanups.incrementAndGet(),
+                    (document, pageIndex, dpi) -> new BufferedImage(10, 10, BufferedImage.TYPE_BYTE_GRAY),
+                    1_000, 1_000, 1_000_000, 8_000, 40_000_000, 40_000_000);
+            successful.extract(source(pdf), batch -> {});
+            assertThat(successfulCleanups).hasValue(1);
+
+            AtomicInteger failedCleanups = new AtomicInteger();
+            PdfBoxPdfPageExtractor failed = extractorWithResourceControls(
+                    pdf, input -> new OcrResult.NoUsableText(), page -> failedCleanups.incrementAndGet(),
+                    (document, pageIndex, dpi) -> {
+                        throw new IOException("synthetic render failure");
+                    }, 1_000, 1_000, 1_000_000, 8_000, 40_000_000, 40_000_000);
+            assertFailure(PdfExtractionException.Kind.EXTRACTION_FAILED,
+                    () -> failed.extract(source(pdf), batch -> {}));
+            assertThat(failedCleanups).hasValue(1);
+
+            AtomicInteger ocrFailureCleanups = new AtomicInteger();
+            PdfBoxPdfPageExtractor ocrFailed = extractorWithResourceControls(
+                    pdf, input -> {
+                        throw new com.hippocampus.materials.port.OcrException(
+                                com.hippocampus.materials.port.OcrException.Kind.TIMEOUT);
+                    }, page -> ocrFailureCleanups.incrementAndGet(),
+                    (document, pageIndex, dpi) -> new BufferedImage(10, 10, BufferedImage.TYPE_BYTE_GRAY),
+                    1_000, 1_000, 1_000_000, 8_000, 40_000_000, 40_000_000);
+            assertFailure(PdfExtractionException.Kind.OCR_FAILED,
+                    () -> ocrFailed.extract(source(pdf), batch -> {}));
+            assertThat(ocrFailureCleanups).hasValue(1);
+        }
+    }
+
+    private static PdfBoxPdfPageExtractor extractorWithResourceControls(
+            StoredPdf pdf,
+            com.hippocampus.materials.port.OcrPort ocr,
+            PdfPageResourceCleaner cleaner,
+            PdfPageRasterizer rasterizer,
+            int maxWidth,
+            int maxHeight,
+            long maxPixels,
+            int maxSourceDimension,
+            long maxSourcePixels,
+            long maxPageSourcePixels) {
+        return new PdfBoxPdfPageExtractor(
+                new FileSourceObjectStore(pdf.path), inspector(), new SystemPdfTemporaryFiles(), cleaner, rasterizer,
+                ocr, 1, 100, 10_000, 72, maxWidth, maxHeight, maxPixels,
+                maxSourceDimension, maxSourcePixels, maxPageSourcePixels, 1_000_000);
+    }
+
     private static PdfBoxPdfPageExtractor boundedExtractor(
             StoredPdf pdf, AtomicInteger calls, int maxWidth, int maxHeight, long maxPixels) {
         return new PdfBoxPdfPageExtractor(
                 new FileSourceObjectStore(pdf.path), inspector(), input -> {
                     calls.incrementAndGet();
                     return new OcrResult.NoUsableText();
-                }, 1, 100, 10_000, 72, maxWidth, maxHeight, maxPixels, 1_000_000);
+                }, 1, 100, 10_000, 72, maxWidth, maxHeight, maxPixels,
+                8_000, 40_000_000, 60_000_000, 1_000_000);
     }
 
     @Test
@@ -326,7 +425,8 @@ class PdfBoxPdfPageExtractorTests {
             StoredPdf pdf, int batchSize, int maxPages, int maxTextCharacters) {
         return new PdfBoxPdfPageExtractor(
                 new FileSourceObjectStore(pdf.path), inspector(), input -> new OcrResult.NoUsableText(),
-                batchSize, maxPages, maxTextCharacters, 72, 10_000, 10_000, 40_000_000, 25_000_000);
+                batchSize, maxPages, maxTextCharacters, 72, 10_000, 10_000, 40_000_000,
+                8_000, 40_000_000, 60_000_000, 25_000_000);
     }
 
     private static PdfBoxPdfPageExtractor extractor(
@@ -337,8 +437,18 @@ class PdfBoxPdfPageExtractorTests {
             int maxPages,
             int maxTextCharacters) {
         return new PdfBoxPdfPageExtractor(
-                store, inspector, temporaryFiles, input -> new OcrResult.NoUsableText(),
-                batchSize, maxPages, maxTextCharacters, 72, 10_000, 10_000, 40_000_000, 25_000_000);
+                store, inspector, temporaryFiles, PDPage::removePageResourceFromCache,
+                PdfBoxPdfPageExtractorTests::renderGrayscaleWithSubsampling,
+                input -> new OcrResult.NoUsableText(), batchSize, maxPages, maxTextCharacters,
+                72, 10_000, 10_000, 40_000_000,
+                8_000, 40_000_000, 60_000_000, 25_000_000);
+    }
+
+    private static BufferedImage renderGrayscaleWithSubsampling(
+            PDDocument document, int pageIndex, int dpi) throws IOException {
+        org.apache.pdfbox.rendering.PDFRenderer renderer = new org.apache.pdfbox.rendering.PDFRenderer(document);
+        renderer.setSubsamplingAllowed(true);
+        return renderer.renderImageWithDPI(pageIndex, dpi, org.apache.pdfbox.rendering.ImageType.GRAY);
     }
 
     private static TikaMaterialContentInspector inspector() {
@@ -500,6 +610,41 @@ class PdfBoxPdfPageExtractorTests {
             PDImageXObject image = LosslessFactory.createFromImage(document, pixel);
             try (PDPageContentStream content = new PDPageContentStream(document, page)) {
                 content.drawImage(image, 1, 1, 2, 2);
+            }
+            document.save(path.toFile());
+        }
+        return new StoredPdf(path);
+    }
+
+    private static StoredPdf sourceImagePdf(int width, int height, int imageCount) throws IOException {
+        Path path = Files.createTempFile("pdf-source-image-budget-test-", ".pdf");
+        try (PDDocument document = new PDDocument()) {
+            PDPage page = addPage(document);
+            try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+                for (int index = 0; index < imageCount; index++) {
+                    BufferedImage source = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_GRAY);
+                    PDImageXObject image = LosslessFactory.createFromImage(document, source);
+                    source.flush();
+                    content.drawImage(image, 10 + index, 10, 2, 2);
+                }
+            }
+            document.save(path.toFile());
+        }
+        return new StoredPdf(path);
+    }
+
+    private static StoredPdf sourceImageMetadataOverflowPdf() throws IOException {
+        Path path = Files.createTempFile("pdf-source-image-overflow-test-", ".pdf");
+        try (PDDocument document = new PDDocument()) {
+            PDPage page = addPage(document);
+            try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+                for (int index = 0; index < 3; index++) {
+                    BufferedImage pixel = new BufferedImage(1, 1, BufferedImage.TYPE_BYTE_GRAY);
+                    PDImageXObject image = LosslessFactory.createFromImage(document, pixel);
+                    image.setWidth(Integer.MAX_VALUE);
+                    image.setHeight(Integer.MAX_VALUE);
+                    content.drawImage(image, 10 + index, 10, 1, 1);
+                }
             }
             document.save(path.toFile());
         }

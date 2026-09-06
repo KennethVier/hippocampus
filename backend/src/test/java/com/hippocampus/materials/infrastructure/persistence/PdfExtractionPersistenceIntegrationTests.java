@@ -325,7 +325,8 @@ class PdfExtractionPersistenceIntegrationTests extends PostgresIntegrationTestSu
             PdfPageExtractor realExtractor = new PdfBoxPdfPageExtractor(
                     store, (input, length) -> new com.hippocampus.materials.port.MaterialContentInspector.Inspection(
                             "application/pdf"), input -> new com.hippocampus.materials.port.OcrResult.NoUsableText(),
-                    2, 100, 10_000, 72, 10_000, 10_000, 40_000_000, 25_000_000);
+                    2, 100, 10_000, 72, 10_000, 10_000, 40_000_000,
+                    8_000, 40_000_000, 60_000_000, 25_000_000);
             PdfPageExtractor transactionCheckingExtractor = (source, sink) -> {
                 assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
                 return realExtractor.extract(source, batch -> {
