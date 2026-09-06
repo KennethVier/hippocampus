@@ -55,6 +55,7 @@ public final class PdfBoxPdfStructureInspector implements PdfStructureInspector 
     private final PdfTemporaryFiles temporaryFiles;
     private final int pageBatchSize;
     private final int maxPages;
+    private final int maxNativeTextCharsPerPage;
     private final int maxOutlineItems;
     private final int maxOutlineDepth;
     private final int maxTextPositionsPerPage;
@@ -65,12 +66,14 @@ public final class PdfBoxPdfStructureInspector implements PdfStructureInspector 
             MaterialContentInspector contentInspector,
             int pageBatchSize,
             int maxPages,
+            int maxNativeTextCharsPerPage,
             int maxOutlineItems,
             int maxOutlineDepth,
             int maxTextPositionsPerPage,
             int maxLayoutLinesPerPage) {
         this(objectStore, contentInspector, new SystemPdfTemporaryFiles(), pageBatchSize, maxPages,
-                maxOutlineItems, maxOutlineDepth, maxTextPositionsPerPage, maxLayoutLinesPerPage);
+                maxNativeTextCharsPerPage, maxOutlineItems, maxOutlineDepth, maxTextPositionsPerPage,
+                maxLayoutLinesPerPage);
     }
 
     PdfBoxPdfStructureInspector(
@@ -79,6 +82,7 @@ public final class PdfBoxPdfStructureInspector implements PdfStructureInspector 
             PdfTemporaryFiles temporaryFiles,
             int pageBatchSize,
             int maxPages,
+            int maxNativeTextCharsPerPage,
             int maxOutlineItems,
             int maxOutlineDepth,
             int maxTextPositionsPerPage,
@@ -86,12 +90,14 @@ public final class PdfBoxPdfStructureInspector implements PdfStructureInspector 
         this.objectStore = Objects.requireNonNull(objectStore);
         this.contentInspector = Objects.requireNonNull(contentInspector);
         this.temporaryFiles = Objects.requireNonNull(temporaryFiles);
-        if (pageBatchSize <= 0 || maxPages <= 0 || maxOutlineItems <= 0 || maxOutlineDepth <= 0
-                || maxTextPositionsPerPage <= 0 || maxLayoutLinesPerPage <= 0) {
+        if (pageBatchSize <= 0 || maxPages <= 0 || maxNativeTextCharsPerPage <= 0
+                || maxOutlineItems <= 0 || maxOutlineDepth <= 0 || maxTextPositionsPerPage <= 0
+                || maxLayoutLinesPerPage <= 0) {
             throw new IllegalArgumentException("PDF structure limits must be positive");
         }
         this.pageBatchSize = pageBatchSize;
         this.maxPages = maxPages;
+        this.maxNativeTextCharsPerPage = maxNativeTextCharsPerPage;
         this.maxOutlineItems = maxOutlineItems;
         this.maxOutlineDepth = maxOutlineDepth;
         this.maxTextPositionsPerPage = maxTextPositionsPerPage;
@@ -270,7 +276,7 @@ public final class PdfBoxPdfStructureInspector implements PdfStructureInspector 
                 || cropBox.getWidth() <= 0 || cropBox.getHeight() <= 0) {
             throw failure(PdfStructureInspectionException.Kind.RESOURCE_LIMIT_EXCEEDED, null);
         }
-        PositionCollector collector = new PositionCollector(maxTextPositionsPerPage);
+        PositionCollector collector = new PositionCollector(maxTextPositionsPerPage, maxNativeTextCharsPerPage);
         collector.setStartPage(pageNumber);
         collector.setEndPage(pageNumber);
         collector.setSortByPosition(false);
@@ -409,18 +415,21 @@ public final class PdfBoxPdfStructureInspector implements PdfStructureInspector 
             String text, float x, float y, float width, float height, float fontSize, FontEmphasis emphasis) {}
 
     private static final class PositionCollector extends PDFTextStripper {
-        private final int maximum;
+        private final int maximumPositions;
+        private final int maximumRetainedCharacters;
         private final List<Glyph> glyphs = new ArrayList<>();
         private int positionsSeen;
+        private int retainedCharacters;
 
-        private PositionCollector(int maximum) throws IOException {
-            this.maximum = maximum;
+        private PositionCollector(int maximumPositions, int maximumRetainedCharacters) throws IOException {
+            this.maximumPositions = maximumPositions;
+            this.maximumRetainedCharacters = maximumRetainedCharacters;
         }
 
         @Override
         protected void processTextPosition(TextPosition position) {
             positionsSeen = Math.addExact(positionsSeen, 1);
-            if (positionsSeen > maximum) {
+            if (positionsSeen > maximumPositions) {
                 throw new PositionLimitExceeded();
             }
             String text = position.getUnicode();
@@ -430,6 +439,11 @@ public final class PdfBoxPdfStructureInspector implements PdfStructureInspector 
             if (text.length() > PdfStructureSignals.MAX_TITLE_CHARACTERS) {
                 throw new PositionLimitExceeded();
             }
+            int nextRetainedCharacters = Math.addExact(retainedCharacters, text.length());
+            if (nextRetainedCharacters > maximumRetainedCharacters) {
+                throw new PositionLimitExceeded();
+            }
+            retainedCharacters = nextRetainedCharacters;
             glyphs.add(new Glyph(
                     text,
                     position.getXDirAdj(),

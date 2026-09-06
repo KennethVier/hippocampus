@@ -36,6 +36,7 @@ public final class JdbcDetectedDocumentStructurePersistence implements DetectedD
               AND btrim(mv.storage_key) <> ''
               AND mv.file_size_bytes > 0
             FOR UPDATE OF mv, dn
+            FOR SHARE OF m
             """;
     private static final String PAGE_SUMMARY = """
             SELECT count(*) AS block_count, min(page_number) AS min_page, max(page_number) AS max_page,

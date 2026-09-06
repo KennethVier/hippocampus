@@ -131,6 +131,33 @@ class PdfBoxPdfStructureInspectorTests {
     }
 
     @Test
+    void boundsAggregateRetainedNativeTextPerPage() throws Exception {
+        Path underLimit = createSinglePagePdf(List.of(
+                new TextLine("abcde", 72, 720, 12, false),
+                new TextLine("fghij", 72, 700, 12, false)));
+        try {
+            CollectingSink sink = new CollectingSink();
+            inspector(underLimit, 1, 10, 10, 10, 10, 1_000, 100).inspect(source(underLimit), sink);
+            assertThat(sink.pages).singleElement()
+                    .satisfies(page -> assertThat(page.lines()).isNotEmpty());
+        } finally {
+            Files.deleteIfExists(underLimit);
+        }
+
+        Path overLimit = createSinglePagePdf(List.of(
+                new TextLine("abcde", 72, 720, 12, false),
+                new TextLine("fghijk", 72, 700, 12, false)));
+        try {
+            PdfExtractionSource overLimitSource = source(overLimit);
+            assertFailure(PdfStructureInspectionException.Kind.RESOURCE_LIMIT_EXCEEDED,
+                    () -> inspector(overLimit, 1, 10, 10, 10, 10, 1_000, 100)
+                            .inspect(overLimitSource, new CollectingSink()));
+        } finally {
+            Files.deleteIfExists(overLimit);
+        }
+    }
+
+    @Test
     void cleansTemporaryFileAfterSuccessAndPreservesPrimaryFailureWhenCleanupAlsoFails() throws Exception {
         Path source = createBlankPdf(1);
         Path staged = Files.createTempFile("structure-staged-", ".pdf");
@@ -186,16 +213,21 @@ class PdfBoxPdfStructureInspectorTests {
 
     private static PdfBoxPdfStructureInspector inspector(
             Path path, int batch, int pages, int outlines, int depth, int positions, int lines) {
+        return inspector(path, batch, pages, Integer.MAX_VALUE, outlines, depth, positions, lines);
+    }
+
+    private static PdfBoxPdfStructureInspector inspector(
+            Path path, int batch, int pages, int nativeTextChars, int outlines, int depth, int positions, int lines) {
         return new PdfBoxPdfStructureInspector(
                 store(path), (input, length) -> new com.hippocampus.materials.port.MaterialContentInspector.Inspection(
-                        "application/pdf"), batch, pages, outlines, depth, positions, lines);
+                        "application/pdf"), batch, pages, nativeTextChars, outlines, depth, positions, lines);
     }
 
     private static PdfBoxPdfStructureInspector testInspector(
             Path path, PdfTemporaryFiles temporaryFiles, int pages) {
         return new PdfBoxPdfStructureInspector(
                 store(path), (input, length) -> new com.hippocampus.materials.port.MaterialContentInspector.Inspection(
-                        "application/pdf"), temporaryFiles, 2, pages, 10, 5, 1_000, 100);
+                        "application/pdf"), temporaryFiles, 2, pages, Integer.MAX_VALUE, 10, 5, 1_000, 100);
     }
 
     private static BinaryObjectStore store(Path source) {

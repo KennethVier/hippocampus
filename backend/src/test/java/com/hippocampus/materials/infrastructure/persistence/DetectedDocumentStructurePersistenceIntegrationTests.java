@@ -3,17 +3,25 @@ package com.hippocampus.materials.infrastructure.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.sql.SQLException;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -118,6 +126,52 @@ class DetectedDocumentStructurePersistenceIntegrationTests extends PostgresInteg
                     () -> persistence.persistOrVerify(invalidSiblingOrder)))
                     .isInstanceOf(DetectedDocumentStructurePersistenceException.class);
             assertThat(nodeCount(jdbc, versionId, rootId)).isZero();
+        }
+    }
+
+    @Test
+    void concurrentLifecycleDeletionCannotBecomeStaleStructureWrite() throws Exception {
+        try (var context = startApplication();
+                Connection deleting = openPostgresConnection()) {
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            PlatformTransactionManager transactions = context.getBean(PlatformTransactionManager.class);
+            UUID versionId = extractedPdf(context, jdbc, 3);
+            UUID rootId = rootId(jdbc, versionId);
+            UUID materialId = jdbc.sql("SELECT material_id FROM material_versions WHERE id = ?")
+                    .param(versionId).query(UUID.class).single();
+            JdbcDetectedDocumentStructurePersistence persistence =
+                    new JdbcDetectedDocumentStructurePersistence(jdbc, 20);
+
+            deleting.setAutoCommit(false);
+            try (PreparedStatement statement = deleting.prepareStatement(
+                    "UPDATE materials SET status = 'DELETED', updated_at = CURRENT_TIMESTAMP WHERE id = ?")) {
+                statement.setObject(1, materialId);
+                statement.executeUpdate();
+            }
+
+            ExecutorService executor = Executors.newSingleThreadExecutor();
+            boolean committed = false;
+            try {
+                Future<Void> write = executor.submit(() -> {
+                    inTransaction(transactions, () -> persistence.persistOrVerify(structure(versionId, rootId, 3)));
+                    return null;
+                });
+
+                assertThatThrownBy(() -> write.get(500, TimeUnit.MILLISECONDS))
+                        .isInstanceOf(TimeoutException.class);
+                deleting.commit();
+                committed = true;
+
+                assertThatThrownBy(() -> get(write))
+                        .isInstanceOf(DetectedDocumentStructurePersistenceException.class);
+                assertThat(nodeCount(jdbc, versionId, rootId)).isZero();
+            } finally {
+                if (!committed) {
+                    deleting.rollback();
+                }
+                executor.shutdownNow();
+                assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+            }
         }
     }
 
@@ -228,6 +282,14 @@ class DetectedDocumentStructurePersistenceIntegrationTests extends PostgresInteg
             assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
             operation.run();
         });
+    }
+
+    private static Void get(Future<Void> future) throws Throwable {
+        try {
+            return future.get(10, TimeUnit.SECONDS);
+        } catch (ExecutionException exception) {
+            throw exception.getCause();
+        }
     }
 
     private record NodeIdentity(UUID id, UUID parentId, String type, int ordinal, OffsetDateTime createdAt) {}

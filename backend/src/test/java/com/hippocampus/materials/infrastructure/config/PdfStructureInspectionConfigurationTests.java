@@ -58,6 +58,7 @@ class PdfStructureInspectionConfigurationTests {
         PdfExtractionProperties properties = mock(PdfExtractionProperties.class);
         when(properties.pageBatchSize()).thenReturn(20);
         when(properties.maxPages()).thenReturn(2_000);
+        when(properties.maxNativeTextCharsPerPage()).thenReturn(200_000);
         return properties;
     }
 }

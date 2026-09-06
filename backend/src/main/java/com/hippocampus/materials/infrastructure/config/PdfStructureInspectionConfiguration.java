@@ -25,6 +25,7 @@ public class PdfStructureInspectionConfiguration {
                 contentInspector,
                 extractionProperties.pageBatchSize(),
                 extractionProperties.maxPages(),
+                extractionProperties.maxNativeTextCharsPerPage(),
                 structureProperties.maxOutlineItems(),
                 structureProperties.maxOutlineDepth(),
                 structureProperties.maxTextPositionsPerPage(),

@@ -151,14 +151,19 @@ public final class DeterministicDocumentStructureDetector {
         }
 
         private void countRepeatedRegions(List<PdfStructureSignals.Line> lines) {
+            Set<RepeatedKey> pageKeys = new HashSet<>();
             for (PdfStructureSignals.Line line : lines) {
                 if (line.verticalBand() != VerticalBand.TOP && line.verticalBand() != VerticalBand.BOTTOM) {
                     continue;
                 }
                 RepeatedKey key = new RepeatedKey(comparisonKey(line.comparisonText()), line.verticalBand());
-                if (!key.text().isBlank() && (repeatedRegions.containsKey(key) || repeatedRegions.size() < maxCandidates)) {
-                    repeatedRegions.merge(key, 1, Math::addExact);
+                if (!key.text().isBlank()
+                        && (repeatedRegions.containsKey(key) || repeatedRegions.size() < maxCandidates)) {
+                    pageKeys.add(key);
                 }
+            }
+            for (RepeatedKey key : pageKeys) {
+                repeatedRegions.merge(key, 1, Math::addExact);
             }
         }
 
@@ -275,15 +280,17 @@ public final class DeterministicDocumentStructureDetector {
                 if (exactCandidate != null) {
                     candidates.remove(exactCandidate);
                     addCandidate(new Candidate(
-                            pageNumber, exactCandidate.lineOrder(), exactCandidate.title(), outlineLevel(outline.depth()),
-                            Math.max(exactCandidate.score(), 6), DocumentNodeDetectionOrigin.NATIVE, "HIGH",
-                            exactCandidate.band(), 0));
+                            pageNumber, exactCandidate.lineOrder(), exactCandidate.title(),
+                            outlineLevel(outline.depth()), Math.max(exactCandidate.score(), 6),
+                            DocumentNodeDetectionOrigin.NATIVE,
+                            outlineConfirmationConfidence(block), exactCandidate.band(), 0));
                     continue;
                 }
                 if (exactBody != null) {
                     addCandidate(new Candidate(
                             pageNumber, exactBody.lineOrder(), exactBody.title(), outlineLevel(outline.depth()), 5,
-                            DocumentNodeDetectionOrigin.NATIVE, "HIGH", VerticalBand.BODY, 0));
+                            DocumentNodeDetectionOrigin.NATIVE, outlineConfirmationConfidence(block), VerticalBand.BODY,
+                            0));
                     continue;
                 }
                 boolean poorOrBlank = block.content().isBlank()
@@ -302,6 +309,23 @@ public final class DeterministicDocumentStructureDetector {
                             DocumentNodeDetectionOrigin.NATIVE, "MEDIUM", VerticalBand.BODY, 0));
                 }
             }
+        }
+
+        private String outlineConfirmationConfidence(TextBlock block) {
+            return switch (block.extractionMethod()) {
+                case NATIVE -> "HIGH";
+                case OCR -> {
+                    TextBlockQuality quality = block.quality();
+                    if (quality == null) {
+                        yield "LOW";
+                    }
+                    yield switch (quality) {
+                        case STRONG -> "HIGH";
+                        case LIMITED -> "MEDIUM";
+                        case POOR -> "LOW";
+                    };
+                }
+            };
         }
 
         private void addCandidate(Candidate candidate) {
@@ -362,8 +386,8 @@ public final class DeterministicDocumentStructureDetector {
                     endPage = Math.min(endPage, nodes.get(item.parentIndex()).endPage());
                 }
                 nodes.add(new Node(
-                        item.parentIndex(), nodeType(item.candidate().level()), item.candidate().title(), item.ordinal(),
-                        item.candidate().page(), Math.max(item.candidate().page(), endPage),
+                        item.parentIndex(), nodeType(item.candidate().level()), item.candidate().title(),
+                        item.ordinal(), item.candidate().page(), Math.max(item.candidate().page(), endPage),
                         item.candidate().origin(), item.candidate().confidence()));
             }
             return new DetectedDocumentStructure(root.materialVersionId(), root.id(), root.endPage(), nodes);

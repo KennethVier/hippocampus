@@ -66,6 +66,42 @@ class DeterministicDocumentStructureDetectorTests {
     }
 
     @Test
+    void exactOutlineConfirmationUsesStrongOcrAsHighConfidence() {
+        DeterministicDocumentStructureDetector.Analysis analysis = analysis(
+                1, List.of(new PdfStructureSignals.OutlineEntry("Chapter 1 Scanned", 1, 1, 1)));
+        accept(analysis, ocrBlock(1, "Chapter 1 Scanned", TextBlockQuality.STRONG),
+                page(1, heading(1, "Chapter 1 Scanned")));
+
+        assertThat(analysis.finish().nodes()).singleElement()
+                .extracting(DetectedDocumentStructure.Node::detectionConfidence)
+                .isEqualTo("HIGH");
+    }
+
+    @Test
+    void exactOutlineConfirmationUsesLimitedOcrAsMediumConfidence() {
+        DeterministicDocumentStructureDetector.Analysis analysis = analysis(
+                1, List.of(new PdfStructureSignals.OutlineEntry("Chapter 1 Scanned", 1, 1, 1)));
+        accept(analysis, ocrBlock(1, "Chapter 1 Scanned", TextBlockQuality.LIMITED),
+                page(1, heading(1, "Chapter 1 Scanned")));
+
+        assertThat(analysis.finish().nodes()).singleElement()
+                .extracting(DetectedDocumentStructure.Node::detectionConfidence)
+                .isEqualTo("MEDIUM");
+    }
+
+    @Test
+    void exactOutlineConfirmationUsesPoorOcrAsLowConfidence() {
+        DeterministicDocumentStructureDetector.Analysis analysis = analysis(
+                1, List.of(new PdfStructureSignals.OutlineEntry("Chapter 1 Scanned", 1, 1, 1)));
+        accept(analysis, ocrBlock(1, "Chapter 1 Scanned", TextBlockQuality.POOR),
+                page(1, heading(1, "Chapter 1 Scanned")));
+
+        assertThat(analysis.finish().nodes()).singleElement()
+                .extracting(DetectedDocumentStructure.Node::detectionConfidence)
+                .isEqualTo("LOW");
+    }
+
+    @Test
     void contradictoryStrongBodyRejectsBookmarkButKeepsIndependentHeuristic() {
         DeterministicDocumentStructureDetector.Analysis analysis = analysis(
                 1, List.of(new PdfStructureSignals.OutlineEntry("Expected Chapter", 1, 1, 1)));
@@ -93,10 +129,53 @@ class DeterministicDocumentStructureDetectorTests {
         DeterministicDocumentStructureDetector.Analysis analysis = analysis(4, List.of());
         for (int page = 1; page <= 4; page++) {
             accept(analysis, nativeBlock(page, "MEDICAL PHYSIOLOGY\nORDINARY UPPERCASE BODY"),
-                    page(page, headingAt(1, "MEDICAL PHYSIOLOGY", VerticalBand.TOP), body(2, "ORDINARY UPPERCASE BODY")));
+                    page(page,
+                            headingAt(1, "MEDICAL PHYSIOLOGY", VerticalBand.TOP),
+                            body(2, "ORDINARY UPPERCASE BODY")));
         }
 
         assertThat(analysis.finish().nodes()).isEmpty();
+    }
+
+    @Test
+    void repeatedRegionMultipleTimesOnOnePageIsNotCrossPageRepetition() {
+        DeterministicDocumentStructureDetector.Analysis analysis = analysis(1, List.of());
+        accept(analysis, nativeBlock(1, "1 Shared Heading\n1 Shared Heading\n1 Shared Heading"),
+                page(1,
+                        headingAt(1, "1 Shared Heading", VerticalBand.TOP),
+                        headingAt(2, "1 Shared Heading", VerticalBand.TOP),
+                        headingAt(3, "1 Shared Heading", VerticalBand.TOP)));
+
+        assertThat(analysis.finish().nodes()).singleElement()
+                .extracting(DetectedDocumentStructure.Node::title)
+                .isEqualTo("1 Shared Heading");
+    }
+
+    @Test
+    void repeatedRegionOnceOnSeveralPagesIsCrossPageRepetition() {
+        DeterministicDocumentStructureDetector.Analysis analysis = analysis(3, List.of());
+        for (int page = 1; page <= 3; page++) {
+            accept(analysis, nativeBlock(page, "1 Shared Heading"),
+                    page(page, headingAt(1, "1 Shared Heading", VerticalBand.TOP)));
+        }
+
+        assertThat(analysis.finish().nodes()).isEmpty();
+    }
+
+    @Test
+    void repeatedRegionTopAndBottomSignaturesRemainDistinct() {
+        DeterministicDocumentStructureDetector.Analysis analysis = analysis(4, List.of());
+        for (int page = 1; page <= 3; page++) {
+            accept(analysis, nativeBlock(page, "1 Shared Heading"),
+                    page(page, headingAt(1, "1 Shared Heading", VerticalBand.TOP)));
+        }
+        accept(analysis, nativeBlock(4, "1 Shared Heading"),
+                page(4, headingAt(1, "1 Shared Heading", VerticalBand.BOTTOM)));
+
+        assertThat(analysis.finish().nodes()).singleElement().satisfies(node -> {
+            assertThat(node.title()).isEqualTo("1 Shared Heading");
+            assertThat(node.startPage()).isEqualTo(4);
+        });
     }
 
     @Test
