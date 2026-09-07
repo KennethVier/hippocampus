@@ -1,9 +1,11 @@
 package com.hippocampus.materials.infrastructure.persistence;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.hippocampus.materials.domain.DocumentNode;
+import com.hippocampus.materials.domain.DocumentNodeType;
 import com.hippocampus.materials.domain.TextBlock;
 import com.hippocampus.materials.port.DocumentStructureRepository;
 
@@ -16,6 +18,13 @@ public final class JpaDocumentStructureRepository implements DocumentStructureRe
             SpringDataTextBlockRepository blocks) {
         this.nodes = nodes;
         this.blocks = blocks;
+    }
+
+    @Override
+    public Optional<DocumentNode> findDocumentRoot(UUID materialVersionId) {
+        return nodes.findByMaterialVersionIdAndNodeTypeAndParentIdIsNull(
+                        materialVersionId, DocumentNodeType.DOCUMENT)
+                .map(JpaDocumentStructureRepository::toDomain);
     }
 
     @Override
