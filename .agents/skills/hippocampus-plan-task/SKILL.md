@@ -1,65 +1,67 @@
 ---
 name: hippocampus-plan-task
-description: Use when the user asks Codex to plan a Hippocampus implementation-tracker task before coding. Produces a source-grounded, scope-safe plan with SRP/pattern/framework/security reasoning and must not modify files.
+description: Use only when a detailed Hippocampus tracker-task plan is requested before coding. Planning is read-only and should produce a compact execution packet so the implementation agent can start immediately without re-planning.
 ---
 
 # Plan a Hippocampus Tracker Task
 
 ## Non-Negotiable
 
-PLAN ONLY. Do not create/modify files, install dependencies, run generators, implement, or commit.
+PLAN ONLY. Do not modify files, install dependencies, implement, commit, push, or create a PR.
 
 ## Workflow
 
-1. Identify exact task ID.
-2. Apply the Source-of-Truth workflow.
-3. Inspect current repository state.
-4. Extract goal, dependencies, build requirements, expected behavior, tests, DoD, and scope exclusions.
-5. Check current phase in Document 26.
-6. Read only relevant authority docs.
-7. For backend work, apply both `hippocampus-java-spring-engineering` and `hippocampus-spring-boot-engineering`.
-8. Apply `hippocampus-react-typescript-engineering` for React/TypeScript work.
-9. Apply `hippocampus-architecture-patterns` for non-trivial responsibility/pattern decisions.
-10. Identify security-sensitive boundaries that the implementation and final vulnerability review must verify.
-11. Produce the required plan.
-12. Stop.
+1. Identify the exact tracker task.
+2. Resolve only the required Source-of-Truth context.
+3. Inspect only repository files needed to understand the current implementation boundary.
+4. Determine goal, dependencies, scope exclusions, required behavior, expected files, validation, DoD, and security-sensitive boundaries.
+5. Make architecture/framework decisions only where the task creates real design pressure.
+6. Flag unresolved significant decisions for reviewer/ADR handling.
+7. Produce the detailed plan and a short implementation execution packet.
+8. Stop.
 
-## Required Plan Output
+Do not automatically load Java, Spring Boot, architecture, testing, or security skills. Load a detailed skill only when the plan contains a concrete question that requires its guidance.
 
-### 1. Task
-### 2. Authoritative Sources Read
-### 3. Current Repository Assessment
-### 4. Requirements Extracted
-Separate MUST / MUST NOT / DEFERRED.
-### 5. Responsibility and Boundary Design
-Identify owning module, SRP boundaries, dependency direction, domain invariants, framework/external boundaries, and which Spring concerns belong at API/application/infrastructure/bootstrap edges rather than domain code.
-### 6. Pattern Decisions
-For each significant pattern: problem/design pressure, selected pattern, why it fits, and complexity cost. Also identify important patterns deliberately not introduced when that prevents speculative abstraction.
-### 7. Spring Boot Framework Decisions
-When backend/framework work is in scope, identify relevant DI/bean ownership, configuration, controller/validation, transaction, persistence, security/session/CSRF/CORS, external-client, observability, and Spring test-boundary decisions. Explicitly note which Spring features are deliberately not introduced when they are unnecessary.
-### 8. Security Risk Assessment
-Identify relevant trust boundaries, authorization/ownership risks, untrusted inputs, sensitive data/secrets, file/network/provider concerns, and required negative security tests. This is design-time risk identification, not the final security verdict.
-### 9. File Change Projection
-### 10. Implementation Steps
-### 11. Tests / Validation
-For each: type, behavior proven, expected result. Include negative/security tests when risk warrants them and use the smallest Spring context that proves framework behavior.
-### 12. Definition of Done Mapping
-For each DoD item: implementation, verification, evidence. Include the independent `hippocampus-security-vulnerability-review` gate after tests and general implementation review.
-### 13. Scope Exclusions
-### 14. Risks / Decisions
-Classify: already decided / normal implementation choice / reviewer-ADR required.
-### 15. Expected End State
+## Required Plan
 
-## Self-Reject the Plan If It
+Cover:
 
-- steals later-task scope;
-- adds undocumented dependencies/services;
-- adds speculative abstractions or patterns without real design pressure;
+- task and authority;
+- current repository assessment;
+- MUST / MUST NOT / DEFERRED;
+- responsibility/module boundaries;
+- significant architecture/framework decisions and why;
+- security risks and required negative cases;
+- projected file changes;
+- ordered implementation steps;
+- focused and tracker-required validation;
+- Definition of Done mapping;
+- scope exclusions;
+- unresolved decisions / ADR requirement;
+- expected end state.
+
+Be detailed enough that implementation does not need to rediscover the plan, but do not copy large source passages.
+
+## Execution Packet
+
+End with a compact handoff containing only:
+
+1. task ID;
+2. required behavior;
+3. controlling decisions/adjustments not obvious from the tracker;
+4. expected scope/files when useful;
+5. validation requirements;
+6. stop conditions;
+7. publication restriction if applicable.
+
+The implementation agent should use `hippocampus-implement-task` and implement this packet directly.
+
+## Reject the Plan If It
+
+- pulls later tracker work forward;
 - changes architecture without governance;
-- mixes unrelated responsibilities without justification;
-- uses Spring/framework annotations or infrastructure to replace domain/application design;
-- adds Spring subsystems/features just because they are available;
-- omits tracker tests/DoD;
-- omits relevant authorization/ownership/security-negative tests;
-- outsources deterministic application decisions to AI;
-- treats a final security scan as a substitute for secure design.
+- adds undocumented services/dependencies/features;
+- introduces speculative abstraction;
+- omits required tests/DoD/security-sensitive negative behavior;
+- leaves a significant unresolved decision hidden inside implementation;
+- delegates deterministic application decisions to AI.
