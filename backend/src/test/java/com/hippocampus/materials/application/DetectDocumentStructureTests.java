@@ -33,6 +33,46 @@ class DetectDocumentStructureTests {
     private static final UUID ROOT_ID = UUID.randomUUID();
 
     @Test
+    void persistsAssistedRecoveryOrDeterministicResultAfterOptionalFailure() {
+        for (boolean fail : List.of(false, true)) {
+            RecordingPersistence recording = new RecordingPersistence();
+            AtomicBoolean called = new AtomicBoolean();
+            var structures = org.mockito.Mockito.mock(DocumentStructureRepository.class);
+            org.mockito.Mockito.when(structures.findDocumentRoot(VERSION_ID)).thenReturn(Optional.of(root()));
+            org.mockito.Mockito.when(structures.findTextBlocksByOrdinalRange(VERSION_ID, 1, 1))
+                    .thenReturn(List.of(new TextBlock(UUID.randomUUID(), VERSION_ID, ROOT_ID, 1,
+                            TextBlockType.PAGE_TEXT, 1, "1 Foundations", TextBlockExtractionMethod.NATIVE,
+                            null, Instant.EPOCH)));
+            var assistance = new ApplyStructureFallback(structures, request -> {
+                called.set(true);
+                assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+                assertThat(recording.saved).isNull();
+                if (fail) {
+                    throw new IllegalStateException("optional provider failure");
+                }
+                return Optional.of(new com.hippocampus.materials.port.StructureFallbackResponse(
+                        request.contractVersion(), request.promptVersion(), request.schemaVersion(),
+                        new com.hippocampus.materials.port.StructureFallbackResponse.Heading(
+                                DocumentNodeType.SECTION, "1 Foundations", 1)));
+            });
+            var detection = new DetectDocumentStructure(
+                    id -> new PdfExtractionSource(id, new BinaryObjectKey("materials/source.pdf"), 10),
+                    structures, (source, sink) -> {
+                        sink.acceptDocument(new PdfStructureSignals.Document(1, List.of()));
+                        sink.acceptPages(new PdfStructureSignals.PageBatch(1, 1,
+                                List.of(new PdfStructureSignals.Page(1, List.of()))));
+                    }, new DeterministicDocumentStructureDetector(10, 10),
+                    new PersistDetectedDocumentStructure(recording), assistance);
+            var result = detection.execute(job(ProcessingJobType.STRUCTURE_DETECT));
+            assertThat(called).isTrue();
+            assertThat(recording.saved).isSameAs(result);
+            assertThat(result.nodes()).singleElement().satisfies(node ->
+                    assertThat(node.detectionOrigin()).isEqualTo(fail
+                            ? DocumentNodeDetectionOrigin.HEURISTIC : DocumentNodeDetectionOrigin.AI_ASSISTED));
+        }
+    }
+
+    @Test
     void combinesBoundedNativeAndPersistedEvidenceOutsidePersistenceTransaction() {
         AtomicBoolean inspectedOutsideTransaction = new AtomicBoolean();
         RecordingPersistence recording = new RecordingPersistence();

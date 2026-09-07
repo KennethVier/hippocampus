@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import com.hippocampus.materials.application.DetectDocumentStructure;
+import com.hippocampus.materials.application.ApplyStructureFallback;
 import com.hippocampus.materials.application.PersistDetectedDocumentStructure;
 import com.hippocampus.materials.application.ProcessingStageHandler;
 import com.hippocampus.materials.application.StructureDetectStageHandler;
@@ -16,6 +17,7 @@ import com.hippocampus.materials.port.DetectedDocumentStructurePersistence;
 import com.hippocampus.materials.port.DocumentStructureRepository;
 import com.hippocampus.materials.port.PdfExtractionSourceRepository;
 import com.hippocampus.materials.port.PdfStructureInspector;
+import com.hippocampus.materials.port.StructureFallback;
 
 @AutoConfiguration(after = {
         PdfStructureInspectionConfiguration.class,
@@ -29,6 +31,16 @@ import com.hippocampus.materials.port.PdfStructureInspector;
         DocumentStructureRepository.class
 })
 public class DetectedDocumentStructureConfiguration {
+    @Bean
+    StructureFallback structureFallback() {
+        return new UnavailableStructureFallback();
+    }
+
+    @Bean
+    ApplyStructureFallback applyStructureFallback(DocumentStructureRepository structures, StructureFallback fallback) {
+        return new ApplyStructureFallback(structures, fallback);
+    }
+
     @Bean
     DetectedDocumentStructurePersistence detectedDocumentStructurePersistence(
             JdbcClient jdbcClient, PdfStructureInspectionProperties properties) {
@@ -54,8 +66,9 @@ public class DetectedDocumentStructureConfiguration {
             DocumentStructureRepository structures,
             PdfStructureInspector inspector,
             DeterministicDocumentStructureDetector detector,
-            PersistDetectedDocumentStructure persistence) {
-        return new DetectDocumentStructure(sources, structures, inspector, detector, persistence);
+            PersistDetectedDocumentStructure persistence,
+            ApplyStructureFallback fallback) {
+        return new DetectDocumentStructure(sources, structures, inspector, detector, persistence, fallback);
     }
 
     @Bean

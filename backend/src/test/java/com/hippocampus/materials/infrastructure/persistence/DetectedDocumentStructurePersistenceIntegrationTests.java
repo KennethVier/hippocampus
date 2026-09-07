@@ -45,6 +45,28 @@ class DetectedDocumentStructurePersistenceIntegrationTests extends PostgresInteg
     }
 
     @Test
+    void persistsAndReplaysAssistedProvenanceWithoutChangingPageEvidence() {
+        try (var context = startApplication()) {
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            UUID versionId = extractedPdf(context, jdbc, 3);
+            UUID rootId = rootId(jdbc, versionId);
+            var pages = pageIdentities(jdbc, versionId);
+            var structure = new DetectedDocumentStructure(versionId, rootId, 3, List.of(
+                    new Node(null, DocumentNodeType.CHAPTER, "Recovered", 1, 1, 3,
+                            DocumentNodeDetectionOrigin.AI_ASSISTED, "LOW")));
+            var persistence = new JdbcDetectedDocumentStructurePersistence(jdbc, 20);
+            var transactions = context.getBean(PlatformTransactionManager.class);
+            inTransaction(transactions, () -> persistence.persistOrVerify(structure));
+            var first = nodeIdentities(jdbc, versionId, rootId);
+            inTransaction(transactions, () -> persistence.persistOrVerify(structure));
+            assertThat(nodeIdentities(jdbc, versionId, rootId)).isEqualTo(first);
+            assertThat(jdbc.sql("SELECT detection_origin FROM document_nodes WHERE material_version_id = :version AND node_type = 'CHAPTER'")
+                    .param("version", versionId).query(String.class).single()).isEqualTo("AI_ASSISTED");
+            assertThat(pageIdentities(jdbc, versionId)).isEqualTo(pages);
+        }
+    }
+
+    @Test
     void atomicallyPersistsExactReplayWithoutChangingRootOrPageEvidence() {
         try (var context = startApplication()) {
             JdbcClient jdbc = context.getBean(JdbcClient.class);

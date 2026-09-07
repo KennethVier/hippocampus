@@ -49,8 +49,9 @@ public record DetectedDocumentStructure(
                 throw new IllegalArgumentException("node order and range must be valid");
             }
             if (detectionOrigin != DocumentNodeDetectionOrigin.NATIVE
-                    && detectionOrigin != DocumentNodeDetectionOrigin.HEURISTIC) {
-                throw new IllegalArgumentException("P3-08 permits only native or heuristic provenance");
+                    && detectionOrigin != DocumentNodeDetectionOrigin.HEURISTIC
+                    && detectionOrigin != DocumentNodeDetectionOrigin.AI_ASSISTED) {
+                throw new IllegalArgumentException("unsupported detected provenance");
             }
             if (!"HIGH".equals(detectionConfidence)
                     && !"MEDIUM".equals(detectionConfidence)

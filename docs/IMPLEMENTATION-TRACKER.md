@@ -903,7 +903,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** AI/Ingestion
 - **Priority:** Should
-- **Status:** Not Started
+- **Status:** Ready For Review
 - **Goal:** Use AI only for ambiguous hierarchy.
 - **Build:** Create typed structure-detection AI task for unresolved segments with strict structured output/versioning.
 - **How it works:** Only ambiguous sampled content is sent; output labeled AI_ASSISTED.
@@ -912,8 +912,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Pipeline can defer ambiguous structure without blocking deterministic extraction.
 - **Definition of Done:** Stub boundary complete; no premature provider coupling.
 - **Authority:** Documents 10,21
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Local implementation adds `StructureFallbackPolicy`, the provider-neutral `StructureFallback` port, bounded `StructureFallbackRequest`, versioned `StructureFallbackResponse`, `StructureFallbackValidator`, `ApplyStructureFallback`, and production `UnavailableStructureFallback`. The application invokes fallback after deterministic `analysis.finish()` and before transactional persistence. Only LOW-confidence deterministic nodes are eligible, with at most eight attempts per document; no detected hierarchy and HIGH/MEDIUM nodes do not trigger assistance. Each request samples at most three contiguous local PAGE_TEXT pages around the heading, with at most 2,000 characters per page and material-version/root/type/order validation. Contract `materials.structure-fallback.v1`, prompt `materials.structure-fallback.prompt.v1`, and response schema `materials.structure-fallback.response.v1` are explicit identifiers, without a Prompt Registry. V1 identifies the ambiguous heading explicitly and proposes one heading per slot; duplicate headings on the same page are rejected. Validation requires an exact sampled heading line on the target page, a supported CHAPTER/SECTION/SUBSECTION type, matching versions, and compatibility with existing parents/children. The application owns page ranges, parent links, ordinals, LOW confidence, and AI_ASSISTED provenance. Other nodes remain untouched. Missing/unavailable/failed/conceptually timed-out or rejected assistance preserves deterministic extraction. Phase 3 production wiring is always unavailable; no provider SDK, external calls, new dependency, migration, or later-phase capability was introduced. Final focused `mvn -B -ntp "-Dtest=*Structure*Tests,HippocampusArchitectureTests" test` passed 71 tests (62 structure and 9 architecture) with zero failures/errors/skips, including mock rejection/recovery contracts, pipeline failure persistence, existing P3-08 fixtures, and PostgreSQL AI_ASSISTED persistence/replay preserving PAGE_TEXT evidence.
+- **Notes / blockers:** Required full `mvn -B -ntp clean verify` was attempted on Windows: 449 tests, 8 failures, 124 errors, 4 skips. Existing OCR configuration/engine paths require an absolute Windows path instead of `/usr/bin/tesseract`; OCR test executables use POSIX shell scripts, and three PDF extraction assertions differ on line endings. Full backend validation/build remains blocked on these environment/platform prerequisites; unrelated OCR/extraction code was not changed. Final focused structure/architecture validation is green. External general review and independent security gate remain pending by request; this task is not marked Done. Changes are uncommitted and unpublished.
 
 ## P3-10 — Extract embedded/source visuals
 
