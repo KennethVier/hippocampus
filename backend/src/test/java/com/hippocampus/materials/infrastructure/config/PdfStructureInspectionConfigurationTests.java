@@ -36,6 +36,15 @@ class PdfStructureInspectionConfigurationTests {
                 .run(context -> assertThat(context).doesNotHaveBean(PdfStructureInspector.class));
     }
 
+    @Test
+    void backsOffWhenExtractionPropertiesAreUnavailable() {
+        runner.withBean(BinaryObjectStore.class, () -> mock(BinaryObjectStore.class))
+                .withBean(MaterialContentInspector.class, () -> mock(MaterialContentInspector.class))
+                .run(context -> assertThat(context)
+                        .hasNotFailed()
+                        .doesNotHaveBean(PdfStructureInspector.class));
+    }
+
     @Configuration(proxyBeanMethods = false)
     static class RequiredBeans {
         @Bean
