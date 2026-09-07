@@ -59,6 +59,7 @@ Do not automatically chain these skills. Cross-references inside a detailed skil
 - Preserve module/dependency direction and authorization boundaries.
 - Security-sensitive uncertainty fails closed.
 - Do not weaken tests to obtain green output.
+- Do not commit, push, or create/update a PR unless the execution packet explicitly authorizes publication.
 - If a significant unresolved decision requires Document 27/ADR handling, stop instead of inventing the decision.
 
 ## Validation
