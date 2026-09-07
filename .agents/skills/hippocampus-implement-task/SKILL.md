@@ -36,7 +36,7 @@ Do not, by default:
 - reread files already established as relevant;
 - re-plan an already approved task.
 
-Do any of those only when a concrete blocker, dependency, failing test, ambiguity, or security/architecture concern makes it necessary.
+Do any of those only when a concrete blocker, dependency, failing test, ambiguity, or security/architecture concern makes it necessary. Cloud execution may perform revision/environment preflight only when that execution environment genuinely requires it; do not copy cloud-specific ceremony into normal local implementation.
 
 Single-agent execution is the default.
 
