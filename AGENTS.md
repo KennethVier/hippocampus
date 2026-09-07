@@ -24,9 +24,11 @@ Code never silently overrides higher authority.
 
 - Primary user: medical student.
 - Study Missions are the core learning experience.
+- Hippocampus is not primarily upload/chat, summarization, flashcard generation, or quiz generation.
 - AI supports bounded tasks; the Learning Engine owns pedagogical sequencing and educational state.
 - Learning evidence must map to real student activity.
 - Material != Topic.
+- Provenance must survive retrieval/generation.
 - RAG authorization/scope happens before ranking; cross-user leakage tolerance is zero.
 - Gemini API and remote Ollama API remain provider adapters behind the Provider Router.
 - PostgreSQL is authoritative persistence; pgvector is the retrieval foundation.
