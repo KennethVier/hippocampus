@@ -50,7 +50,7 @@ Root `AGENTS.md` contains the persistent baseline. Load at most the detailed ski
 - non-trivial architecture/pattern choice → `hippocampus-architecture-patterns`
 - specialized test/security-test design → `hippocampus-testing-security`
 
-Do not automatically chain these skills. The independent `hippocampus-security-vulnerability-review` is a later completion gate, not an implementation-time skill load.
+Do not automatically chain these skills. Cross-references inside a detailed skill are advisory routing hints, not instructions to load another skill unless the current implementation presents that concrete concern. The independent `hippocampus-security-vulnerability-review` is a later completion gate, not an implementation-time skill load.
 
 ## Scope / Safety
 
