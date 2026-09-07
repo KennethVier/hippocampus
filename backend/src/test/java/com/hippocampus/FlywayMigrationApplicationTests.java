@@ -30,7 +30,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 .contains(":" + postgresMappedPort() + "/");
         assertDatabaseIsEmpty();
 
-        try (var firstContext = startApplicationWithFlyway()) {
+        try (var firstContext = startMigrationApplication()) {
             assertThat(firstContext.isActive()).isTrue();
         }
 
@@ -47,6 +47,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("8");
         assertSuccessfulFlywayVersion("9");
         assertSuccessfulFlywayVersion("10");
+        assertSuccessfulFlywayVersion("11");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -62,8 +63,9 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertMaterialTopicLinkSchema();
         assertProcessingJobSchema();
         assertDocumentStructureSchema();
+        assertVisualAssetSchema();
 
-        try (var secondContext = startApplicationWithFlyway()) {
+        try (var secondContext = startMigrationApplication()) {
             assertThat(secondContext.isActive()).isTrue();
         }
 
@@ -77,6 +79,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("8");
         assertSuccessfulFlywayVersion("9");
         assertSuccessfulFlywayVersion("10");
+        assertSuccessfulFlywayVersion("11");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -184,7 +187,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                     "processing_jobs",
                     "spring_session", "spring_session_attributes",
                     "subjects", "subtopics", "text_blocks", "topics",
-                    "user_password_credentials", "users");
+                    "user_password_credentials", "users", "visual_assets");
         }
     }
 
@@ -232,6 +235,45 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 "PAGE_TEXT", "HEADING", "PARAGRAPH", "LIST", "CAPTION", "TABLE_TEXT", "TRANSCRIPT");
         assertCheckConstraintContains("text_blocks", "chk_text_blocks_extraction_method", "NATIVE", "OCR");
         assertCheckConstraintContains("text_blocks", "chk_text_blocks_quality", "STRONG", "LIMITED", "POOR");
+    }
+
+    private static org.springframework.context.ConfigurableApplicationContext startMigrationApplication() {
+        String executable = java.nio.file.Path.of(
+                System.getProperty("java.home"), "bin",
+                System.getProperty("os.name", "").startsWith("Windows") ? "java.exe" : "java")
+                .toAbsolutePath().normalize().toString();
+        return startApplicationWithFlywayAndArguments(
+                new Class<?>[0], "--hippocampus.materials.processing.pdf.ocr-executable=" + executable);
+    }
+
+    private static void assertVisualAssetSchema() throws SQLException {
+        assertColumnsMatch("visual_assets", Map.ofEntries(
+                Map.entry("id", "uuid:NO"), Map.entry("material_version_id", "uuid:NO"),
+                Map.entry("document_node_id", "uuid:YES"), Map.entry("page_number", "integer:NO"),
+                Map.entry("storage_key", "character varying:NO"),
+                Map.entry("visual_type", "character varying:NO"), Map.entry("caption", "text:YES"),
+                Map.entry("nearby_text", "text:YES"),
+                Map.entry("interpretation_status", "character varying:NO"),
+                Map.entry("width_px", "integer:YES"), Map.entry("height_px", "integer:YES"),
+                Map.entry("content_hash", "character varying:NO"),
+                Map.entry("created_at", "timestamp with time zone:NO")));
+        assertNamedConstraint("visual_assets", "fk_visual_assets_material_version",
+                "FOREIGN KEY (material_version_id) REFERENCES material_versions(id) ON DELETE CASCADE", "c");
+        assertNamedConstraint("visual_assets", "fk_visual_assets_node_same_version",
+                "FOREIGN KEY (document_node_id, material_version_id) REFERENCES document_nodes(id, material_version_id) DEFERRABLE INITIALLY DEFERRED", "a");
+        assertNamedConstraint("visual_assets", "uq_visual_assets_page_content",
+                "UNIQUE (material_version_id, page_number, content_hash)", null);
+        assertNamedConstraint("visual_assets", "uq_visual_assets_storage_key", "UNIQUE (storage_key)", null);
+        assertIndex("visual_assets", "idx_visual_assets_material_version_page", false,
+                "material_version_id", "page_number");
+        assertCheckConstraintContains("visual_assets", "chk_visual_assets_visual_type",
+                "ANATOMY_DIAGRAM", "HISTOLOGY", "PATHOLOGY", "RADIOLOGY", "FLOW_DIAGRAM",
+                "TABLE", "CHART", "SLIDE_FIGURE", "OTHER");
+        assertCheckConstraintContains("visual_assets", "chk_visual_assets_interpretation_status",
+                "UNASSESSED", "SUPPORTED", "LIMITED", "UNSUPPORTED", "FAILED");
+        assertCheckConstraintContains("visual_assets", "chk_visual_assets_page_number", "page_number", ">= 1");
+        assertCheckConstraintContains("visual_assets", "chk_visual_assets_width", "width_px", ">= 1");
+        assertCheckConstraintContains("visual_assets", "chk_visual_assets_height", "height_px", ">= 1");
     }
 
     private static void assertLearningOrganizationSchema() throws SQLException {

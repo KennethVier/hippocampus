@@ -36,6 +36,16 @@ hippocampus:
         ocr-max-text-chars: ${HIPPOCAMPUS_OCR_MAX_TEXT_CHARS:1000000}
         ocr-timeout: ${HIPPOCAMPUS_OCR_TIMEOUT:PT30S}
         ocr-termination-grace: ${HIPPOCAMPUS_OCR_TERMINATION_GRACE:PT2S}
+        visual:
+          max-images-per-page: ${HIPPOCAMPUS_PDF_VISUAL_MAX_IMAGES_PER_PAGE:256}
+          max-images-per-document: ${HIPPOCAMPUS_PDF_VISUAL_MAX_IMAGES_PER_DOCUMENT:10000}
+          max-source-image-dimension: ${HIPPOCAMPUS_PDF_VISUAL_MAX_SOURCE_IMAGE_DIMENSION:8000}
+          max-source-image-pixels: ${HIPPOCAMPUS_PDF_VISUAL_MAX_SOURCE_IMAGE_PIXELS:40000000}
+          max-page-source-image-pixels: ${HIPPOCAMPUS_PDF_VISUAL_MAX_PAGE_SOURCE_IMAGE_PIXELS:80000000}
+          max-document-source-image-pixels: ${HIPPOCAMPUS_PDF_VISUAL_MAX_DOCUMENT_SOURCE_IMAGE_PIXELS:2000000000}
+          max-encoded-image-bytes: ${HIPPOCAMPUS_PDF_VISUAL_MAX_ENCODED_IMAGE_BYTES:25000000}
+          max-page-encoded-image-bytes: ${HIPPOCAMPUS_PDF_VISUAL_MAX_PAGE_ENCODED_IMAGE_BYTES:100000000}
+          max-document-encoded-image-bytes: ${HIPPOCAMPUS_PDF_VISUAL_MAX_DOCUMENT_ENCODED_IMAGE_BYTES:2000000000}
         structure:
           max-outline-items: ${HIPPOCAMPUS_PDF_STRUCTURE_MAX_OUTLINE_ITEMS:4096}
           max-outline-depth: ${HIPPOCAMPUS_PDF_STRUCTURE_MAX_OUTLINE_DEPTH:16}

@@ -919,7 +919,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Visuals
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready For Review
 - **Goal:** Preserve anatomy/medical figures as first-class assets.
 - **Build:** Extract images per page, store binary in object store, persist visual metadata/content hash.
 - **How it works:** Original image bytes retained with page/hierarchy.
@@ -928,8 +928,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Visuals survive extraction and retry without duplicates.
 - **Definition of Done:** Visual fixture tests pass.
 - **Authority:** Documents 18,21
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Implementation adds the provider-neutral `PdfVisualExtractor` boundary and a real PDFBox adapter that walks painted page content one physical page at a time, including inline images and nested forms, while excluding unused resources and stencil masks. Exact standalone JPEG/JPX bytes are retained when safely available; other painted images are losslessly encoded as PNG. The application hashes the exact stored bytes with SHA-256, writes deterministic private-object keys under `materials/{materialVersionId}/visuals/{pageNumber}/{contentHash}.{suffix}`, deduplicates repeated same-page visuals, preserves occurrences across pages, and associates each asset with the deepest applicable same-version `DocumentNode` or the `DOCUMENT` root. Object-store work remains outside the metadata transaction; `JdbcVisualAssetPersistence` performs a short fail-closed transaction with exact-replay convergence. Flyway `V11__create_visual_assets.sql` creates `visual_assets` with same-version composite foreign-key enforcement, positive page/dimension checks, controlled visual/interpretation vocabularies, deterministic-key uniqueness, and retry uniqueness. The real `VISUAL_EXTRACT` handler is auto-configured without changing the existing `VISUAL_EXTRACT -> NORMALIZE` sequence. Focused validation passed 47 tests with zero failures/errors/skips, covering mixed fixtures, exact hashes and JPEG retention, inline/nested forms, unused resources, masks, zero visuals, same-page and cross-page identity, limits, hierarchy selection, source failures, transaction boundaries, replay/conflict behavior, migration constraints, handler registration, stage sequencing, and architecture. A broader Windows-compatible run passed 436 tests with zero failures/errors and four intentional skips. A full `mvn -B -ntp clean verify` was attempted and ran 464 tests, but did not pass because five pre-existing PDF/OCR test classes assume Unix paths, shell executables, Tesseract availability, or LF-only PDFBox text output on this Windows host; P3-10 tests remained green. No new dependency, provider SDK, OCR/rendered-page fallback, caption inference, visual interpretation, sequencing change, frontend/RAG work, or ADR is introduced.
+- **Notes / blockers:** Implementation is complete locally, but status remains In Progress because the full validation command is not green on this Windows environment and the required external general implementation review plus independent security review have not yet occurred. The remaining validation failures are confined to pre-existing platform-specific PDF/OCR tests; authoritative Linux CI is expected to resolve or confirm that environment limitation.
 
 ## P3-11 — Associate captions and nearby text
 
