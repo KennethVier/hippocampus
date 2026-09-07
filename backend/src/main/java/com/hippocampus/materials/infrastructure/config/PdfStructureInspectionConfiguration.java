@@ -14,7 +14,7 @@ import com.hippocampus.materials.port.PdfStructureInspector;
 @EnableConfigurationProperties(PdfStructureInspectionProperties.class)
 public class PdfStructureInspectionConfiguration {
     @Bean
-    @ConditionalOnBean({BinaryObjectStore.class, MaterialContentInspector.class})
+    @ConditionalOnBean({BinaryObjectStore.class, MaterialContentInspector.class, PdfExtractionProperties.class})
     PdfStructureInspector pdfStructureInspector(
             BinaryObjectStore objectStore,
             MaterialContentInspector contentInspector,
