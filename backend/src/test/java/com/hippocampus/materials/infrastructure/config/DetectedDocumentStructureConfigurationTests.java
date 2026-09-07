@@ -1,5 +1,7 @@
 package com.hippocampus.materials.infrastructure.config;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
@@ -35,6 +37,12 @@ class DetectedDocumentStructureConfigurationTests {
                     .hasSingleBean(DetectDocumentStructure.class)
                     .hasSingleBean(ProcessingStageHandler.class);
             assertThat(context.getBean(ProcessingStageHandler.class)).isInstanceOf(StructureDetectStageHandler.class);
+            assertThat(context.getBean(com.hippocampus.materials.port.StructureFallback.class))
+                    .isInstanceOf(UnavailableStructureFallback.class);
+            assertThat(context.getBean(com.hippocampus.materials.port.StructureFallback.class).detect(
+                    new com.hippocampus.materials.port.StructureFallbackRequest(1, "text", List.of(
+                            new com.hippocampus.materials.port.StructureFallbackRequest.PageText(1, "text")))))
+                    .isEmpty();
         });
     }
 

@@ -28,6 +28,7 @@ public final class DetectDocumentStructure {
     private final PdfStructureInspector inspector;
     private final DeterministicDocumentStructureDetector detector;
     private final PersistDetectedDocumentStructure persistence;
+    private final ApplyStructureFallback fallback;
 
     public DetectDocumentStructure(
             PdfExtractionSourceRepository sources,
@@ -35,11 +36,23 @@ public final class DetectDocumentStructure {
             PdfStructureInspector inspector,
             DeterministicDocumentStructureDetector detector,
             PersistDetectedDocumentStructure persistence) {
+        this(sources, structureRepository, inspector, detector, persistence,
+                new ApplyStructureFallback(structureRepository, request -> java.util.Optional.empty()));
+    }
+
+    public DetectDocumentStructure(
+            PdfExtractionSourceRepository sources,
+            DocumentStructureRepository structureRepository,
+            PdfStructureInspector inspector,
+            DeterministicDocumentStructureDetector detector,
+            PersistDetectedDocumentStructure persistence,
+            ApplyStructureFallback fallback) {
         this.sources = Objects.requireNonNull(sources);
         this.structureRepository = Objects.requireNonNull(structureRepository);
         this.inspector = Objects.requireNonNull(inspector);
         this.detector = Objects.requireNonNull(detector);
         this.persistence = Objects.requireNonNull(persistence);
+        this.fallback = Objects.requireNonNull(fallback);
     }
 
     public DetectedDocumentStructure execute(ClaimedProcessingJob job) {
@@ -80,7 +93,7 @@ public final class DetectDocumentStructure {
             }
         });
         requireNoTransaction();
-        DetectedDocumentStructure result = analysis.finish();
+        DetectedDocumentStructure result = fallback.execute(analysis.finish());
         persistence.execute(result);
         return result;
     }
