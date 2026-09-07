@@ -82,6 +82,40 @@ class VisualAssetPersistenceIntegrationTests extends PostgresIntegrationTestSupp
         }
     }
 
+    @Test
+    void exactReplayPreservesDownstreamEnrichment() {
+        try (var context = startApplication()) {
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            Version version = insertPdf(jdbc, 1);
+            JdbcVisualAssetPersistence persistence = new JdbcVisualAssetPersistence(jdbc, 10);
+            PlatformTransactionManager transactions = context.getBean(PlatformTransactionManager.class);
+            VisualAssetDraft expected = visual(version.versionId(), version.rootId(), 1, "c".repeat(64), 20, 30);
+
+            inTransaction(transactions, () -> persistence.persistOrVerify(version.versionId(), List.of(expected)));
+            UUID originalId = jdbc.sql("SELECT id FROM visual_assets WHERE material_version_id = ?")
+                    .param(version.versionId()).query(UUID.class).single();
+            jdbc.sql("""
+                    UPDATE visual_assets
+                    SET caption = 'Figure 1', nearby_text = 'Enriched context',
+                        visual_type = 'ANATOMY_DIAGRAM', interpretation_status = 'SUPPORTED'
+                    WHERE id = ?
+                    """).param(originalId).update();
+
+            inTransaction(transactions, () -> persistence.persistOrVerify(version.versionId(), List.of(expected)));
+
+            assertThat(jdbc.sql("""
+                    SELECT id, caption, nearby_text, visual_type, interpretation_status
+                    FROM visual_assets WHERE material_version_id = ?
+                    """).param(version.versionId()).query((result, row) -> List.of(
+                            result.getObject("id", UUID.class),
+                            result.getString("caption"), result.getString("nearby_text"),
+                            result.getString("visual_type"), result.getString("interpretation_status"))).single())
+                    .containsExactly(originalId, "Figure 1", "Enriched context", "ANATOMY_DIAGRAM", "SUPPORTED");
+            assertThat(jdbc.sql("SELECT count(*) FROM visual_assets WHERE material_version_id = ?")
+                    .param(version.versionId()).query(Integer.class).single()).isEqualTo(1);
+        }
+    }
+
     private static VisualAssetDraft visual(
             UUID versionId, UUID nodeId, int page, String hash, int width, int height) {
         return new VisualAssetDraft(

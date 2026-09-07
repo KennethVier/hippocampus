@@ -121,6 +121,16 @@ class PdfBoxPdfVisualExtractorTests {
         }
     }
 
+    @Test
+    void distinctPaintedObjectsWithIdenticalContentConsumeSourceImageCount() throws Exception {
+        Path source = identicalDistinctVisualsPdf(2);
+        try {
+            assertResourceLimit(source, extractor(source, 1, 10, 100, 10_000, 100_000, 100_000, 1_000_000));
+        } finally {
+            Files.deleteIfExists(source);
+        }
+    }
+
     private static void assertResourceLimit(Path source, PdfBoxPdfVisualExtractor extractor) throws IOException {
         assertThatThrownBy(() -> extractor.extract(pdfSource(source), visual -> {}))
                 .isInstanceOf(PdfVisualExtractionException.class)
@@ -193,6 +203,21 @@ class PdfBoxPdfVisualExtractorTests {
         Path path = Files.createTempFile("pdf-visual-empty-", ".pdf");
         try (PDDocument document = new PDDocument()) {
             page(document);
+            document.save(path.toFile());
+        }
+        return path;
+    }
+
+    private static Path identicalDistinctVisualsPdf(int imageCount) throws IOException {
+        Path path = Files.createTempFile("pdf-visual-identical-distinct-", ".pdf");
+        try (PDDocument document = new PDDocument()) {
+            PDPage page = page(document);
+            try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+                for (int index = 0; index < imageCount; index++) {
+                    PDImageXObject image = image(document, 2, 2, Color.RED);
+                    content.drawImage(image, 10 + index * 20, 10, 10, 10);
+                }
+            }
             document.save(path.toFile());
         }
         return path;

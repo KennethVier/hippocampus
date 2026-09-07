@@ -39,8 +39,7 @@ public final class JdbcVisualAssetPersistence implements VisualAssetPersistence 
             WHERE material_version_id = :materialVersionId AND id IN (:nodeIds)
             """;
     private static final String FIND_VISUALS = """
-            SELECT document_node_id, page_number, storage_key, visual_type, caption, nearby_text,
-                   interpretation_status, width_px, height_px, content_hash
+            SELECT document_node_id, page_number, storage_key, width_px, height_px, content_hash
             FROM visual_assets
             WHERE material_version_id = :materialVersionId
             """;
@@ -157,10 +156,6 @@ public final class JdbcVisualAssetPersistence implements VisualAssetPersistence 
             if (visual == null
                     || !visual.documentNodeId().equals(actual.documentNodeId())
                     || !visual.storageKey().value().equals(actual.storageKey())
-                    || !visual.visualType().name().equals(actual.visualType())
-                    || !Objects.equals(visual.caption(), actual.caption())
-                    || !Objects.equals(visual.nearbyText(), actual.nearbyText())
-                    || !visual.interpretationStatus().name().equals(actual.interpretationStatus())
                     || visual.widthPixels() != actual.width()
                     || visual.heightPixels() != actual.height()) {
                 return false;
@@ -172,8 +167,7 @@ public final class JdbcVisualAssetPersistence implements VisualAssetPersistence 
     private static VisualRow mapVisual(ResultSet result, int row) throws SQLException {
         return new VisualRow(
                 result.getObject("document_node_id", UUID.class), result.getInt("page_number"),
-                result.getString("storage_key"), result.getString("visual_type"), result.getString("caption"),
-                result.getString("nearby_text"), result.getString("interpretation_status"),
+                result.getString("storage_key"),
                 result.getInt("width_px"), result.getInt("height_px"), result.getString("content_hash"));
     }
 
@@ -190,7 +184,6 @@ public final class JdbcVisualAssetPersistence implements VisualAssetPersistence 
     private record Identity(int pageNumber, String contentHash) {}
 
     private record VisualRow(
-            UUID documentNodeId, int pageNumber, String storageKey, String visualType,
-            String caption, String nearbyText, String interpretationStatus,
+            UUID documentNodeId, int pageNumber, String storageKey,
             int width, int height, String contentHash) {}
 }

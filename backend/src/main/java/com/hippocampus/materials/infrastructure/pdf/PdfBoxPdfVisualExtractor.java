@@ -242,15 +242,24 @@ public final class PdfBoxPdfVisualExtractor implements PdfVisualExtractor {
             }
         }
 
-        private void addImage(long bytes) {
+        private void addSourceImage() {
             try {
                 images = Math.addExact(images, 1);
+            } catch (ArithmeticException exception) {
+                throw resourceLimit(exception);
+            }
+            if (images > limits.maxImagesPerDocument()) {
+                throw resourceLimit(null);
+            }
+        }
+
+        private void addEncodedBytes(long bytes) {
+            try {
                 encodedBytes = Math.addExact(encodedBytes, bytes);
             } catch (ArithmeticException exception) {
                 throw resourceLimit(exception);
             }
-            if (images > limits.maxImagesPerDocument()
-                    || encodedBytes > limits.maxDocumentEncodedBytes()) {
+            if (encodedBytes > limits.maxDocumentEncodedBytes()) {
                 throw resourceLimit(null);
             }
         }
@@ -286,15 +295,17 @@ public final class PdfBoxPdfVisualExtractor implements PdfVisualExtractor {
             if (!painted.add(image.getCOSObject())) {
                 return;
             }
+            addPageSourceImage();
+            documentBudget.addSourceImage();
             requireDimensions(image);
             inspectMasks(image);
             EncodedVisual encoded = encode(image);
+            addPageEncodedBytes(encoded.bytes().length);
+            documentBudget.addEncodedBytes(encoded.bytes().length);
             String hash = sha256(encoded.bytes());
             if (!emittedHashes.add(hash)) {
                 return;
             }
-            addPageImage(encoded.bytes().length);
-            documentBudget.addImage(encoded.bytes().length);
             try {
                 sink.accept(new ExtractedPdfVisual(
                         pageNumber, image.getWidth(), image.getHeight(), encoded.suffix(), encoded.bytes()));
@@ -341,15 +352,24 @@ public final class PdfBoxPdfVisualExtractor implements PdfVisualExtractor {
             documentBudget.addSourcePixels(pixels);
         }
 
-        private void addPageImage(long bytes) {
+        private void addPageSourceImage() {
             try {
                 pageImages = Math.addExact(pageImages, 1);
+            } catch (ArithmeticException exception) {
+                throw resourceLimit(exception);
+            }
+            if (pageImages > limits.maxImagesPerPage()) {
+                throw resourceLimit(null);
+            }
+        }
+
+        private void addPageEncodedBytes(long bytes) {
+            try {
                 pageEncodedBytes = Math.addExact(pageEncodedBytes, bytes);
             } catch (ArithmeticException exception) {
                 throw resourceLimit(exception);
             }
-            if (pageImages > limits.maxImagesPerPage()
-                    || pageEncodedBytes > limits.maxPageEncodedBytes()) {
+            if (pageEncodedBytes > limits.maxPageEncodedBytes()) {
                 throw resourceLimit(null);
             }
         }
