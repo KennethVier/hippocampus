@@ -57,22 +57,27 @@ public class DocumentStructurePersistenceConfiguration {
     }
 
     @Bean
-    JdbcTextNormalizationRepository textNormalizationRepository(JdbcClient jdbcClient) {
-        return new JdbcTextNormalizationRepository(jdbcClient);
+    @ConditionalOnBean({PdfExtractionProperties.class, PdfTableExtractionProperties.class})
+    JdbcTextNormalizationRepository textNormalizationRepository(
+            JdbcClient jdbcClient, PdfExtractionProperties pdfProperties, PdfTableExtractionProperties tableProperties) {
+        return new JdbcTextNormalizationRepository(jdbcClient, pdfProperties.maxNativeTextCharsPerPage(),
+                pdfProperties.ocrMaxTextChars(), tableProperties.maxTableTextChars());
     }
 
     @Bean
+    @ConditionalOnBean(JdbcTextNormalizationRepository.class)
     PersistNormalizedText persistNormalizedText(JdbcTextNormalizationRepository repository) {
         return new PersistNormalizedText(repository);
     }
 
     @Bean
+    @ConditionalOnBean(JdbcTextNormalizationRepository.class)
     FinalizeTextNormalization finalizeTextNormalization(JdbcTextNormalizationRepository repository) {
         return new FinalizeTextNormalization(repository);
     }
 
     @Bean
-    @ConditionalOnBean(PdfExtractionProperties.class)
+    @ConditionalOnBean({PdfExtractionProperties.class, PdfTableExtractionProperties.class, PersistNormalizedText.class, FinalizeTextNormalization.class})
     NormalizeMaterialText normalizeMaterialText(
             JdbcTextNormalizationRepository repository, PersistNormalizedText persistence,
             FinalizeTextNormalization finalization, PdfExtractionProperties properties) {

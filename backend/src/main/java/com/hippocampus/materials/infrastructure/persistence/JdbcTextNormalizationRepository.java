@@ -37,12 +37,19 @@ public final class JdbcTextNormalizationRepository implements TextNormalizationS
             WHERE tb.id = :id AND tb.material_version_id = :version AND m.status <> 'DELETED'
               AND m.material_type = 'PDF' AND m.mime_type = 'application/pdf' AND mv.storage_key IS NOT NULL
               AND btrim(mv.storage_key) <> '' AND mv.file_size_bytes > 0 AND mv.page_count > 0
-            FOR UPDATE OF tb, mv
+            FOR UPDATE OF tb, mv FOR SHARE OF m
             """;
     private static final String UPDATE = "UPDATE text_blocks SET normalized_content = :normalized WHERE id = :id AND material_version_id = :version AND normalized_content IS NULL";
 
     private final JdbcClient jdbc;
-    public JdbcTextNormalizationRepository(JdbcClient jdbc) { this.jdbc = Objects.requireNonNull(jdbc); }
+    private final int maxNativePageChars;
+    private final int maxOcrPageChars;
+    private final int maxTableChars;
+    public JdbcTextNormalizationRepository(JdbcClient jdbc, int maxNativePageChars, int maxOcrPageChars, int maxTableChars) {
+        this.jdbc = Objects.requireNonNull(jdbc);
+        if (maxNativePageChars <= 0 || maxOcrPageChars <= 0 || maxTableChars <= 0) throw new IllegalArgumentException("Normalization bounds must be positive");
+        this.maxNativePageChars = maxNativePageChars; this.maxOcrPageChars = maxOcrPageChars; this.maxTableChars = maxTableChars;
+    }
     @Override public int requirePageCount(UUID version) {
         return jdbc.sql(ELIGIBLE).param("version", version).query(Integer.class).optional()
                 .orElseThrow(() -> new IllegalStateException("Material version is not eligible for normalization"));
@@ -64,6 +71,9 @@ public final class JdbcTextNormalizationRepository implements TextNormalizationS
             if (!version.equals(block.materialVersionId()) || block.normalizedContent() == null
                     || (block.blockType() != TextBlockType.PAGE_TEXT && block.blockType() != TextBlockType.TABLE_TEXT))
                 throw new IllegalStateException("Normalized text provenance is invalid");
+            int limit = block.blockType() == TextBlockType.TABLE_TEXT ? maxTableChars
+                    : block.extractionMethod() == TextBlockExtractionMethod.OCR ? maxOcrPageChars : maxNativePageChars;
+            if (block.content().length() > limit || block.normalizedContent().length() > limit) throw new IllegalStateException("Normalized text exceeds source bound");
             Row row = jdbc.sql(LOCK).param("id", block.id()).param("version", version).query((r,n) -> new Row(
                     r.getObject("id", UUID.class), r.getObject("material_version_id", UUID.class),
                     r.getObject("document_node_id", UUID.class), r.getObject("page_number", Integer.class),
