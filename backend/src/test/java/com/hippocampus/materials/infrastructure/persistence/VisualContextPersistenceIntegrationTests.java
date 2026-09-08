@@ -39,10 +39,8 @@ class VisualContextPersistenceIntegrationTests extends PostgresIntegrationTestSu
             assertThatThrownBy(() -> repository.persist(version.versionId(), List.of(detected)))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("transaction");
-            inTransaction(transactions, () -> {
-                assertThat(repository.findByMaterialVersion(version.versionId())).hasSize(1);
-                repository.persist(version.versionId(), List.of(detected));
-            });
+            assertThat(repository.findByMaterialVersion(version.versionId())).hasSize(1);
+            inTransaction(transactions, () -> repository.persist(version.versionId(), List.of(detected)));
             inTransaction(transactions, () -> repository.persist(version.versionId(), List.of(detected)));
 
             assertThat(jdbc.sql("""

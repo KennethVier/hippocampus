@@ -35,6 +35,7 @@ public final class VisualContextAssociationPolicy {
                 .collect(Collectors.groupingBy(VisualContextAsset::pageNumber));
         Map<Integer, List<TextBlock>> pageTextByPage = safeBlocks.stream()
                 .filter(block -> block.blockType() == TextBlockType.PAGE_TEXT)
+                .filter(VisualContextAssociationPolicy::hasReliableText)
                 .collect(Collectors.groupingBy(TextBlock::pageNumber));
 
         List<VisualContextAssociation> result = new ArrayList<>();
@@ -131,6 +132,12 @@ public final class VisualContextAssociationPolicy {
     private static boolean isBoundary(String line) {
         return FIGURE_LABEL.matcher(line).matches()
                 || SECTION_BOUNDARY.matcher(line).matches();
+    }
+
+    private static boolean hasReliableText(TextBlock block) {
+        return block.extractionMethod() == TextBlockExtractionMethod.NATIVE
+                || (block.extractionMethod() == TextBlockExtractionMethod.OCR
+                        && block.quality() == TextBlockQuality.STRONG);
     }
 
     private static void validateOwnership(

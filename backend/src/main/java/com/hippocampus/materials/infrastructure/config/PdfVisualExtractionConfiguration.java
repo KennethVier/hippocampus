@@ -10,6 +10,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import com.hippocampus.materials.application.AssociateVisualContext;
 import com.hippocampus.materials.application.ExtractPdfVisuals;
 import com.hippocampus.materials.application.PersistVisualAssets;
+import com.hippocampus.materials.application.PersistVisualContext;
 import com.hippocampus.materials.application.ProcessingStageHandler;
 import com.hippocampus.materials.application.VisualExtractStageHandler;
 import com.hippocampus.materials.domain.VisualContextAssociationPolicy;
@@ -65,14 +66,21 @@ public class PdfVisualExtractionConfiguration {
     }
 
     @Bean
+    PersistVisualContext persistVisualContext(VisualContextRepository repository) {
+        return new PersistVisualContext(repository);
+    }
+
+    @Bean
     VisualContextRepository visualContextRepository(JdbcClient jdbcClient) {
         return new JdbcVisualContextRepository(jdbcClient);
     }
 
     @Bean
     AssociateVisualContext associateVisualContext(
-            VisualContextRepository visuals, DocumentStructureRepository structures) {
-        return new AssociateVisualContext(visuals, structures, new VisualContextAssociationPolicy());
+            VisualContextRepository visuals, DocumentStructureRepository structures,
+            PersistVisualContext persistence) {
+        return new AssociateVisualContext(
+                visuals, structures, new VisualContextAssociationPolicy(), persistence);
     }
 
     @Bean

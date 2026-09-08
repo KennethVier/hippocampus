@@ -43,7 +43,28 @@ class AssociateVisualContextTests {
 
         RecordingVisuals unresolved = new RecordingVisuals(List.of(asset(VERSION)));
         assertThat(useCase(unresolved, "No explicit caption").execute(job())).isEmpty();
-        assertThat(unresolved.persisted).isEmpty();
+        assertThat(unresolved.persisted).isNull();
+    }
+
+    @Test
+    void validatesNodesOnceAndLoadsAndPersistsOneVisualPageAtATime() {
+        List<String> events = new ArrayList<>();
+        RecordingVisuals visuals = new RecordingVisuals(
+                List.of(asset(VERSION, 2), asset(VERSION, 1)), events);
+        RecordingStructures structures = new RecordingStructures(events);
+        AssociateVisualContext useCase = new AssociateVisualContext(
+                visuals,
+                structures,
+                new VisualContextAssociationPolicy(),
+                new PersistVisualContext(visuals));
+
+        assertThat(useCase.execute(job())).hasSize(2);
+        assertThat(structures.nodeLoads).isEqualTo(1);
+        assertThat(structures.pageRanges).containsExactly("1-1", "2-2");
+        assertThat(visuals.persistedBatches)
+                .hasSize(2)
+                .allSatisfy(batch -> assertThat(batch).hasSize(1));
+        assertThat(events).containsExactly("nodes", "text-1", "persist-1", "text-2", "persist-2");
     }
 
     @Test
@@ -58,7 +79,10 @@ class AssociateVisualContextTests {
 
     private static AssociateVisualContext useCase(RecordingVisuals visuals, String pageContent) {
         return new AssociateVisualContext(
-                visuals, structures(pageContent), new VisualContextAssociationPolicy());
+                visuals,
+                structures(pageContent),
+                new VisualContextAssociationPolicy(),
+                new PersistVisualContext(visuals));
     }
 
     private static DocumentStructureRepository structures(String pageContent) {
@@ -79,7 +103,11 @@ class AssociateVisualContextTests {
     }
 
     private static VisualContextAsset asset(UUID version) {
-        return new VisualContextAsset(UUID.randomUUID(), version, ROOT, 1, null, null);
+        return asset(version, 1);
+    }
+
+    private static VisualContextAsset asset(UUID version, int page) {
+        return new VisualContextAsset(UUID.randomUUID(), version, ROOT, page, null, null);
     }
 
     private static ClaimedProcessingJob job() {
@@ -88,15 +116,59 @@ class AssociateVisualContextTests {
 
     private static final class RecordingVisuals implements VisualContextRepository {
         private final List<VisualContextAsset> assets;
+        private final List<String> events;
+        private final List<List<VisualContextAssociation>> persistedBatches = new ArrayList<>();
         private List<VisualContextAssociation> persisted;
 
         private RecordingVisuals(List<VisualContextAsset> assets) {
+            this(assets, new ArrayList<>());
+        }
+
+        private RecordingVisuals(List<VisualContextAsset> assets, List<String> events) {
             this.assets = new ArrayList<>(assets);
+            this.events = events;
         }
 
         @Override public List<VisualContextAsset> findByMaterialVersion(UUID id) { return List.copyOf(assets); }
         @Override public void persist(UUID id, List<VisualContextAssociation> associations) {
             persisted = List.copyOf(associations);
+            persistedBatches.add(persisted);
+            if (!persisted.isEmpty()) {
+                events.add("persist-" + persisted.getFirst().pageNumber());
+            }
+        }
+    }
+
+    private static final class RecordingStructures implements DocumentStructureRepository {
+        private final List<String> events;
+        private final List<String> pageRanges = new ArrayList<>();
+        private int nodeLoads;
+
+        private RecordingStructures(List<String> events) {
+            this.events = events;
+        }
+
+        @Override public Optional<DocumentNode> findDocumentRoot(UUID id) { return Optional.empty(); }
+
+        @Override
+        public List<DocumentNode> findNodesByMaterialVersion(UUID id) {
+            nodeLoads++;
+            events.add("nodes");
+            return List.of(new DocumentNode(
+                    ROOT, VERSION, null, DocumentNodeType.DOCUMENT, null, null, 1, 2,
+                    null, null, DocumentNodeDetectionOrigin.NATIVE, null, Instant.EPOCH));
+        }
+
+        @Override public List<DocumentNode> findChildren(UUID id, UUID parentId) { return List.of(); }
+
+        @Override
+        public List<TextBlock> findTextBlocksByOrdinalRange(UUID id, int first, int last) {
+            pageRanges.add(first + "-" + last);
+            events.add("text-" + first);
+            return List.of(new TextBlock(
+                    UUID.randomUUID(), VERSION, ROOT, first, TextBlockType.PAGE_TEXT, first,
+                    "Figure " + first + ". Caption", TextBlockExtractionMethod.NATIVE,
+                    TextBlockQuality.STRONG, Instant.EPOCH));
         }
     }
 }

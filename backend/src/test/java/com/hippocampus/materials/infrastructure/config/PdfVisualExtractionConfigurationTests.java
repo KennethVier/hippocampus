@@ -14,6 +14,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import com.hippocampus.materials.application.AssociateVisualContext;
 import com.hippocampus.materials.application.ExtractPdfVisuals;
 import com.hippocampus.materials.application.PersistVisualAssets;
+import com.hippocampus.materials.application.PersistVisualContext;
 import com.hippocampus.materials.application.ProcessingStageHandler;
 import com.hippocampus.materials.application.VisualExtractStageHandler;
 import com.hippocampus.materials.port.BinaryObjectStore;
@@ -46,6 +47,7 @@ class PdfVisualExtractionConfigurationTests {
                     .hasSingleBean(VisualAssetPersistence.class)
                     .hasSingleBean(VisualContextRepository.class)
                     .hasSingleBean(PersistVisualAssets.class)
+                    .hasSingleBean(PersistVisualContext.class)
                     .hasSingleBean(ExtractPdfVisuals.class)
                     .hasSingleBean(AssociateVisualContext.class)
                     .hasSingleBean(ProcessingStageHandler.class);

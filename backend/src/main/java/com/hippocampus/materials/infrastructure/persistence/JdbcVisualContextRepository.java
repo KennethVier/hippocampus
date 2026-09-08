@@ -23,7 +23,6 @@ public final class JdbcVisualContextRepository implements VisualContextRepositor
             LEFT JOIN document_nodes dn ON dn.id = va.document_node_id
             WHERE va.material_version_id = :materialVersionId
             ORDER BY va.page_number, va.id
-            FOR UPDATE OF va
             """;
     private static final String FIND_VISUAL = """
             SELECT document_node_id, page_number, caption, nearby_text
@@ -47,7 +46,6 @@ public final class JdbcVisualContextRepository implements VisualContextRepositor
 
     @Override
     public List<VisualContextAsset> findByMaterialVersion(UUID materialVersionId) {
-        requireTransaction();
         Objects.requireNonNull(materialVersionId);
         return jdbcClient.sql(FIND_VISUALS)
                 .param("materialVersionId", materialVersionId)

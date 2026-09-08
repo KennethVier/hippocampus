@@ -1,13 +1,14 @@
 package com.hippocampus.materials.application;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-
-import org.springframework.transaction.annotation.Transactional;
+import java.util.stream.Collectors;
 
 import com.hippocampus.materials.domain.ClaimedProcessingJob;
 import com.hippocampus.materials.domain.DocumentNode;
@@ -23,17 +24,19 @@ public class AssociateVisualContext {
     private final VisualContextRepository visuals;
     private final DocumentStructureRepository structures;
     private final VisualContextAssociationPolicy policy;
+    private final PersistVisualContext persistence;
 
     public AssociateVisualContext(
             VisualContextRepository visuals,
             DocumentStructureRepository structures,
-            VisualContextAssociationPolicy policy) {
+            VisualContextAssociationPolicy policy,
+            PersistVisualContext persistence) {
         this.visuals = Objects.requireNonNull(visuals);
         this.structures = Objects.requireNonNull(structures);
         this.policy = Objects.requireNonNull(policy);
+        this.persistence = Objects.requireNonNull(persistence);
     }
 
-    @Transactional
     public List<VisualContextAssociation> execute(ClaimedProcessingJob job) {
         Objects.requireNonNull(job, "job must not be null");
         if (job.jobType() != ProcessingJobType.VISUAL_EXTRACT || job.materialVersionId() == null) {
@@ -43,6 +46,16 @@ public class AssociateVisualContext {
         List<VisualContextAsset> assets = visuals.findByMaterialVersion(materialVersionId);
         if (assets.isEmpty()) {
             return List.of();
+        }
+
+        Set<UUID> assetIds = new HashSet<>();
+        for (VisualContextAsset asset : assets) {
+            if (!materialVersionId.equals(asset.materialVersionId())) {
+                throw new IllegalStateException("Visual context contains a cross-material-version asset");
+            }
+            if (!assetIds.add(asset.id())) {
+                throw new IllegalStateException("Visual context contains a duplicate asset");
+            }
         }
 
         Set<UUID> nodeIds = new HashSet<>();
@@ -55,12 +68,29 @@ public class AssociateVisualContext {
             throw new IllegalStateException("Visual context references an incompatible document node");
         }
 
-        List<TextBlock> pageText = new ArrayList<>();
-        assets.stream().map(VisualContextAsset::pageNumber).distinct().sorted()
-                .forEach(page -> pageText.addAll(
-                        structures.findTextBlocksByOrdinalRange(materialVersionId, page, page)));
-        List<VisualContextAssociation> associations = policy.associate(materialVersionId, assets, pageText);
-        visuals.persist(materialVersionId, associations);
-        return associations;
+        Map<Integer, List<VisualContextAsset>> assetsByPage = assets.stream()
+                .collect(Collectors.groupingBy(VisualContextAsset::pageNumber));
+        List<VisualContextAssociation> result = new ArrayList<>();
+        assetsByPage.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> associatePage(materialVersionId, entry.getKey(), entry.getValue(), result));
+        return List.copyOf(result);
+    }
+
+    private void associatePage(
+            UUID materialVersionId,
+            int pageNumber,
+            List<VisualContextAsset> pageAssets,
+            List<VisualContextAssociation> result) {
+        List<TextBlock> pageText = structures.findTextBlocksByOrdinalRange(
+                materialVersionId, pageNumber, pageNumber);
+        List<VisualContextAssociation> associations = policy.associate(
+                materialVersionId,
+                pageAssets.stream().sorted(Comparator.comparing(VisualContextAsset::id)).toList(),
+                pageText);
+        if (!associations.isEmpty()) {
+            persistence.execute(materialVersionId, associations);
+            result.addAll(associations);
+        }
     }
 }

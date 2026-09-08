@@ -25,6 +25,44 @@ class VisualContextAssociationPolicyTests {
     }
 
     @Test
+    void associatesStrongOcrPageText() {
+        assertThat(policy.associate(
+                VERSION,
+                List.of(asset(1)),
+                List.of(pageText(
+                        "Figure 4. Cardiac conduction pathway",
+                        TextBlockExtractionMethod.OCR,
+                        TextBlockQuality.STRONG))))
+                .singleElement()
+                .extracting(VisualContextAssociation::caption)
+                .isEqualTo("Figure 4. Cardiac conduction pathway");
+    }
+
+    @Test
+    void leavesLimitedOcrPageTextUnresolved() {
+        assertThat(policy.associate(
+                VERSION,
+                List.of(asset(1)),
+                List.of(pageText(
+                        "Figure 4. Cardiac conduction pathway\nNearby explanation.",
+                        TextBlockExtractionMethod.OCR,
+                        TextBlockQuality.LIMITED))))
+                .isEmpty();
+    }
+
+    @Test
+    void leavesPoorOcrPageTextUnresolved() {
+        assertThat(policy.associate(
+                VERSION,
+                List.of(asset(1)),
+                List.of(pageText(
+                        "Figure 4. Cardiac conduction pathway\nNearby explanation.",
+                        TextBlockExtractionMethod.OCR,
+                        TextBlockQuality.POOR))))
+                .isEmpty();
+    }
+
+    @Test
     void associatesOneBoundedMultilineCaption() {
         List<VisualContextAssociation> result = associate(
                 List.of(asset(1)), "Figure 10-2\nSA Nodal Action Potential");
@@ -78,8 +116,15 @@ class VisualContextAssociationPolicyTests {
     }
 
     private static TextBlock pageText(String content) {
+        return pageText(content, TextBlockExtractionMethod.NATIVE, TextBlockQuality.STRONG);
+    }
+
+    private static TextBlock pageText(
+            String content,
+            TextBlockExtractionMethod extractionMethod,
+            TextBlockQuality quality) {
         return new TextBlock(
                 UUID.randomUUID(), VERSION, NODE, 1, TextBlockType.PAGE_TEXT, 1, content,
-                TextBlockExtractionMethod.NATIVE, TextBlockQuality.STRONG, Instant.EPOCH);
+                extractionMethod, quality, Instant.EPOCH);
     }
 }
