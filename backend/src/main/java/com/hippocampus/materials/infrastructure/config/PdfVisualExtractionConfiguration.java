@@ -71,6 +71,7 @@ public class PdfVisualExtractionConfiguration {
         return new PdfBoxPdfTableExtractor(
                 objectStore, contentInspector, pdfProperties.maxPages(),
                 pdfProperties.maxNativeTextCharsPerPage(), structureProperties.maxTextPositionsPerPage(),
+                structureProperties.maxLayoutLinesPerPage(),
                 tableProperties.maxTablesPerPage(), tableProperties.maxTablesPerDocument(),
                 tableProperties.maxRowsPerTable(), tableProperties.maxColumnsPerTable(),
                 tableProperties.maxTableTextChars());

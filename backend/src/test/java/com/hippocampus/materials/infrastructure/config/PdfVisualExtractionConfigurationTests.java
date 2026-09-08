@@ -95,6 +95,7 @@ class PdfVisualExtractionConfigurationTests {
         @Bean PdfStructureInspectionProperties structureProperties() {
             PdfStructureInspectionProperties properties = mock(PdfStructureInspectionProperties.class);
             org.mockito.Mockito.when(properties.maxTextPositionsPerPage()).thenReturn(1000);
+            org.mockito.Mockito.when(properties.maxLayoutLinesPerPage()).thenReturn(100);
             return properties;
         }
     }

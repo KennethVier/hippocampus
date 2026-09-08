@@ -100,6 +100,38 @@ class TableTextPersistenceIntegrationTests extends PostgresIntegrationTestSuppor
         }
     }
 
+    @Test
+    void rejectsSameVersionNodeThatDoesNotContainTheTablePageDuringPersistAndFinalization() {
+        try (var context = startApplicationWithFlyway()) {
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            UUID version = readyPdf(jdbc, context, 2);
+            UUID section = UUID.randomUUID();
+            jdbc.sql("""
+                    INSERT INTO document_nodes
+                        (id, material_version_id, parent_id, node_type, title, ordinal,
+                         start_page, end_page, detection_origin, created_at)
+                    VALUES (?, ?, ?, 'SECTION', 'Page one', 1, 1, 1, 'NATIVE', CURRENT_TIMESTAMP)
+                    """).params(section, version, root(jdbc, version)).update();
+            JdbcTableTextPersistence persistence = new JdbcTableTextPersistence(jdbc, 10, 1000);
+            TransactionTemplate transactions = new TransactionTemplate(context.getBean(PlatformTransactionManager.class));
+
+            assertThatThrownBy(() -> inTransaction(transactions, () -> persistence.persistOrVerify(
+                    version, 2, table(version, section, 2, 3, "A\tB\n1\t2",
+                            TextBlockExtractionMethod.NATIVE, TextBlockQuality.STRONG))))
+                    .isInstanceOf(TableTextPersistenceException.class);
+
+            jdbc.sql("""
+                    INSERT INTO text_blocks
+                        (id, material_version_id, document_node_id, page_number, block_type,
+                         ordinal, content, extraction_method, quality, created_at)
+                    VALUES (?, ?, ?, 2, 'TABLE_TEXT', 3, 'A B', 'NATIVE', 'LIMITED', CURRENT_TIMESTAMP)
+                    """).params(UUID.randomUUID(), version, section).update();
+            assertThatThrownBy(() -> inTransaction(transactions,
+                    () -> persistence.finalizeExtraction(version, 2, 1)))
+                    .isInstanceOf(TableTextPersistenceException.class);
+        }
+    }
+
     private static UUID readyPdf(JdbcClient jdbc, ConfigurableApplicationContext context, int pageCount) {
         UUID version = insertPdf(jdbc);
         List<PdfExtractedPage> extracted = java.util.stream.IntStream.rangeClosed(1, pageCount)

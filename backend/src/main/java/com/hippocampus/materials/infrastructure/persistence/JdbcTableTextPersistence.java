@@ -31,6 +31,8 @@ public final class JdbcTableTextPersistence implements TableTextPersistence {
     private static final String NODE_EXISTS = """
             SELECT count(*) FROM document_nodes
             WHERE id = :nodeId AND material_version_id = :materialVersionId
+              AND start_page IS NOT NULL AND end_page IS NOT NULL
+              AND :pageNumber BETWEEN start_page AND end_page
             """;
     private static final String FIND_BLOCK = """
             SELECT document_node_id, page_number, block_type, content, extraction_method, quality
@@ -59,7 +61,9 @@ public final class JdbcTableTextPersistence implements TableTextPersistence {
                        AND EXISTS (
                            SELECT 1 FROM document_nodes dn
                            WHERE dn.id = text_blocks.document_node_id
-                             AND dn.material_version_id = :materialVersionId)), true) AS valid_rows
+                             AND dn.material_version_id = :materialVersionId
+                             AND dn.start_page IS NOT NULL AND dn.end_page IS NOT NULL
+                             AND text_blocks.page_number BETWEEN dn.start_page AND dn.end_page)), true) AS valid_rows
             FROM text_blocks
             WHERE material_version_id = :materialVersionId
               AND block_type = 'TABLE_TEXT'
@@ -105,6 +109,7 @@ public final class JdbcTableTextPersistence implements TableTextPersistence {
         int nodes = jdbcClient.sql(NODE_EXISTS)
                 .param("nodeId", table.documentNodeId())
                 .param("materialVersionId", materialVersionId)
+                .param("pageNumber", table.pageNumber())
                 .query(Integer.class).single();
         if (nodes != 1) {
             throw conflict("Table document node does not belong to the material version");

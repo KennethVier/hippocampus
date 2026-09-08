@@ -16,6 +16,7 @@ import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.util.Matrix;
 import org.junit.jupiter.api.Test;
 
 import com.hippocampus.materials.domain.PdfTablePage;
@@ -100,6 +101,63 @@ class PdfBoxPdfTableExtractorTests {
     }
 
     @Test
+    void extractsAlignedTwoColumnMedicalTableAsStrong() throws Exception {
+        byte[] pdf = pdf(page -> {
+            positioned(page, 50, 720, "Nerve"); positioned(page, 300, 720, "Function");
+            positioned(page, 50, 700, "Vagus"); positioned(page, 300, 700, "Parasympathetic");
+            positioned(page, 50, 680, "Radial"); positioned(page, 300, 680, "Wrist extension");
+        });
+
+        assertThat(extract(pdf, 32, 100, 256, 32, 100_000).getFirst().tables())
+                .singleElement().satisfies(table -> {
+                    assertThat(table.quality()).isEqualTo(TextBlockQuality.STRONG);
+                    assertThat(table.content()).isEqualTo(
+                            "Nerve\tFunction\nVagus\tParasympathetic\nRadial\tWrist extension");
+                });
+    }
+
+    @Test
+    void rejectsAlignedThreeColumnProse() throws Exception {
+        byte[] pdf = pdf(page -> {
+            row(page, 720, "This prose sentence", "continues across columns", "without table semantics");
+            row(page, 700, "Another prose sentence", "continues across columns", "without tabular labels");
+            row(page, 680, "Ordinary explanatory text", "continues across columns", "as flowing prose");
+        });
+
+        assertThat(extract(pdf, 32, 100, 256, 32, 100_000).getFirst().tables()).isEmpty();
+    }
+
+    @Test
+    void doesNotMergeSideBySideTablesIntoOneStrongGrid() throws Exception {
+        byte[] pdf = pdf(page -> {
+            fourColumns(page, 720, "Drug", "Dose", "Nerve", "Action");
+            fourColumns(page, 700, "A", "1mg", "Vagus", "Slow HR");
+            fourColumns(page, 680, "B", "2mg", "Radial", "Extend");
+        });
+
+        assertThat(extract(pdf, 32, 100, 256, 32, 100_000).getFirst().tables())
+                .noneMatch(table -> table.quality() == TextBlockQuality.STRONG);
+    }
+
+    @Test
+    void rotatedAndOverlappingLayoutCannotEstablishStrongConfidence() throws Exception {
+        byte[] rotated = pdf(page -> {
+            page.transform(Matrix.getRotateInstance(Math.PI / 2, 500, 100));
+            row(page, 720, "A", "B", "C"); row(page, 700, "1", "2", "3"); row(page, 680, "4", "5", "6");
+        });
+        assertThat(extract(rotated, 32, 100, 256, 32, 100_000).getFirst().tables())
+                .noneMatch(table -> table.quality() == TextBlockQuality.STRONG);
+
+        byte[] overlap = pdf(page -> {
+            positioned(page, 50, 720, "Drug"); positioned(page, 70, 720, "Dose"); positioned(page, 300, 720, "Effect");
+            positioned(page, 50, 700, "Aspirin"); positioned(page, 70, 700, "5mg"); positioned(page, 300, 700, "Relief");
+            positioned(page, 50, 680, "Statin"); positioned(page, 70, 680, "10mg"); positioned(page, 300, 680, "Lower LDL");
+        });
+        assertThat(extract(overlap, 32, 100, 256, 32, 100_000).getFirst().tables())
+                .noneMatch(table -> table.quality() == TextBlockQuality.STRONG);
+    }
+
+    @Test
     void emitsTwoSeparatedTablesOnOnePageAndDoesNotDeduplicateAcrossPages() throws Exception {
         PageContent twoTables = page -> {
             row(page, 720, "A", "B", "C");
@@ -143,6 +201,35 @@ class PdfBoxPdfTableExtractorTests {
         assertResourceLimit(() -> extract(twoPages, 1, 1, 256, 32, 100_000));
     }
 
+    @Test
+    void enforcesConstructionAndPageLimitsBeforeStructuresGrowPastThem() throws Exception {
+        byte[] rows = pdf(page -> {
+            positioned(page, 50, 720, "one"); positioned(page, 50, 700, "two");
+            positioned(page, 50, 680, "three"); positioned(page, 50, 660, "four");
+        });
+        assertResourceLimit(() -> extract(rows, 32, 100, 256, 32, 100_000, 3));
+
+        byte[] columns = pdf(page -> fourColumns(page, 720, "A", "B", "C", "D"));
+        assertResourceLimit(() -> extract(columns, 32, 100, 256, 3, 100_000));
+
+        byte[] twoTables = pdf(page -> {
+            row(page, 720, "A", "B", "C"); row(page, 700, "1", "2", "3"); row(page, 680, "4", "5", "6");
+            positioned(page, 50, 630, "separator paragraph");
+            row(page, 580, "D", "E", "F"); row(page, 560, "7", "8", "9"); row(page, 540, "10", "11", "12");
+        });
+        assertResourceLimit(() -> extract(twoTables, 1, 100, 256, 32, 100_000));
+    }
+
+    @Test
+    void safelyDisregardsGeometryOutsideTheCropBox() throws Exception {
+        byte[] pdf = pdf(page -> {
+            positioned(page, 2000, 720, "A"); positioned(page, 2200, 720, "B");
+            positioned(page, 2000, 700, "1"); positioned(page, 2200, 700, "2");
+            positioned(page, 2000, 680, "3"); positioned(page, 2200, 680, "4");
+        });
+        assertThat(extract(pdf, 32, 100, 256, 32, 100_000).getFirst().tables()).isEmpty();
+    }
+
     private static void assertResourceLimit(ThrowingOperation operation) {
         assertThatThrownBy(operation::run)
                 .isInstanceOf(PdfTableExtractionException.class)
@@ -156,7 +243,22 @@ class PdfBoxPdfTableExtractorTests {
         PdfBoxPdfTableExtractor extractor = new PdfBoxPdfTableExtractor(
                 store,
                 (input, length) -> new MaterialContentInspector.Inspection("application/pdf"),
-                100, 100_000, 100_000, pageTables, documentTables, rows, columns, chars);
+                100, 100_000, 100_000, 10_000, pageTables, documentTables, rows, columns, chars);
+        int pageCount = extractor.extract(
+                new PdfExtractionSource(UUID.randomUUID(), new BinaryObjectKey("objects/pdf"), pdf.length),
+                output::add);
+        assertThat(pageCount).isEqualTo(output.size());
+        return output;
+    }
+
+    private static List<PdfTablePage> extract(
+            byte[] pdf, int pageTables, int documentTables, int rows, int columns, int chars, int layoutRows) {
+        List<PdfTablePage> output = new ArrayList<>();
+        PdfBoxPdfTableExtractor extractor = new PdfBoxPdfTableExtractor(
+                new ByteStore(pdf),
+                (input, length) -> new MaterialContentInspector.Inspection("application/pdf"),
+                100, 100_000, 100_000, layoutRows,
+                pageTables, documentTables, rows, columns, chars);
         int pageCount = extractor.extract(
                 new PdfExtractionSource(UUID.randomUUID(), new BinaryObjectKey("objects/pdf"), pdf.length),
                 output::add);
@@ -190,6 +292,13 @@ class PdfBoxPdfTableExtractorTests {
         page.newLineAtOffset(x, y);
         page.showText(value);
         page.endText();
+    }
+
+    private static void fourColumns(PDPageContentStream page, float y, String... values) throws IOException {
+        float[] columns = {50, 150, 360, 470};
+        for (int index = 0; index < values.length; index++) {
+            positioned(page, columns[index], y, values[index]);
+        }
     }
 
     @FunctionalInterface private interface PageContent { void write(PDPageContentStream page) throws Exception; }

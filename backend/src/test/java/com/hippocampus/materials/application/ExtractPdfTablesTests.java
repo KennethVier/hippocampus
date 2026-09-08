@@ -109,6 +109,15 @@ class ExtractPdfTablesTests {
                 1, page(1, TextBlockExtractionMethod.NATIVE, null, "prose"))), duplicatePage,
                 new MemoryPersistence()).execute(job(ProcessingJobType.VISUAL_EXTRACT)))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("physical order");
+
+        PdfTableExtractor emittedCountMismatch = (source, sink) -> {
+            sink.accept(new PdfTablePage(1, 2, List.of()));
+            return 1;
+        };
+        assertThatThrownBy(() -> useCase(repository(Map.of(
+                1, page(1, TextBlockExtractionMethod.NATIVE, null, "prose"))), emittedCountMismatch,
+                new MemoryPersistence()).execute(job(ProcessingJobType.VISUAL_EXTRACT)))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("exact physical page set");
     }
 
     @Test
@@ -123,6 +132,16 @@ class ExtractPdfTablesTests {
         assertThatThrownBy(() -> useCase(missing, pages(1), new MemoryPersistence())
                 .execute(job(ProcessingJobType.VISUAL_EXTRACT)))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("Exactly one");
+
+        assertThatThrownBy(() -> useCase(repository(Map.of(
+                1, page(1, TextBlockExtractionMethod.OCR, null, "A|B\n1|2"))), pages(1),
+                new MemoryPersistence()).execute(job(ProcessingJobType.VISUAL_EXTRACT)))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("quality");
+
+        assertThatThrownBy(() -> useCase(repository(Map.of(
+                1, page(1, TextBlockExtractionMethod.NATIVE, TextBlockQuality.STRONG, "text"))), pages(1),
+                new MemoryPersistence()).execute(job(ProcessingJobType.VISUAL_EXTRACT)))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("quality");
     }
 
     private static ExtractPdfTables useCase(

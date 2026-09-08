@@ -74,7 +74,7 @@ public final class ExtractPdfTables {
                 materialVersionId, structures.findNodesByMaterialVersion(materialVersionId));
         Counter counter = new Counter();
         int pageCount = extractor.extract(source, page -> processPage(materialVersionId, locator, counter, page));
-        if (counter.lastPage != pageCount) {
+        if (counter.lastPage != pageCount || counter.pageCount != pageCount) {
             throw new IllegalStateException("PDF table extractor did not emit the exact physical page set");
         }
         requireNoTransaction();
@@ -126,6 +126,13 @@ public final class ExtractPdfTables {
                 || !Integer.valueOf(pageNumber).equals(block.pageNumber())) {
             throw new IllegalStateException("Physical page text provenance is inconsistent");
         }
+        boolean validNative = block.extractionMethod() == TextBlockExtractionMethod.NATIVE
+                && block.quality() == null;
+        boolean validOcr = block.extractionMethod() == TextBlockExtractionMethod.OCR
+                && block.quality() != null;
+        if (!validNative && !validOcr) {
+            throw new IllegalStateException("Physical PAGE_TEXT extraction quality is inconsistent");
+        }
         return block;
     }
 
@@ -140,7 +147,8 @@ public final class ExtractPdfTables {
                 ? TextBlockQuality.POOR : TextBlockQuality.LIMITED;
         List<SourceTable> result = new ArrayList<>();
         for (String content : OcrDelimitedTableDetector.detect(
-                block.content(), maxRowsPerTable, maxColumnsPerTable, maxTableTextCharacters)) {
+                block.content(), maxTablesPerPage, maxRowsPerTable,
+                maxColumnsPerTable, maxTableTextCharacters)) {
             result.add(new SourceTable(content, TextBlockExtractionMethod.OCR, outputQuality));
         }
         return List.copyOf(result);

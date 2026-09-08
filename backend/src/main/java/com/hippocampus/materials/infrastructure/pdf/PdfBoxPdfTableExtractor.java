@@ -50,6 +50,7 @@ public final class PdfBoxPdfTableExtractor implements PdfTableExtractor {
     private final int maxPages;
     private final int maxNativeTextCharactersPerPage;
     private final int maxTextPositionsPerPage;
+    private final int maxLayoutLinesPerPage;
     private final Limits limits;
 
     public PdfBoxPdfTableExtractor(
@@ -58,13 +59,14 @@ public final class PdfBoxPdfTableExtractor implements PdfTableExtractor {
             int maxPages,
             int maxNativeTextCharactersPerPage,
             int maxTextPositionsPerPage,
+            int maxLayoutLinesPerPage,
             int maxTablesPerPage,
             int maxTablesPerDocument,
             int maxRowsPerTable,
             int maxColumnsPerTable,
             int maxTableTextCharacters) {
         this(objectStore, contentInspector, new SystemPdfTemporaryFiles(), PDPage::removePageResourceFromCache,
-                maxPages, maxNativeTextCharactersPerPage, maxTextPositionsPerPage,
+                maxPages, maxNativeTextCharactersPerPage, maxTextPositionsPerPage, maxLayoutLinesPerPage,
                 new Limits(maxTablesPerPage, maxTablesPerDocument, maxRowsPerTable,
                         maxColumnsPerTable, maxTableTextCharacters));
     }
@@ -77,17 +79,20 @@ public final class PdfBoxPdfTableExtractor implements PdfTableExtractor {
             int maxPages,
             int maxNativeTextCharactersPerPage,
             int maxTextPositionsPerPage,
+            int maxLayoutLinesPerPage,
             Limits limits) {
         this.objectStore = Objects.requireNonNull(objectStore);
         this.contentInspector = Objects.requireNonNull(contentInspector);
         this.temporaryFiles = Objects.requireNonNull(temporaryFiles);
         this.pageResourceCleaner = Objects.requireNonNull(pageResourceCleaner);
-        if (maxPages <= 0 || maxNativeTextCharactersPerPage <= 0 || maxTextPositionsPerPage <= 0) {
+        if (maxPages <= 0 || maxNativeTextCharactersPerPage <= 0 || maxTextPositionsPerPage <= 0
+                || maxLayoutLinesPerPage <= 0) {
             throw new IllegalArgumentException("PDF table parser limits must be positive");
         }
         this.maxPages = maxPages;
         this.maxNativeTextCharactersPerPage = maxNativeTextCharactersPerPage;
         this.maxTextPositionsPerPage = maxTextPositionsPerPage;
+        this.maxLayoutLinesPerPage = maxLayoutLinesPerPage;
         this.limits = Objects.requireNonNull(limits);
     }
 
@@ -154,15 +159,11 @@ public final class PdfBoxPdfTableExtractor implements PdfTableExtractor {
             if (pageCount > maxPages) {
                 throw failure(PdfTableExtractionException.Kind.PAGE_LIMIT_EXCEEDED, null);
             }
-            int documentTables = 0;
+            DocumentBudget documentBudget = new DocumentBudget(limits.maxTablesPerDocument());
             for (int pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
                 PDPage page = document.getPage(pageNumber - 1);
                 try {
-                    List<ExtractedPdfTable> tables = readPage(document, page, pageNumber);
-                    documentTables = Math.addExact(documentTables, tables.size());
-                    if (documentTables > limits.maxTablesPerDocument()) {
-                        throw resourceLimit(null);
-                    }
+                    List<ExtractedPdfTable> tables = readPage(document, page, pageNumber, documentBudget);
                     sink.accept(new PdfTablePage(pageNumber, pageCount, tables));
                 } catch (PdfTableExtractionException exception) {
                     throw exception;
@@ -184,26 +185,27 @@ public final class PdfBoxPdfTableExtractor implements PdfTableExtractor {
         }
     }
 
-    private List<ExtractedPdfTable> readPage(PDDocument document, PDPage page, int pageNumber) throws IOException {
+    private List<ExtractedPdfTable> readPage(
+            PDDocument document, PDPage page, int pageNumber, DocumentBudget documentBudget) throws IOException {
         PDRectangle box = page.getCropBox();
         if (box == null || !Float.isFinite(box.getWidth()) || !Float.isFinite(box.getHeight())
                 || box.getWidth() <= 0 || box.getHeight() <= 0) {
             throw resourceLimit(null);
         }
         PositionCollector collector = new PositionCollector(
-                maxTextPositionsPerPage, maxNativeTextCharactersPerPage);
+                maxTextPositionsPerPage, maxNativeTextCharactersPerPage, box.getWidth(), box.getHeight());
         collector.setStartPage(pageNumber);
         collector.setEndPage(pageNumber);
         collector.setSortByPosition(false);
         try {
             collector.writeText(document, Writer.nullWriter());
-            return detect(collector.fragments());
+            return detect(collector.fragments(), documentBudget);
         } catch (PositionLimitExceeded exception) {
             throw resourceLimit(exception);
         }
     }
 
-    private List<ExtractedPdfTable> detect(List<Fragment> fragments) {
+    private List<ExtractedPdfTable> detect(List<Fragment> fragments, DocumentBudget documentBudget) {
         fragments.sort(Comparator.comparingDouble(Fragment::y).thenComparingDouble(Fragment::x));
         List<Row> rows = groupRows(fragments);
         List<ExtractedPdfTable> result = new ArrayList<>();
@@ -213,22 +215,19 @@ public final class PdfBoxPdfTableExtractor implements PdfTableExtractor {
             if (row.cells().size() >= 2 && closeToPrevious(candidate, row)) {
                 if (candidate.isEmpty() && previous != null && previous.cells().size() == 1
                         && closeRows(previous, row)) {
-                    candidate.add(previous);
+                    addCandidateRow(candidate, previous);
                 }
-                candidate.add(row);
+                addCandidateRow(candidate, row);
             } else {
-                finishCandidate(candidate, result);
+                finishCandidate(candidate, result, documentBudget);
                 candidate = new ArrayList<>();
                 if (row.cells().size() >= 2) {
-                    candidate.add(row);
+                    addCandidateRow(candidate, row);
                 }
             }
             previous = row;
         }
-        finishCandidate(candidate, result);
-        if (result.size() > limits.maxTablesPerPage()) {
-            throw resourceLimit(null);
-        }
+        finishCandidate(candidate, result, documentBudget);
         return List.copyOf(result);
     }
 
@@ -238,7 +237,10 @@ public final class PdfBoxPdfTableExtractor implements PdfTableExtractor {
             RowBuilder row = builders.isEmpty() ? null : builders.getLast();
             float tolerance = Math.max(1.5f, fragment.height() * ROW_BASELINE_FACTOR);
             if (row == null || Math.abs(row.baseline() - fragment.y()) > tolerance) {
-                row = new RowBuilder(fragment.y());
+                if (builders.size() >= maxLayoutLinesPerPage) {
+                    throw resourceLimit(null);
+                }
+                row = new RowBuilder(fragment.y(), limits.maxColumnsPerTable());
                 builders.add(row);
             }
             row.add(fragment);
@@ -259,19 +261,26 @@ public final class PdfBoxPdfTableExtractor implements PdfTableExtractor {
                 <= Math.max(previous.height(), row.height()) * MAX_ROW_GAP_FACTOR;
     }
 
-    private void finishCandidate(List<Row> rows, List<ExtractedPdfTable> result) {
-        if (rows.size() < 2 || rows.stream().mapToInt(row -> row.cells().size()).max().orElse(0) < 3) {
+    private void addCandidateRow(List<Row> candidate, Row row) {
+        if (candidate.size() >= limits.maxRowsPerTable()) {
+            throw resourceLimit(null);
+        }
+        candidate.add(row);
+    }
+
+    private void finishCandidate(
+            List<Row> rows, List<ExtractedPdfTable> result, DocumentBudget documentBudget) {
+        if (rows.size() < 2 || rows.stream().mapToInt(row -> row.cells().size()).max().orElse(0) < 2
+                || !tableLike(rows)) {
             return;
         }
-        if (rows.size() > limits.maxRowsPerTable()
-                || rows.stream().anyMatch(row -> row.cells().size() > limits.maxColumnsPerTable())) {
+        if (result.size() >= limits.maxTablesPerPage()) {
             throw resourceLimit(null);
         }
-        boolean strong = rows.size() >= 3 && stableGrid(rows);
-        String content = strong ? serializeGrid(rows) : serializeSourceOrder(rows);
-        if (content.length() > limits.maxTableTextCharacters()) {
-            throw resourceLimit(null);
-        }
+        boolean strong = rows.size() >= 3 && stableGrid(rows) && !hasSideBySideSeparation(rows);
+        String content = strong ? serializeGrid(rows, limits.maxTableTextCharacters())
+                : serializeSourceOrder(rows, limits.maxTableTextCharacters());
+        documentBudget.addTable();
         result.add(new ExtractedPdfTable(
                 content, strong ? TextBlockQuality.STRONG : TextBlockQuality.LIMITED));
     }
@@ -279,7 +288,7 @@ public final class PdfBoxPdfTableExtractor implements PdfTableExtractor {
     private static boolean stableGrid(List<Row> rows) {
         int columns = rows.getFirst().cells().size();
         for (Row row : rows) {
-            if (row.cells().size() != columns) {
+            if (row.ambiguous() || row.cells().size() != columns) {
                 return false;
             }
             for (int column = 0; column < columns; column++) {
@@ -292,25 +301,75 @@ public final class PdfBoxPdfTableExtractor implements PdfTableExtractor {
         return true;
     }
 
-    private static String serializeGrid(List<Row> rows) {
-        StringBuilder output = new StringBuilder();
+    private static boolean tableLike(List<Row> rows) {
+        Row header = rows.stream().filter(row -> row.cells().size() >= 2).findFirst().orElse(rows.getFirst());
+        if (header.cells().stream().anyMatch(cell -> !compactCell(cell.text(), 2, 40))) {
+            return false;
+        }
+        return rows.stream().flatMap(row -> row.cells().stream())
+                .allMatch(cell -> compactCell(cell.text(), 8, 80));
+    }
+
+    private static boolean compactCell(String value, int maxWords, int maxCharacters) {
+        if (value.length() > maxCharacters || value.endsWith(".") || value.endsWith("?") || value.endsWith("!")) {
+            return false;
+        }
+        int words = 1;
+        for (int index = 0; index < value.length(); index++) {
+            if (Character.isWhitespace(value.charAt(index))) {
+                words++;
+            }
+        }
+        return words <= maxWords;
+    }
+
+    private static boolean hasSideBySideSeparation(List<Row> rows) {
+        int columns = rows.getFirst().cells().size();
+        if (columns < 4) {
+            return false;
+        }
+        float[] gaps = new float[columns - 1];
+        for (Row row : rows) {
+            for (int column = 0; column < columns - 1; column++) {
+                gaps[column] += row.cells().get(column + 1).x() - row.cells().get(column).endX();
+            }
+        }
+        float largest = Float.NEGATIVE_INFINITY;
+        float second = Float.NEGATIVE_INFINITY;
+        for (float total : gaps) {
+            float average = total / rows.size();
+            if (average > largest) {
+                second = largest;
+                largest = average;
+            } else if (average > second) {
+                second = average;
+            }
+        }
+        return largest >= MIN_CELL_GAP * 4 && largest > second * 1.8f;
+    }
+
+    private static String serializeGrid(List<Row> rows, int maxCharacters) {
+        BoundedText output = new BoundedText(maxCharacters);
         for (Row row : rows) {
             if (!output.isEmpty()) output.append('\n');
             for (Cell cell : row.cells()) {
-                if (output.length() > 0 && output.charAt(output.length() - 1) != '\n') output.append('\t');
+                if (!output.isEmpty() && output.last() != '\n') output.append('\t');
                 output.append(cell.text());
             }
         }
-        return output.toString();
+        return output.value();
     }
 
-    private static String serializeSourceOrder(List<Row> rows) {
-        StringBuilder output = new StringBuilder();
+    private static String serializeSourceOrder(List<Row> rows, int maxCharacters) {
+        BoundedText output = new BoundedText(maxCharacters);
         for (Row row : rows) {
             if (!output.isEmpty()) output.append('\n');
-            output.append(row.sourceText());
+            for (Cell cell : row.cells()) {
+                if (!output.isEmpty() && output.last() != '\n') output.append(' ');
+                output.append(cell.text());
+            }
         }
-        return output.toString();
+        return output.value();
     }
 
     private void cleanup(Path staged, PdfTableExtractionException primary) {
@@ -357,19 +416,24 @@ public final class PdfBoxPdfTableExtractor implements PdfTableExtractor {
     }
 
     private record Fragment(String text, float x, float y, float width, float height) {}
-    private record Cell(float x, String text) {}
-    private record Row(float baseline, float height, List<Cell> cells, String sourceText) {}
+    private record Cell(float x, float endX, String text) {}
+    private record Row(float baseline, float height, List<Cell> cells, boolean ambiguous) {}
 
     private static final class PositionCollector extends PDFTextStripper {
         private final int maximumPositions;
         private final int maximumCharacters;
+        private final float pageWidth;
+        private final float pageHeight;
         private final List<Fragment> fragments = new ArrayList<>();
         private int positions;
         private int characters;
 
-        private PositionCollector(int maximumPositions, int maximumCharacters) throws IOException {
+        private PositionCollector(
+                int maximumPositions, int maximumCharacters, float pageWidth, float pageHeight) throws IOException {
             this.maximumPositions = maximumPositions;
             this.maximumCharacters = maximumCharacters;
+            this.pageWidth = pageWidth;
+            this.pageHeight = pageHeight;
         }
 
         @Override
@@ -387,10 +451,22 @@ public final class PdfBoxPdfTableExtractor implements PdfTableExtractor {
             float y = position.getYDirAdj();
             float width = position.getWidthDirAdj();
             float height = position.getHeightDir();
+            float direction = position.getDir();
+            double endX = (double) x + width;
+            if (!Float.isFinite(direction)) {
+                throw new PositionLimitExceeded();
+            }
+            if (Math.abs(direction) > 0.01f) {
+                return;
+            }
             if (characters > maximumCharacters || !Float.isFinite(x) || !Float.isFinite(y)
                     || !Float.isFinite(width) || !Float.isFinite(height)
+                    || !Double.isFinite(endX)
                     || x < 0 || y < 0 || width < 0 || height <= 0) {
                 throw new PositionLimitExceeded();
+            }
+            if (x > pageWidth || y > pageHeight || endX > pageWidth) {
+                return;
             }
             fragments.add(new Fragment(text, x, y, width, height));
         }
@@ -402,10 +478,12 @@ public final class PdfBoxPdfTableExtractor implements PdfTableExtractor {
 
     private static final class RowBuilder {
         private final float baseline;
+        private final int maximumColumns;
         private final List<Fragment> fragments = new ArrayList<>();
 
-        private RowBuilder(float baseline) {
+        private RowBuilder(float baseline, int maximumColumns) {
             this.baseline = baseline;
+            this.maximumColumns = maximumColumns;
         }
 
         private float baseline() {
@@ -423,12 +501,16 @@ public final class PdfBoxPdfTableExtractor implements PdfTableExtractor {
             float cellX = 0;
             float previousEnd = Float.NaN;
             float height = 0;
+            boolean ambiguous = false;
             for (Fragment fragment : fragments) {
                 float gap = fragment.x() - previousEnd;
+                if (Float.isFinite(previousEnd) && gap < -0.5f) {
+                    ambiguous = true;
+                }
                 boolean newCell = Float.isFinite(previousEnd)
                         && gap > Math.max(MIN_CELL_GAP, fragment.height() * CELL_GAP_HEIGHT_FACTOR);
                 if (newCell) {
-                    cells.add(new Cell(cellX, cell.toString().strip()));
+                    addCell(cells, cellX, previousEnd, cell.toString().strip());
                     cell.setLength(0);
                 } else if (Float.isFinite(previousEnd) && gap > Math.max(1.0f, fragment.height() * 0.15f)) {
                     cell.append(' ');
@@ -441,14 +523,53 @@ public final class PdfBoxPdfTableExtractor implements PdfTableExtractor {
                 height = Math.max(height, fragment.height());
             }
             if (!cell.isEmpty()) {
-                cells.add(new Cell(cellX, cell.toString().strip()));
+                addCell(cells, cellX, previousEnd, cell.toString().strip());
             }
-            StringBuilder source = new StringBuilder();
-            for (Cell value : cells) {
-                if (!source.isEmpty()) source.append(' ');
-                source.append(value.text());
+            return new Row(baseline, height, List.copyOf(cells), ambiguous);
+        }
+
+        private void addCell(List<Cell> cells, float x, float endX, String text) {
+            if (cells.size() >= maximumColumns) {
+                throw new PositionLimitExceeded();
             }
-            return new Row(baseline, height, List.copyOf(cells), source.toString());
+            cells.add(new Cell(x, endX, text));
+        }
+    }
+
+    private static final class DocumentBudget {
+        private final int maximumTables;
+        private int tables;
+
+        private DocumentBudget(int maximumTables) {
+            this.maximumTables = maximumTables;
+        }
+
+        private void addTable() {
+            if (tables >= maximumTables) {
+                throw resourceLimit(null);
+            }
+            tables++;
+        }
+    }
+
+    private static final class BoundedText {
+        private final int maximumCharacters;
+        private final StringBuilder value = new StringBuilder();
+
+        private BoundedText(int maximumCharacters) {
+            this.maximumCharacters = maximumCharacters;
+        }
+
+        private boolean isEmpty() { return value.isEmpty(); }
+        private char last() { return value.charAt(value.length() - 1); }
+        private void append(char character) { ensure(1); value.append(character); }
+        private void append(String text) { ensure(text.length()); value.append(text); }
+        private String value() { return value.toString(); }
+
+        private void ensure(int addition) {
+            if (addition > maximumCharacters - value.length()) {
+                throw resourceLimit(null);
+            }
         }
     }
 
