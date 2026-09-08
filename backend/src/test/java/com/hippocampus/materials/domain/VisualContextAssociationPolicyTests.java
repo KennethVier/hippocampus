@@ -25,6 +25,32 @@ class VisualContextAssociationPolicyTests {
     }
 
     @Test
+    void associatesInlineCaptionsWithExplicitDelimiters() {
+        assertThat(associate(List.of(asset(1)), "Figure 4: Cardiac conduction pathway"))
+                .singleElement()
+                .extracting(VisualContextAssociation::caption)
+                .isEqualTo("Figure 4: Cardiac conduction pathway");
+
+        for (String delimiter : List.of("-", "–", "—")) {
+            String caption = "Figure 4 " + delimiter + " Cardiac conduction pathway";
+            assertThat(associate(List.of(asset(1)), caption))
+                    .singleElement()
+                    .extracting(VisualContextAssociation::caption)
+                    .isEqualTo(caption);
+        }
+    }
+
+    @Test
+    void leavesBodyReferencesWithoutAnExplicitDelimiterUnresolved() {
+        assertThat(associate(List.of(asset(1)), "Figure 4 shows the cardiac conduction pathway."))
+                .isEmpty();
+        assertThat(associate(List.of(asset(1)), "Figure 4 illustrates the anatomy."))
+                .isEmpty();
+        assertThat(associate(List.of(asset(1)), "Figure 4 demonstrates the mechanism."))
+                .isEmpty();
+    }
+
+    @Test
     void associatesStrongOcrPageText() {
         assertThat(policy.associate(
                 VERSION,
@@ -63,12 +89,15 @@ class VisualContextAssociationPolicyTests {
     }
 
     @Test
-    void associatesOneBoundedMultilineCaption() {
-        List<VisualContextAssociation> result = associate(
-                List.of(asset(1)), "Figure 10-2\nSA Nodal Action Potential");
+    void associatesNumberOnlyLabelsWithOneBoundedContinuation() {
+        for (String label : List.of("Figure 4", "Figure 4-3", "Figure 4.3", "Fig. 4")) {
+            String caption = label + "\nSA Nodal Action Potential";
 
-        assertThat(result).singleElement().extracting(VisualContextAssociation::caption)
-                .isEqualTo("Figure 10-2\nSA Nodal Action Potential");
+            assertThat(associate(List.of(asset(1)), caption))
+                    .singleElement()
+                    .extracting(VisualContextAssociation::caption)
+                    .isEqualTo(caption);
+        }
     }
 
     @Test

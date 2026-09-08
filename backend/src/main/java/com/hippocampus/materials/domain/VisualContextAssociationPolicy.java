@@ -18,7 +18,8 @@ public final class VisualContextAssociationPolicy {
     static final int MAX_NEARBY_CHARACTERS = 600;
 
     private static final Pattern FIGURE_LABEL = Pattern.compile(
-            "(?i)^\\s*(fig(?:ure)?\\.?\\s+\\d+(?:[-.]\\d+)?)\\b(?:\\s*[:.\\-–—]?\\s*(.*))?$");
+            "(?i)^\\s*(fig(?:ure)?\\.?\\s+\\d+(?:[-.]\\d+)?)"
+                    + "(?:\\s*$|\\s*([.:\\-\\u2013\\u2014])\\s*(\\S.*))$");
     private static final Pattern SECTION_BOUNDARY = Pattern.compile(
             "(?i)^(?:chapter|section|part)\\s+(?:\\d+|[ivxlcdm]+)\\b.*$");
 
@@ -87,7 +88,7 @@ public final class VisualContextAssociationPolicy {
         List<String> captionLines = new ArrayList<>();
         captionLines.add(labelLine);
         int lastLine = labelIndex;
-        String inlineDescription = matcher.group(2);
+        String inlineDescription = matcher.group(3);
         if (inlineDescription == null || inlineDescription.isBlank()) {
             int continuationIndex = labelIndex + 1;
             if (continuationIndex < lines.length) {
