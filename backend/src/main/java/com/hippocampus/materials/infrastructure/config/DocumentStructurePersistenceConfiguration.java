@@ -3,7 +3,6 @@ package com.hippocampus.materials.infrastructure.config;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
 
@@ -75,10 +74,9 @@ public class DocumentStructurePersistenceConfiguration {
     @Bean
     NormalizeMaterialText normalizeMaterialText(
             JdbcTextNormalizationRepository repository, PersistNormalizedText persistence,
-            FinalizeTextNormalization finalization,
-            @Value("${hippocampus.materials.processing.pdf.page-batch-size:20}") int pageBatchSize) {
+            FinalizeTextNormalization finalization, PdfExtractionProperties properties) {
         return new NormalizeMaterialText(repository, new ExtractionNormalizationPolicy(), persistence, finalization,
-                pageBatchSize);
+                properties.pageBatchSize());
     }
 
     @Bean
