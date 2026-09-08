@@ -935,7 +935,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Visuals
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready For Review
 - **Goal:** Preserve visual context for later RAG.
 - **Build:** Detect caption proximity/figure labels and create associations to blocks/nodes.
 - **How it works:** Uncertain association remains limited rather than fabricated.
@@ -944,7 +944,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Correct caption/nearby text attached.
 - **Definition of Done:** Association tests pass.
 - **Authority:** Documents 21
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** P3-11 implementation extends the existing `VISUAL_EXTRACT` handler so persisted P3-10 visuals are followed by visual-context association before the unchanged `NORMALIZE` transition. A deterministic domain policy associates context only when one visual and one explicit numbered `Figure`/`Fig.` caption candidate occur on the same physical page, supports one bounded multiline continuation, and derives only a bounded immediately following explanatory region. Missing or ambiguous evidence remains unresolved without failing the stage. JDBC persistence validates same-version visual/node/page provenance, fills only NULL context, treats exact replay as a no-op, preserves conflicting/manual enrichment, and never creates assets or mutates extraction/classification fields. No migration, dependency, processing stage, or later-phase capability was added. Initial focused validation passed 48 tests with zero failures/errors/skips across association policy/application/handler/configuration, visual context and P3-10 persistence integration, processing sequencing, and architecture. External review of head `c3b2823a079e29a0592578b821ce0b4f568aa702` identified three correction findings: OCR extraction quality was ignored; document-wide `PAGE_TEXT` accumulation, transaction scope, and visual locking were unbounded; and the `Figure` caption grammar accepted body-reference prose without an explicit delimiter. The first correction at head `3682c46742a74c0113ab7af6be1ff5f0c11f39b0` permits native page text and only strong-quality OCR for confident association, processes one visual-bearing page at a time, and persists through the short transactional `PersistVisualContext` boundary that re-reads and locks only the target visual. The final grammar correction accepts number-only `Figure`/`Fig.` labels with the existing bounded continuation and accepts inline captions only after an explicit period, colon, hyphen, en dash, or em dash; prose such as `Figure 4 shows ...` remains unresolved. Final correction-focused validation passed 23 tests with zero failures/errors/skips across `VisualContextAssociationPolicyTests`, `AssociateVisualContextTests`, and `HippocampusArchitectureTests`.
 - **Notes / blockers:** _None_
 
 ## P3-12 — Implement safe table text handling
