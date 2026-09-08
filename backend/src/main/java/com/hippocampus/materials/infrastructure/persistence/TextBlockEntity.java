@@ -40,6 +40,9 @@ public class TextBlockEntity {
     @Column(name = "content", nullable = false)
     private String content;
 
+    @Column(name = "normalized_content")
+    private String normalizedContent;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "extraction_method", nullable = false)
     private TextBlockExtractionMethod extractionMethod;
@@ -60,6 +63,7 @@ public class TextBlockEntity {
     public TextBlockType getBlockType() { return blockType; }
     public int getOrdinal() { return ordinal; }
     public String getContent() { return content; }
+    public String getNormalizedContent() { return normalizedContent; }
     public TextBlockExtractionMethod getExtractionMethod() { return extractionMethod; }
     public TextBlockQuality getQuality() { return quality; }
     public Instant getCreatedAt() { return createdAt; }

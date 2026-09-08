@@ -457,6 +457,8 @@ If OCR quality is poor:
 
 Before chunking, persist normalized blocks.
 
+Raw extraction content remains preserved. NORMALIZE stores derived semantic text additively on the same TextBlock and owns only that derived value; downstream chunking consumes normalized content after successful normalization.
+
 Conceptual block types:
 
 ``` text
