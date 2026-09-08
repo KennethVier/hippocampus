@@ -67,10 +67,14 @@ public final class JdbcTextNormalizationRepository implements TextNormalizationS
     }
     @Override public void persistOrVerify(UUID version, List<TextBlock> blocks) {
         requireTransaction();
+        lockEligibleVersion(version);
         for (TextBlock block : blocks) {
             if (!version.equals(block.materialVersionId()) || block.normalizedContent() == null
                     || (block.blockType() != TextBlockType.PAGE_TEXT && block.blockType() != TextBlockType.TABLE_TEXT))
                 throw new IllegalStateException("Normalized text provenance is invalid");
+            if (block.blockType() == TextBlockType.TABLE_TEXT && !block.content().equals(block.normalizedContent())) {
+                throw new IllegalStateException("Normalized table must preserve raw content exactly");
+            }
             int limit = block.blockType() == TextBlockType.TABLE_TEXT ? maxTableChars
                     : block.extractionMethod() == TextBlockExtractionMethod.OCR ? maxOcrPageChars : maxNativePageChars;
             if (block.content().length() > limit || block.normalizedContent().length() > limit) throw new IllegalStateException("Normalized text exceeds source bound");
@@ -90,21 +94,33 @@ public final class JdbcTextNormalizationRepository implements TextNormalizationS
     }
     @Override public void finalizeNormalization(UUID version, int pageCount) {
         requireTransaction();
-        requirePageCount(version);
+        if (lockEligibleVersion(version) != pageCount) {
+            throw new IllegalStateException("Durable page count changed during normalization");
+        }
         Integer invalid = jdbc.sql("""
                 SELECT count(*) FROM text_blocks tb LEFT JOIN document_nodes dn ON dn.id = tb.document_node_id
                 WHERE tb.material_version_id = :version AND (
-                  (tb.block_type = 'PAGE_TEXT' AND NOT (tb.page_number BETWEEN 1 AND :pages AND tb.ordinal = tb.page_number
-                   AND ((tb.extraction_method = 'NATIVE' AND tb.quality IS NULL) OR (tb.extraction_method = 'OCR' AND tb.quality IN ('STRONG','LIMITED','POOR')))))
-                  OR (tb.block_type = 'TABLE_TEXT' AND NOT (tb.page_number BETWEEN 1 AND :pages AND tb.ordinal > :pages
-                   AND ((tb.extraction_method = 'NATIVE' AND tb.quality IN ('STRONG','LIMITED')) OR (tb.extraction_method = 'OCR' AND tb.quality IN ('LIMITED','POOR')))
-                   AND tb.normalized_content = tb.content))
-                  OR (tb.block_type IN ('PAGE_TEXT','TABLE_TEXT') AND (tb.normalized_content IS NULL OR tb.document_node_id IS NULL
-                   OR dn.material_version_id <> :version OR tb.page_number NOT BETWEEN dn.start_page AND dn.end_page)))
+                  tb.normalized_content IS NOT NULL
+                  AND tb.document_node_id IS NOT NULL AND dn.material_version_id = :version
+                  AND tb.page_number BETWEEN dn.start_page AND dn.end_page
+                  AND ((tb.block_type = 'PAGE_TEXT' AND tb.page_number BETWEEN 1 AND :pages
+                    AND tb.ordinal = tb.page_number
+                    AND ((tb.extraction_method = 'NATIVE' AND tb.quality IS NULL)
+                      OR (tb.extraction_method = 'OCR' AND tb.quality IN ('STRONG','LIMITED','POOR'))))
+                    OR (tb.block_type = 'TABLE_TEXT' AND tb.page_number BETWEEN 1 AND :pages
+                    AND tb.ordinal > :pages AND tb.normalized_content = tb.content
+                    AND ((tb.extraction_method = 'NATIVE' AND tb.quality IN ('STRONG','LIMITED'))
+                      OR (tb.extraction_method = 'OCR' AND tb.quality IN ('LIMITED','POOR')))))
+                ) IS NOT TRUE
                 """).param("version", version).param("pages", pageCount).query(Integer.class).single();
         Integer pages = jdbc.sql("SELECT count(*) FROM text_blocks WHERE material_version_id = :version AND block_type = 'PAGE_TEXT'")
                 .param("version", version).query(Integer.class).single();
         if (pages != pageCount || invalid != 0) throw new IllegalStateException("Durable normalization is incomplete or conflicting");
+    }
+    private int lockEligibleVersion(UUID version) {
+        return jdbc.sql(ELIGIBLE + " FOR UPDATE OF mv FOR SHARE OF m").param("version", version)
+                .query(Integer.class).optional()
+                .orElseThrow(() -> new IllegalStateException("Material version is not eligible for normalization"));
     }
     private static void requireTransaction() { if (!TransactionSynchronizationManager.isActualTransactionActive()) throw new IllegalStateException("Normalization persistence requires a transaction"); }
     private record Row(UUID id, UUID version, UUID node, Integer page, String type, int ordinal, String content,

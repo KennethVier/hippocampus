@@ -11,18 +11,12 @@ import com.hippocampus.materials.application.ExtractPdfPages;
 import com.hippocampus.materials.application.FinalizePdfExtraction;
 import com.hippocampus.materials.application.PersistPdfPageBatch;
 import com.hippocampus.materials.application.ProcessingStageHandler;
-import com.hippocampus.materials.application.NormalizeMaterialText;
-import com.hippocampus.materials.application.NormalizeMaterialStageHandler;
-import com.hippocampus.materials.application.PersistNormalizedText;
-import com.hippocampus.materials.application.FinalizeTextNormalization;
-import com.hippocampus.materials.domain.ExtractionNormalizationPolicy;
 import com.hippocampus.materials.infrastructure.persistence.JdbcPdfExtractionPersistence;
 import com.hippocampus.materials.infrastructure.persistence.JpaDocumentStructureRepository;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataDocumentNodeRepository;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataTextBlockRepository;
 import com.hippocampus.materials.port.DocumentStructureRepository;
 import com.hippocampus.materials.port.PdfExtractionPersistence;
-import com.hippocampus.materials.infrastructure.persistence.JdbcTextNormalizationRepository;
 
 @AutoConfiguration(
         after = PdfExtractionConfiguration.class,
@@ -54,41 +48,6 @@ public class DocumentStructurePersistenceConfiguration {
     @Bean
     FinalizePdfExtraction finalizePdfExtraction(PdfExtractionPersistence persistence) {
         return new FinalizePdfExtraction(persistence);
-    }
-
-    @Bean
-    @ConditionalOnBean({PdfExtractionProperties.class, PdfTableExtractionProperties.class})
-    JdbcTextNormalizationRepository textNormalizationRepository(
-            JdbcClient jdbcClient, PdfExtractionProperties pdfProperties, PdfTableExtractionProperties tableProperties) {
-        return new JdbcTextNormalizationRepository(jdbcClient, pdfProperties.maxNativeTextCharsPerPage(),
-                pdfProperties.ocrMaxTextChars(), tableProperties.maxTableTextChars());
-    }
-
-    @Bean
-    @ConditionalOnBean(JdbcTextNormalizationRepository.class)
-    PersistNormalizedText persistNormalizedText(JdbcTextNormalizationRepository repository) {
-        return new PersistNormalizedText(repository);
-    }
-
-    @Bean
-    @ConditionalOnBean(JdbcTextNormalizationRepository.class)
-    FinalizeTextNormalization finalizeTextNormalization(JdbcTextNormalizationRepository repository) {
-        return new FinalizeTextNormalization(repository);
-    }
-
-    @Bean
-    @ConditionalOnBean({PdfExtractionProperties.class, PdfTableExtractionProperties.class, PersistNormalizedText.class, FinalizeTextNormalization.class})
-    NormalizeMaterialText normalizeMaterialText(
-            JdbcTextNormalizationRepository repository, PersistNormalizedText persistence,
-            FinalizeTextNormalization finalization, PdfExtractionProperties properties) {
-        return new NormalizeMaterialText(repository, new ExtractionNormalizationPolicy(), persistence, finalization,
-                properties.pageBatchSize());
-    }
-
-    @Bean
-    @ConditionalOnBean(NormalizeMaterialText.class)
-    ProcessingStageHandler normalizeMaterialStageHandler(NormalizeMaterialText normalization) {
-        return new NormalizeMaterialStageHandler(normalization);
     }
 
     @Bean

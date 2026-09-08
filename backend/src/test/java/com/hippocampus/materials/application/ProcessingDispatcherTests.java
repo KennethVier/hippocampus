@@ -131,6 +131,23 @@ class ProcessingDispatcherTests {
         verifyNoInteractions(embed);
     }
 
+    @Test
+    void realNormalizeHandlerInvokesUseCaseOnceAndAdvancesOnlyToUnimplementedChunk() {
+        NormalizeMaterialText normalization = mock(NormalizeMaterialText.class);
+        NormalizeMaterialStageHandler handler = new NormalizeMaterialStageHandler(normalization);
+        assertThat(handler.jobType()).isEqualTo(ProcessingJobType.NORMALIZE);
+        assertThatThrownBy(() -> handler.handle(job(ProcessingJobType.NORMALIZE, null)))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(normalization);
+        ProcessingDispatcher dispatcher = new ProcessingDispatcher(List.of(handler));
+        assertThat(dispatcher.dispatch(job(ProcessingJobType.NORMALIZE, MATERIAL_VERSION_ID)))
+                .isEqualTo(new ProcessingStageResult(ProcessingJobType.NORMALIZE, ProcessingJobType.CHUNK));
+        verify(normalization).execute(MATERIAL_VERSION_ID);
+        org.mockito.Mockito.verifyNoMoreInteractions(normalization);
+        assertThatThrownBy(() -> dispatcher.dispatch(job(ProcessingJobType.CHUNK, MATERIAL_VERSION_ID)))
+                .isInstanceOf(MissingProcessingStageHandlerException.class);
+    }
+
     private static List<ProcessingStageHandler> handlersForSupportedStages() {
         return supportedStages().map(ProcessingDispatcherTests::handler).toList();
     }

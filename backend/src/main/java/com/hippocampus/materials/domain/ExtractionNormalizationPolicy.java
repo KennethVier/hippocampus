@@ -8,20 +8,21 @@ import java.util.Map;
 /** Pure, deliberately conservative normalization of extracted page evidence. */
 public final class ExtractionNormalizationPolicy {
     private static final int CANDIDATE_LIMIT = 512;
+    private static final int MAX_CANDIDATE_SIGNATURES = 32;
 
     public Map<String, Integer> countCandidates(List<TextBlock> pages) {
         Map<String, Integer> counts = new HashMap<>();
+        mergeCandidates(counts, pages);
+        return counts;
+    }
+
+    public void mergeCandidates(Map<String, Integer> counts, List<TextBlock> pages) {
         for (TextBlock page : pages) {
             if (page.extractionMethod() != TextBlockExtractionMethod.NATIVE) continue;
             List<String> lines = nonBlank(page.content());
             for (int i = 0; i < Math.min(2, lines.size()); i++) add(counts, "T" + i, lines.get(i));
             for (int i = 0; i < Math.min(2, lines.size()); i++) add(counts, "B" + i, lines.get(lines.size() - 1 - i));
         }
-        return counts;
-    }
-
-    public void mergeCandidates(Map<String, Integer> target, List<TextBlock> pages) {
-        countCandidates(pages).forEach((key, count) -> target.merge(key, count, Integer::sum));
     }
 
     public String normalizePage(TextBlock page, Map<String, Integer> candidates, int pageCount) {
@@ -31,7 +32,7 @@ public final class ExtractionNormalizationPolicy {
         for (int i = 0; i < all.size(); i++) if (!all.get(i).trim().isEmpty()) nonBlank.add(i);
         List<Integer> remove = new ArrayList<>();
         if (pageCount >= 3) {
-            int required = (pageCount * 90 + 99) / 100;
+            int required = (int) ((pageCount * 90L + 99) / 100);
             for (int i = 0; i < Math.min(2, nonBlank.size()); i++) {
                 if (repeated(candidates, "T" + i, all.get(nonBlank.get(i)), required)) remove.add(nonBlank.get(i));
                 int bottom = nonBlank.get(nonBlank.size() - 1 - i);
@@ -47,7 +48,12 @@ public final class ExtractionNormalizationPolicy {
     }
     private static void add(Map<String, Integer> counts, String slot, String line) {
         String canonical = canonical(line);
-        if (canonical != null) counts.merge(slot + '\u0000' + canonical, 1, Integer::sum);
+        if (canonical == null) return;
+        String key = slot + '\u0000' + canonical;
+        // Never evict or estimate counts: dropping unseen signatures can only miss noise.
+        if (counts.containsKey(key) || counts.size() < MAX_CANDIDATE_SIGNATURES) {
+            counts.merge(key, 1, Integer::sum);
+        }
     }
     private static String canonical(String line) {
         String trimmed = line.trim();

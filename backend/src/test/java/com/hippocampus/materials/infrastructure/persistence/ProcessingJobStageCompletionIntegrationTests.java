@@ -35,6 +35,17 @@ class ProcessingJobStageCompletionIntegrationTests extends PostgresIntegrationTe
     }
 
     @Test
+    void completedNormalizeCreatesPendingChunkWithoutExecutingChunk() throws SQLException {
+        try (var context = startApplicationWithFlyway()) {
+            Fixture fixture = insertFixture(ProcessingJobType.NORMALIZE, ProcessingJobStatus.RUNNING);
+            complete(context.getBean(CompleteProcessingStage.class), fixture, ProcessingJobType.CHUNK);
+            assertThat(loadJob(fixture.jobId()).status()).isEqualTo(ProcessingJobStatus.COMPLETED);
+            assertThat(loadOnlyJob(ProcessingJobType.CHUNK).status()).isEqualTo(ProcessingJobStatus.PENDING);
+            assertThat(countJobs(ProcessingJobType.EMBED)).isZero();
+        }
+    }
+
+    @Test
     void atomicallyCompletesCurrentJobAndCreatesNextJobFromAuthoritativeData() throws SQLException {
         try (var context = startApplicationWithFlyway()) {
             Fixture fixture = insertFixture(ProcessingJobType.MATERIAL_VALIDATE, ProcessingJobStatus.RUNNING);
