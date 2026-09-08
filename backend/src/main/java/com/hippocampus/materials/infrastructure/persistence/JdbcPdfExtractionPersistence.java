@@ -71,6 +71,7 @@ public final class JdbcPdfExtractionPersistence implements PdfExtractionPersiste
                            OR (extraction_method = 'OCR' AND quality IN ('STRONG', 'LIMITED', 'POOR')))) AS valid_rows
             FROM text_blocks
             WHERE material_version_id = :materialVersionId
+              AND block_type = 'PAGE_TEXT'
             """;
     private static final String FINALIZE_VERSION = """
             UPDATE material_versions

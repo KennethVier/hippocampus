@@ -17,14 +17,16 @@ class VisualExtractStageHandlerTests {
     void associatesContextAfterExtractionAndKeepsNormalizeAsTheNextStage() {
         ExtractPdfVisuals extraction = mock(ExtractPdfVisuals.class);
         AssociateVisualContext association = mock(AssociateVisualContext.class);
+        ExtractPdfTables tables = mock(ExtractPdfTables.class);
         ClaimedProcessingJob job = new ClaimedProcessingJob(
                 UUID.randomUUID(), ProcessingJobType.VISUAL_EXTRACT, UUID.randomUUID(), "worker");
 
-        new VisualExtractStageHandler(extraction, association).handle(job);
+        new VisualExtractStageHandler(extraction, association, tables).handle(job);
 
-        InOrder order = inOrder(extraction, association);
+        InOrder order = inOrder(extraction, association, tables);
         order.verify(extraction).execute(job);
         order.verify(association).execute(job);
+        order.verify(tables).execute(job);
         assertThat(ProcessingStageSequence.nextStage(ProcessingJobType.VISUAL_EXTRACT))
                 .isEqualTo(ProcessingJobType.NORMALIZE);
     }
