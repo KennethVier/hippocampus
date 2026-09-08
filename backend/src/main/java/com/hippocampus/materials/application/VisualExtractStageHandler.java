@@ -8,10 +8,13 @@ import com.hippocampus.materials.domain.ProcessingJobType;
 public final class VisualExtractStageHandler implements ProcessingStageHandler {
     private final ExtractPdfVisuals extraction;
     private final AssociateVisualContext association;
+    private final ExtractPdfTables tables;
 
-    public VisualExtractStageHandler(ExtractPdfVisuals extraction, AssociateVisualContext association) {
+    public VisualExtractStageHandler(
+            ExtractPdfVisuals extraction, AssociateVisualContext association, ExtractPdfTables tables) {
         this.extraction = Objects.requireNonNull(extraction);
         this.association = Objects.requireNonNull(association);
+        this.tables = Objects.requireNonNull(tables);
     }
 
     @Override
@@ -23,5 +26,6 @@ public final class VisualExtractStageHandler implements ProcessingStageHandler {
     public void handle(ClaimedProcessingJob job) {
         extraction.execute(job);
         association.execute(job);
+        tables.execute(job);
     }
 }

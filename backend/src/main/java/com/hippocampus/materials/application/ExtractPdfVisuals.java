@@ -4,19 +4,15 @@ import java.io.ByteArrayInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.hippocampus.materials.domain.ClaimedProcessingJob;
-import com.hippocampus.materials.domain.DocumentNode;
-import com.hippocampus.materials.domain.DocumentNodeType;
+import com.hippocampus.materials.domain.DocumentNodePageLocator;
 import com.hippocampus.materials.domain.ExtractedPdfVisual;
 import com.hippocampus.materials.domain.ProcessingJobType;
 import com.hippocampus.materials.domain.VisualAssetDraft;
@@ -58,7 +54,8 @@ public final class ExtractPdfVisuals {
         requireNoTransaction();
         UUID materialVersionId = job.materialVersionId();
         PdfExtractionSource source = sources.requireExtractablePdf(materialVersionId);
-        NodeLocator nodes = new NodeLocator(materialVersionId, structures.findNodesByMaterialVersion(materialVersionId));
+        DocumentNodePageLocator nodes = new DocumentNodePageLocator(
+                materialVersionId, structures.findNodesByMaterialVersion(materialVersionId));
         List<VisualAssetDraft> drafts = new ArrayList<>();
         extractor.extract(source, visual -> {
             requireNoTransaction();
@@ -100,82 +97,4 @@ public final class ExtractPdfVisuals {
         }
     }
 
-    private static final class NodeLocator {
-        private final DocumentNode root;
-        private final List<NodeDepth> nodes;
-
-        private NodeLocator(UUID materialVersionId, List<DocumentNode> nodes) {
-            Map<UUID, DocumentNode> byId = new HashMap<>();
-            for (DocumentNode node : Objects.requireNonNull(nodes)) {
-                if (!materialVersionId.equals(node.materialVersionId()) || byId.put(node.id(), node) != null) {
-                    throw new IllegalStateException("Document hierarchy does not belong exclusively to the material version");
-                }
-            }
-            List<DocumentNode> roots = nodes.stream()
-                    .filter(node -> node.nodeType() == DocumentNodeType.DOCUMENT && node.parentId() == null)
-                    .toList();
-            if (roots.size() != 1) {
-                throw new IllegalStateException("Exactly one durable document root is required");
-            }
-            root = roots.getFirst();
-            Map<UUID, Integer> depths = new HashMap<>();
-            this.nodes = nodes.stream()
-                    .map(node -> new NodeDepth(node, depth(node, byId, depths, new java.util.HashSet<>())))
-                    .toList();
-        }
-
-        private UUID locate(int pageNumber) {
-            return nodes.stream()
-                    .filter(candidate -> contains(candidate.node(), pageNumber))
-                    .max(Comparator.comparingInt(NodeDepth::depth)
-                            .thenComparingInt(candidate -> -range(candidate.node()))
-                            .thenComparingInt(candidate -> nullable(candidate.node().startPage()))
-                            .thenComparingInt(candidate -> nullable(candidate.node().ordinal())))
-                    .map(candidate -> candidate.node().id())
-                    .orElse(root.id());
-        }
-
-        private static boolean contains(DocumentNode node, int page) {
-            return node.startPage() != null && node.endPage() != null
-                    && node.startPage() <= page && page <= node.endPage();
-        }
-
-        private static int range(DocumentNode node) {
-            return node.startPage() == null || node.endPage() == null
-                    ? Integer.MAX_VALUE : node.endPage() - node.startPage();
-        }
-
-        private static int nullable(Integer value) {
-            return value == null ? Integer.MIN_VALUE : value;
-        }
-
-        private static int depth(
-                DocumentNode node,
-                Map<UUID, DocumentNode> nodes,
-                Map<UUID, Integer> depths,
-                java.util.Set<UUID> visiting) {
-            Integer known = depths.get(node.id());
-            if (known != null) {
-                return known;
-            }
-            if (!visiting.add(node.id())) {
-                throw new IllegalStateException("Document hierarchy must be acyclic");
-            }
-            int depth;
-            if (node.parentId() == null) {
-                depth = 0;
-            } else {
-                DocumentNode parent = nodes.get(node.parentId());
-                if (parent == null) {
-                    throw new IllegalStateException("Document hierarchy contains a missing parent");
-                }
-                depth = Math.addExact(depth(parent, nodes, depths, visiting), 1);
-            }
-            visiting.remove(node.id());
-            depths.put(node.id(), depth);
-            return depth;
-        }
-
-        private record NodeDepth(DocumentNode node, int depth) {}
-    }
 }

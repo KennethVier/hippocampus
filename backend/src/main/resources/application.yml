@@ -46,6 +46,12 @@ hippocampus:
           max-encoded-image-bytes: ${HIPPOCAMPUS_PDF_VISUAL_MAX_ENCODED_IMAGE_BYTES:25000000}
           max-page-encoded-image-bytes: ${HIPPOCAMPUS_PDF_VISUAL_MAX_PAGE_ENCODED_IMAGE_BYTES:100000000}
           max-document-encoded-image-bytes: ${HIPPOCAMPUS_PDF_VISUAL_MAX_DOCUMENT_ENCODED_IMAGE_BYTES:2000000000}
+        table:
+          max-tables-per-page: ${HIPPOCAMPUS_PDF_TABLE_MAX_TABLES_PER_PAGE:32}
+          max-tables-per-document: ${HIPPOCAMPUS_PDF_TABLE_MAX_TABLES_PER_DOCUMENT:4096}
+          max-rows-per-table: ${HIPPOCAMPUS_PDF_TABLE_MAX_ROWS_PER_TABLE:256}
+          max-columns-per-table: ${HIPPOCAMPUS_PDF_TABLE_MAX_COLUMNS_PER_TABLE:32}
+          max-table-text-chars: ${HIPPOCAMPUS_PDF_TABLE_MAX_TEXT_CHARS:100000}
         structure:
           max-outline-items: ${HIPPOCAMPUS_PDF_STRUCTURE_MAX_OUTLINE_ITEMS:4096}
           max-outline-depth: ${HIPPOCAMPUS_PDF_STRUCTURE_MAX_OUTLINE_DEPTH:16}
