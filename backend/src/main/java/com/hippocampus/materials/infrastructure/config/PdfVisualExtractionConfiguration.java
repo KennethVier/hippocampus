@@ -7,18 +7,22 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
 
+import com.hippocampus.materials.application.AssociateVisualContext;
 import com.hippocampus.materials.application.ExtractPdfVisuals;
 import com.hippocampus.materials.application.PersistVisualAssets;
 import com.hippocampus.materials.application.ProcessingStageHandler;
 import com.hippocampus.materials.application.VisualExtractStageHandler;
+import com.hippocampus.materials.domain.VisualContextAssociationPolicy;
 import com.hippocampus.materials.infrastructure.pdf.PdfBoxPdfVisualExtractor;
 import com.hippocampus.materials.infrastructure.persistence.JdbcVisualAssetPersistence;
+import com.hippocampus.materials.infrastructure.persistence.JdbcVisualContextRepository;
 import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.DocumentStructureRepository;
 import com.hippocampus.materials.port.MaterialContentInspector;
 import com.hippocampus.materials.port.PdfExtractionSourceRepository;
 import com.hippocampus.materials.port.PdfVisualExtractor;
 import com.hippocampus.materials.port.VisualAssetPersistence;
+import com.hippocampus.materials.port.VisualContextRepository;
 
 @AutoConfiguration(after = {
         PdfExtractionConfiguration.class,
@@ -61,6 +65,17 @@ public class PdfVisualExtractionConfiguration {
     }
 
     @Bean
+    VisualContextRepository visualContextRepository(JdbcClient jdbcClient) {
+        return new JdbcVisualContextRepository(jdbcClient);
+    }
+
+    @Bean
+    AssociateVisualContext associateVisualContext(
+            VisualContextRepository visuals, DocumentStructureRepository structures) {
+        return new AssociateVisualContext(visuals, structures, new VisualContextAssociationPolicy());
+    }
+
+    @Bean
     ExtractPdfVisuals extractPdfVisuals(
             PdfExtractionSourceRepository sources,
             DocumentStructureRepository structures,
@@ -71,7 +86,8 @@ public class PdfVisualExtractionConfiguration {
     }
 
     @Bean
-    ProcessingStageHandler visualExtractStageHandler(ExtractPdfVisuals extraction) {
-        return new VisualExtractStageHandler(extraction);
+    ProcessingStageHandler visualExtractStageHandler(
+            ExtractPdfVisuals extraction, AssociateVisualContext association) {
+        return new VisualExtractStageHandler(extraction, association);
     }
 }

@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
 
+import com.hippocampus.materials.application.AssociateVisualContext;
 import com.hippocampus.materials.application.ExtractPdfVisuals;
 import com.hippocampus.materials.application.PersistVisualAssets;
 import com.hippocampus.materials.application.ProcessingStageHandler;
@@ -21,6 +22,7 @@ import com.hippocampus.materials.port.MaterialContentInspector;
 import com.hippocampus.materials.port.PdfExtractionSourceRepository;
 import com.hippocampus.materials.port.PdfVisualExtractor;
 import com.hippocampus.materials.port.VisualAssetPersistence;
+import com.hippocampus.materials.port.VisualContextRepository;
 
 class PdfVisualExtractionConfigurationTests {
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
@@ -42,8 +44,10 @@ class PdfVisualExtractionConfigurationTests {
             assertThat(context).hasNotFailed()
                     .hasSingleBean(PdfVisualExtractor.class)
                     .hasSingleBean(VisualAssetPersistence.class)
+                    .hasSingleBean(VisualContextRepository.class)
                     .hasSingleBean(PersistVisualAssets.class)
                     .hasSingleBean(ExtractPdfVisuals.class)
+                    .hasSingleBean(AssociateVisualContext.class)
                     .hasSingleBean(ProcessingStageHandler.class);
             assertThat(context.getBean(ProcessingStageHandler.class)).isInstanceOf(VisualExtractStageHandler.class);
         });

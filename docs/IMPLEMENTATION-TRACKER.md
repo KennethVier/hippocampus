@@ -935,7 +935,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Visuals
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready For Review
 - **Goal:** Preserve visual context for later RAG.
 - **Build:** Detect caption proximity/figure labels and create associations to blocks/nodes.
 - **How it works:** Uncertain association remains limited rather than fabricated.
@@ -944,7 +944,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Correct caption/nearby text attached.
 - **Definition of Done:** Association tests pass.
 - **Authority:** Documents 21
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** P3-11 implementation extends the existing `VISUAL_EXTRACT` handler so persisted P3-10 visuals are followed by a short transactional `AssociateVisualContext` step before the unchanged `NORMALIZE` transition. A deterministic domain policy associates context only when one visual and one explicit numbered `Figure`/`Fig.` caption candidate occur on the same physical page, supports one bounded multiline continuation, and derives only a bounded immediately following explanatory region. Missing or ambiguous evidence remains unresolved without failing the stage. JDBC persistence locks and validates same-version visual/node/page provenance, fills only NULL context, treats exact replay as a no-op, preserves conflicting/manual enrichment, and never creates assets or mutates extraction/classification fields. No migration, dependency, processing stage, or later-phase capability was added. Focused validation passed 48 tests with zero failures/errors/skips across association policy/application/handler/configuration, visual context and P3-10 persistence integration, processing sequencing, and architecture.
 - **Notes / blockers:** _None_
 
 ## P3-12 — Implement safe table text handling
