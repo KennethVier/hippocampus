@@ -72,6 +72,7 @@ public class DocumentStructurePersistenceConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(PdfExtractionProperties.class)
     NormalizeMaterialText normalizeMaterialText(
             JdbcTextNormalizationRepository repository, PersistNormalizedText persistence,
             FinalizeTextNormalization finalization, PdfExtractionProperties properties) {
@@ -80,6 +81,7 @@ public class DocumentStructurePersistenceConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(NormalizeMaterialText.class)
     ProcessingStageHandler normalizeMaterialStageHandler(NormalizeMaterialText normalization) {
         return new NormalizeMaterialStageHandler(normalization);
     }

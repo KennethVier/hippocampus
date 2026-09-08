@@ -70,6 +70,7 @@ public final class ExtractionNormalizationPolicy {
                 output.append(previous).append('\n'); previous = current; continue;
             }
             if (dehyphenate && canDehyphenate(previous, current)) output.append(previous, 0, previous.length() - 1);
+            else if (dehyphenate && previous.endsWith("-")) output.append(previous);
             else output.append(previous).append(' ');
             previous = current;
         }

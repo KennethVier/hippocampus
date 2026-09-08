@@ -205,7 +205,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 Map.entry("id", "uuid:NO"), Map.entry("material_version_id", "uuid:NO"),
                 Map.entry("document_node_id", "uuid:YES"), Map.entry("page_number", "integer:YES"),
                 Map.entry("block_type", "character varying:NO"), Map.entry("ordinal", "integer:NO"),
-                Map.entry("content", "text:NO"), Map.entry("extraction_method", "character varying:NO"),
+                Map.entry("content", "text:NO"), Map.entry("normalized_content", "text:YES"), Map.entry("extraction_method", "character varying:NO"),
                 Map.entry("quality", "character varying:YES"),
                 Map.entry("created_at", "timestamp with time zone:NO")));
         assertNamedConstraint("document_nodes", "uq_document_nodes_id_material_version",

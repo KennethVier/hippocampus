@@ -21,5 +21,8 @@ class ExtractionNormalizationPolicyTests {
                 "IL-\n6\n\nDrug\tEffect", TextBlockExtractionMethod.OCR, TextBlockQuality.POOR, Instant.EPOCH);
         assertThat(policy.normalizePage(ocr, Map.of(), 1)).isEqualTo("IL- 6\n\nDrug\tEffect");
     }
+    @Test void preservesNativeMedicalLineBoundaryHyphensWithoutAddingWhitespace() {
+        assertThat(policy.normalizePage(page(1, "IL-\n6\nHLA-\nB27"), Map.of(), 1)).isEqualTo("IL-6 HLA-B27");
+    }
     private static TextBlock page(int number, String content) { return new TextBlock(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), number, TextBlockType.PAGE_TEXT, number, content, TextBlockExtractionMethod.NATIVE, null, Instant.EPOCH); }
 }
