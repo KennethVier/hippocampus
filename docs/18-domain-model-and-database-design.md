@@ -4,7 +4,7 @@ Audience: Backend, architecture, database, AI, QA, security, and DevOps
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 18
-Last Updated: 2026-08-30
+Last Updated: 2026-09-09
 Owner: Project Hippocampus Team
 Prerequisites:
 - 00 - Project Vision
@@ -47,7 +47,7 @@ Scope: Core entities, aggregate boundaries, PostgreSQL schema design,
   versioning, and migration rules.
 Status: Final
 Title: Domain Model & Database Design
-Version: 1.0.1
+Version: 1.0.2
 ---
 
 # 18 - Domain Model & Database Design
@@ -603,6 +603,73 @@ Constraint:
 ``` text
 UNIQUE(material_version_id, chunk_index)
 ```
+
+For initial v1 chunking, this constraint represents one durable Chunk
+generation per MaterialVersion. P3-14 uses the fixed deterministic replay
+identity `CHUNKER_V1`; it does not add `chunks.chunking_version` or general
+multi-generation Chunk persistence.
+
+An extraction-method change is a Chunk boundary. NATIVE and OCR TextBlocks do
+not coexist in one P3-14 Chunk.
+
+------------------------------------------------------------------------
+
+# 18.1 Chunk Source Provenance
+
+Chunks retain an exact ordered relation to the TextBlocks from which their
+content was derived.
+
+## Table: `chunk_text_block_links`
+
+``` text
+chunk_id UUID NOT NULL
+text_block_id UUID NOT NULL
+material_version_id UUID NOT NULL
+source_position INT NOT NULL
+is_overlap BOOLEAN NOT NULL DEFAULT FALSE
+PRIMARY KEY(chunk_id, source_position)
+CHECK(source_position >= 1)
+```
+
+`source_position` is one-based and contiguous within a finalized Chunk. It
+represents the deterministic occurrence order of a contributing source in the
+Chunk. It is not a physical page number, a TextBlock ordinal, a character
+offset, or a MaterialVersion-global ordinal.
+
+A TextBlock may contribute to multiple Chunks. The same TextBlock may also
+occupy more than one source position in one Chunk when multiple source units
+are derived from that block. Therefore `(chunk_id, text_block_id)` is not
+unique.
+
+`is_overlap = false` identifies primary newly consumed source for the Chunk.
+`is_overlap = true` identifies a source occurrence intentionally repeated from
+the immediately preceding compatible Chunk by the conservative-overlap policy.
+Overlap does not create or mutate a TextBlock.
+
+Chunk and TextBlock ownership must be enforced against the same
+MaterialVersion through composite foreign keys:
+
+``` text
+(chunk_id, material_version_id)
+    -> chunks(id, material_version_id)
+
+(text_block_id, material_version_id)
+    -> text_blocks(id, material_version_id)
+```
+
+The required candidate keys are:
+
+``` text
+UNIQUE(chunks.id, chunks.material_version_id)
+UNIQUE(text_blocks.id, text_blocks.material_version_id)
+```
+
+The association rows use `ON DELETE CASCADE` because they are derived from
+their Chunk and TextBlock parents. Application provenance validation remains
+defense in depth.
+
+Page range, DocumentNode, heading path, and `source_order` remain useful Chunk
+metadata, but they do not replace the exact TextBlock relation.
 
 ------------------------------------------------------------------------
 
@@ -1806,6 +1873,15 @@ Deactivate prior generation
 
 Activation should be explicit.
 
+`index_generations.chunking_version` identifies the chunking contract expected
+by an index generation. It does not, by itself, authorize multiple durable
+Chunk generations for one MaterialVersion.
+
+P3-14 persists only the initial `CHUNKER_V1` generation under
+`UNIQUE(material_version_id, chunk_index)`. Future re-chunking or replacement
+must explicitly define Chunk-generation retention, activation, and migration
+before a second generation may coexist with or replace the first.
+
 ------------------------------------------------------------------------
 
 # 69. Database Migration Policy
@@ -2430,6 +2506,12 @@ and:
                                                         boundary and existing
                                                         user/email semantics
                                                         with ADR-0002
+
+  1.0.2             2026-09-09        Project           Aligned exact Chunk
+                                      Hippocampus Team  source provenance and
+                                                        initial deterministic
+                                                        replay identity with
+                                                        ADR-0005
 
   -----------------------------------------------------------------------
 

@@ -4,7 +4,7 @@ Audience: Backend, architecture, AI/RAG, QA, security, DevOps, and
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 21
-Last Updated: 2026-08-24
+Last Updated: 2026-09-09
 Owner: Project Hippocampus Team
 Prerequisites:
 - 07 - Feature Specifications
@@ -35,7 +35,7 @@ Scope: Upload validation, file limits, storage, PDF parsing, scanned-PDF
   processing security.
 Status: Final
 Title: File Processing & Ingestion Architecture
-Version: 1.0.0
+Version: 1.0.1
 ---
 
 # 21 - File Processing & Ingestion Architecture
@@ -819,6 +819,17 @@ Chunk
 
 Semantic/document structure takes precedence over arbitrary size.
 
+Each emitted Chunk retains its exact ordered TextBlock provenance through
+`chunk_text_block_links`. Page range, DocumentNode, heading path, and source
+order remain summary metadata and do not replace the source-block relation.
+
+A TextBlock may contribute to multiple Chunks because of oversized splitting
+or conservative overlap. Each occurrence has a one-based `source_position`;
+overlap occurrences are explicitly marked with `is_overlap = true`.
+
+An extraction-method change is a hard Chunk boundary. NATIVE and OCR source
+content do not coexist in one P3-14 Chunk.
+
 ------------------------------------------------------------------------
 
 # 38. Chunk Quality Metadata
@@ -838,23 +849,44 @@ Poor upstream quality must not disappear during chunking.
 
 # 39. Chunk Versioning
 
-Chunk generation should have an explicit processing/chunking version.
-
-Example:
+The initial v1 chunking contract is named exactly:
 
 ``` text
-chunking_version = CHUNKER_V1
+CHUNKER_V1
 ```
 
-If chunking changes materially:
+For P3-14, `CHUNKER_V1` is a deterministic replay-identity label. It does not
+add a `chunking_version` column to `chunks` and does not introduce general
+multi-generation Chunk persistence.
+
+Chunk IDs use UUIDv5/name-based semantics with one fixed application-owned UUID
+namespace constant. The implementation must define and permanently retain that
+constant for CHUNKER_V1. The canonical UTF-8 name is:
 
 ``` text
-New IndexGeneration
-+
-Reprocessing
+"CHUNKER_V1\n" +
+canonical lowercase MaterialVersion UUID +
+"\n" +
+base-10 chunkIndex
 ```
 
-should occur rather than silently mixing outputs.
+`chunkIndex` is positive and one-based. Identical authoritative inputs under
+CHUNKER_V1 must produce the same ordered Chunk indexes, UUIDs, contents,
+metadata, source-link positions, and overlap flags. No third-party UUID library
+is required by this decision.
+
+The durable uniqueness rule remains:
+
+``` text
+UNIQUE(material_version_id, chunk_index)
+```
+
+This supports one initial Chunk generation per MaterialVersion.
+
+If the chunking algorithm changes materially, future
+IndexGeneration/reprocessing work must define replacement, coexistence,
+activation, and retention behavior before another Chunk generation is
+persisted. P3-14 does not implement that lifecycle.
 
 ------------------------------------------------------------------------
 
@@ -1138,7 +1170,11 @@ Examples:
 
 -   extraction replaces/upserts same processing-version output;
 -   visual assets deduplicate using stable source identity/content hash;
--   chunk generation uses versioned chunk IDs/indexes;
+-   CHUNKER_V1 deterministically derives Chunk UUIDs from a fixed application
+    namespace, MaterialVersion ID, and one-based Chunk index; exact replay
+    verifies the same Chunk fields and ordered `chunk_text_block_links`,
+    partial compatible state may converge, and conflicting durable state fails
+    closed;
 -   embedding enforces unique `(chunk, generation)`;
 -   activation is transactionally repeatable.
 
@@ -2201,6 +2237,12 @@ It must preserve:
                                                         deletion, and
                                                         processing security
                                                         boundaries
+
+  1.0.1             2026-09-09        Project           Aligned exact Chunk
+                                      Hippocampus Team  source provenance and
+                                                        initial deterministic
+                                                        replay identity with
+                                                        ADR-0005
 
   -----------------------------------------------------------------------------
 

@@ -4,7 +4,7 @@ Audience: Product, architecture, backend, frontend, AI/RAG, DevOps,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 27
-Last Updated: 2026-08-30
+Last Updated: 2026-09-09
 Owner: Project Hippocampus Team
 Prerequisites:
 - README
@@ -24,7 +24,7 @@ Scope: Decision authority, decision categories, ADR lifecycle, ADR
   Source-of-Truth freeze procedure.
 Status: Final
 Title: Decision Log / ADR Index
-Version: 1.0.3
+Version: 1.0.4
 ---
 
 # 27 - Decision Log / ADR Index
@@ -1385,6 +1385,7 @@ When ADRs exist, add an index:
 | [ADR-0002](adr/ADR-0002-v1-student-credential-mechanism.md) | V1 Student Credential Mechanism | ACCEPTED | 2026-08-28 | SECURITY, BACKEND, DATA, ARCHITECTURE |
 | [ADR-0003](adr/ADR-0003-learning-organization-archive-lifecycle.md) | Learning Organization Archive Lifecycle | ACCEPTED | 2026-08-30 | DOMAIN, DATA, BACKEND |
 | [ADR-0004](adr/ADR-0004-durable-text-normalization-contract.md) | Durable Text Normalization Contract | ACCEPTED | 2026-09-08 | DATA, INGESTION, DOMAIN |
+| [ADR-0005](adr/ADR-0005-exact-chunk-source-provenance-and-initial-replay-identity.md) | Exact Chunk Source Provenance and Initial Replay Identity | ACCEPTED | 2026-09-09 | DATA, INGESTION, RAG, DOMAIN |
 
 This table begins empty at initial v1 freeze unless a real pending
 decision already exists.
@@ -1416,6 +1417,22 @@ status fields. Parent archive does not rewrite descendant persisted
 statuses, ownership and the single Subtopic level remain unchanged, and
 primary hierarchy foreign keys are non-cascading. Documents 18 and the
 Implementation Tracker are aligned before P2-01 implementation.
+
+## ADR-0005 Decision Summary
+
+Chunks retain exact ordered TextBlock provenance through
+`chunk_text_block_links`, using one-based source occurrence positions,
+explicit overlap flags, and composite foreign keys that enforce one
+MaterialVersion across each Chunk and TextBlock relation.
+
+P3-14 uses the fixed `CHUNKER_V1` replay identity and deterministic UUIDv5
+Chunk IDs derived from a fixed application-owned namespace, MaterialVersion
+ID, and one-based Chunk index. The existing
+`UNIQUE(material_version_id, chunk_index)` remains the single initial durable
+generation boundary. P3-14 does not add `chunks.chunking_version` or general
+multi-generation Chunk persistence; future replacement and re-chunking remain
+owned by IndexGeneration/reprocessing design. NATIVE and OCR transitions are
+hard Chunk boundaries rather than a new mixed extraction method.
 
 ------------------------------------------------------------------------
 
@@ -1706,6 +1723,13 @@ Phase 0 — Engineering Foundation
                                       Hippocampus Team  ADR-0003 and aligned
                                                         learning organization
                                                         archive lifecycle
+
+  1.0.4             2026-09-09        Project           Accepted and indexed
+                                      Hippocampus Team  ADR-0005 and aligned
+                                                        exact Chunk source
+                                                        provenance and initial
+                                                        replay identity across
+                                                        Documents 18 and 21
 
   ----------------------------------------------------------------------------
 

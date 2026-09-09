@@ -28,3 +28,5 @@ documentation patches.
 | [ADR-0001](ADR-0001-mobile-client-architecture-and-authentication-boundary.md) | Mobile Client Architecture and Authentication Boundary | ACCEPTED | 2026-08-27 |
 | [ADR-0002](ADR-0002-v1-student-credential-mechanism.md) | V1 Student Credential Mechanism | ACCEPTED | 2026-08-28 |
 | [ADR-0003](ADR-0003-learning-organization-archive-lifecycle.md) | Learning Organization Archive Lifecycle | ACCEPTED | 2026-08-30 |
+| [ADR-0004](ADR-0004-durable-text-normalization-contract.md) | Durable Text Normalization Contract | ACCEPTED | 2026-09-08 |
+| [ADR-0005](ADR-0005-exact-chunk-source-provenance-and-initial-replay-identity.md) | Exact Chunk Source Provenance and Initial Replay Identity | ACCEPTED | 2026-09-09 |
