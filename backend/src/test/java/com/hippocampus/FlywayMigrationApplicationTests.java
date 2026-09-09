@@ -48,6 +48,8 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("9");
         assertSuccessfulFlywayVersion("10");
         assertSuccessfulFlywayVersion("11");
+        assertSuccessfulFlywayVersion("12");
+        assertSuccessfulFlywayVersion("13");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -64,6 +66,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertProcessingJobSchema();
         assertDocumentStructureSchema();
         assertVisualAssetSchema();
+        assertChunkSchema();
 
         try (var secondContext = startMigrationApplication()) {
             assertThat(secondContext.isActive()).isTrue();
@@ -80,6 +83,8 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("9");
         assertSuccessfulFlywayVersion("10");
         assertSuccessfulFlywayVersion("11");
+        assertSuccessfulFlywayVersion("12");
+        assertSuccessfulFlywayVersion("13");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -183,8 +188,8 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 actual.add(result.getString("table_name"));
             }
             assertThat(actual).containsExactly(
-                    "document_nodes", "material_topic_links", "material_versions", "materials",
-                    "processing_jobs",
+                    "chunk_text_block_links", "chunk_visual_links", "chunks", "document_nodes",
+                    "material_topic_links", "material_versions", "materials", "processing_jobs",
                     "spring_session", "spring_session_attributes",
                     "subjects", "subtopics", "text_blocks", "topics",
                     "user_password_credentials", "users", "visual_assets");
@@ -274,6 +279,39 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertCheckConstraintContains("visual_assets", "chk_visual_assets_page_number", "page_number", ">= 1");
         assertCheckConstraintContains("visual_assets", "chk_visual_assets_width", "width_px", ">= 1");
         assertCheckConstraintContains("visual_assets", "chk_visual_assets_height", "height_px", ">= 1");
+    }
+
+    private static void assertChunkSchema() throws SQLException {
+        assertColumnsMatch("chunks", Map.ofEntries(
+                Map.entry("id", "uuid:NO"), Map.entry("material_version_id", "uuid:NO"),
+                Map.entry("document_node_id", "uuid:YES"), Map.entry("chunk_index", "integer:NO"),
+                Map.entry("content", "text:NO"), Map.entry("token_count", "integer:YES"),
+                Map.entry("page_start", "integer:YES"), Map.entry("page_end", "integer:YES"),
+                Map.entry("timestamp_start_ms", "bigint:YES"), Map.entry("timestamp_end_ms", "bigint:YES"),
+                Map.entry("heading_path", "jsonb:YES"), Map.entry("content_type", "character varying:NO"),
+                Map.entry("extraction_method", "character varying:NO"), Map.entry("quality", "character varying:YES"),
+                Map.entry("source_order", "bigint:YES"), Map.entry("is_active", "boolean:NO"),
+                Map.entry("created_at", "timestamp with time zone:NO")));
+        assertColumnsMatch("chunk_text_block_links", Map.of(
+                "chunk_id", "uuid:NO", "text_block_id", "uuid:NO", "material_version_id", "uuid:NO",
+                "source_position", "integer:NO", "is_overlap", "boolean:NO"));
+        assertColumnsMatch("chunk_visual_links", Map.of(
+                "chunk_id", "uuid:NO", "visual_asset_id", "uuid:NO",
+                "material_version_id", "uuid:NO", "relationship_type", "character varying:NO"));
+        assertNamedConstraint("chunks", "uq_chunks_material_version_index",
+                "UNIQUE (material_version_id, chunk_index)", null);
+        assertNamedConstraint("chunks", "uq_chunks_id_material_version",
+                "UNIQUE (id, material_version_id)", null);
+        assertNamedConstraint("text_blocks", "uq_text_blocks_id_material_version",
+                "UNIQUE (id, material_version_id)", null);
+        assertNamedConstraint("chunk_text_block_links", "pk_chunk_text_block_links",
+                "PRIMARY KEY (chunk_id, source_position)", null);
+        assertIndex("chunk_text_block_links", "idx_chunk_text_block_links_text_block", false,
+                "text_block_id", "material_version_id");
+        assertCheckConstraintContains("chunks", "chk_chunks_content_type", "TEXT", "TABLE");
+        assertCheckConstraintContains("chunks", "chk_chunks_extraction_method", "NATIVE", "OCR");
+        assertCheckConstraintContains("chunk_text_block_links", "chk_chunk_text_block_links_position",
+                "source_position", ">= 1");
     }
 
     private static void assertLearningOrganizationSchema() throws SQLException {

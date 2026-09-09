@@ -1,10 +1,62 @@
 package com.hippocampus.materials.infrastructure.config;
-import tools.jackson.databind.ObjectMapper; import org.springframework.boot.autoconfigure.AutoConfiguration; import org.springframework.boot.autoconfigure.condition.ConditionalOnBean; import org.springframework.boot.context.properties.EnableConfigurationProperties; import org.springframework.context.annotation.Bean; import org.springframework.jdbc.core.simple.JdbcClient; import org.springframework.transaction.PlatformTransactionManager;
-import com.hippocampus.materials.application.*; import com.hippocampus.materials.domain.*; import com.hippocampus.materials.infrastructure.persistence.JdbcChunkRepository;
-@AutoConfiguration(after=TextNormalizationConfiguration.class) @ConditionalOnBean({JdbcClient.class,PlatformTransactionManager.class,PdfExtractionProperties.class,PdfStructureInspectionProperties.class}) @EnableConfigurationProperties(ChunkingProperties.class)
+
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.PlatformTransactionManager;
+
+import com.hippocampus.materials.application.ChunkMaterialStageHandler;
+import com.hippocampus.materials.application.ChunkMaterialText;
+import com.hippocampus.materials.application.FinalizeChunking;
+import com.hippocampus.materials.application.PersistChunkBatch;
+import com.hippocampus.materials.application.ProcessingStageHandler;
+import com.hippocampus.materials.domain.DeterministicChunkTokenCounter;
+import com.hippocampus.materials.domain.HierarchyAwareChunkingPolicy;
+import com.hippocampus.materials.infrastructure.persistence.JdbcChunkRepository;
+
+import tools.jackson.databind.ObjectMapper;
+
+@AutoConfiguration(after = TextNormalizationConfiguration.class)
+@ConditionalOnBean({JdbcClient.class, PlatformTransactionManager.class,
+        PdfExtractionProperties.class, PdfStructureInspectionProperties.class})
+@EnableConfigurationProperties(ChunkingProperties.class)
 public class ChunkingConfiguration {
- @Bean JdbcChunkRepository chunkRepository(JdbcClient jdbc,ObjectMapper mapper){return new JdbcChunkRepository(jdbc,mapper);}
- @Bean PersistChunkBatch persistChunkBatch(JdbcChunkRepository r){return new PersistChunkBatch(r);}@Bean FinalizeChunking finalizeChunking(JdbcChunkRepository r){return new FinalizeChunking(r);}
- @Bean ChunkMaterialText chunkMaterialText(JdbcChunkRepository r,PersistChunkBatch p,FinalizeChunking f,PdfExtractionProperties pdf,PdfStructureInspectionProperties structure,ChunkingProperties c){return new ChunkMaterialText(r,new HierarchyAwareChunkingPolicy(new DeterministicChunkTokenCounter(),c.targetTokenCount(),c.hardTokenCount(),c.overlapTokenCount()),p,f,pdf.pageBatchSize(),c.persistenceBatchSize(),structure.maxNodesPerDocument(),structure.maxOutlineDepth());}
- @Bean ProcessingStageHandler chunkMaterialStageHandler(ChunkMaterialText c){return new ChunkMaterialStageHandler(c);}
+    @Bean
+    JdbcChunkRepository chunkRepository(
+            JdbcClient jdbc, ObjectMapper mapper, ChunkingProperties properties) {
+        return new JdbcChunkRepository(jdbc, mapper, properties.hardTokenCount());
+    }
+
+    @Bean
+    PersistChunkBatch persistChunkBatch(JdbcChunkRepository repository) {
+        return new PersistChunkBatch(repository);
+    }
+
+    @Bean
+    FinalizeChunking finalizeChunking(JdbcChunkRepository repository) {
+        return new FinalizeChunking(repository);
+    }
+
+    @Bean
+    ChunkMaterialText chunkMaterialText(
+            JdbcChunkRepository repository,
+            PersistChunkBatch persistence,
+            FinalizeChunking finalization,
+            PdfExtractionProperties pdf,
+            PdfStructureInspectionProperties structure,
+            ChunkingProperties chunking) {
+        HierarchyAwareChunkingPolicy policy = new HierarchyAwareChunkingPolicy(
+                new DeterministicChunkTokenCounter(), chunking.targetTokenCount(),
+                chunking.hardTokenCount(), chunking.overlapTokenCount());
+        return new ChunkMaterialText(repository, policy, persistence, finalization,
+                pdf.pageBatchSize(), chunking.persistenceBatchSize(),
+                structure.maxNodesPerDocument(), structure.maxOutlineDepth());
+    }
+
+    @Bean
+    ProcessingStageHandler chunkMaterialStageHandler(ChunkMaterialText chunking) {
+        return new ChunkMaterialStageHandler(chunking);
+    }
 }

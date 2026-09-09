@@ -1,9 +1,28 @@
 package com.hippocampus.materials.domain;
-import java.util.Objects; import java.util.UUID;
-public record ChunkSourceUnit(UUID textBlockId, UUID materialVersionId, UUID documentNodeId, int page,
-        ChunkContentType contentType, TextBlockExtractionMethod extractionMethod, TextBlockQuality quality,
-        String content, long sourceOrder, boolean fragment) {
-    public ChunkSourceUnit { Objects.requireNonNull(textBlockId); Objects.requireNonNull(materialVersionId);
-        Objects.requireNonNull(documentNodeId); Objects.requireNonNull(contentType); Objects.requireNonNull(extractionMethod);
-        Objects.requireNonNull(content); if (page < 1 || sourceOrder < 1) throw new IllegalArgumentException("Invalid source position"); }
+
+import java.util.Objects;
+import java.util.UUID;
+
+public record ChunkSourceUnit(
+        SourceTextBlockSnapshot source,
+        ChunkContentType contentType,
+        String content,
+        long sourceOrder,
+        boolean fragment) {
+
+    public ChunkSourceUnit {
+        Objects.requireNonNull(source, "source must not be null");
+        Objects.requireNonNull(contentType, "contentType must not be null");
+        Objects.requireNonNull(content, "content must not be null");
+        if (sourceOrder < 1) {
+            throw new IllegalArgumentException("sourceOrder must be positive");
+        }
+    }
+
+    public UUID textBlockId() { return source.id(); }
+    public UUID materialVersionId() { return source.materialVersionId(); }
+    public UUID documentNodeId() { return source.documentNodeId(); }
+    public int page() { return source.pageNumber(); }
+    public TextBlockExtractionMethod extractionMethod() { return source.extractionMethod(); }
+    public TextBlockQuality quality() { return source.quality(); }
 }

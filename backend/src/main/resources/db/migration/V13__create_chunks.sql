@@ -27,11 +27,12 @@ CREATE TABLE chunks (
     CONSTRAINT uq_chunks_material_version_index UNIQUE (material_version_id, chunk_index),
     CONSTRAINT fk_chunks_material_version FOREIGN KEY (material_version_id) REFERENCES material_versions(id) ON DELETE CASCADE,
     CONSTRAINT fk_chunks_node_same_version FOREIGN KEY (document_node_id, material_version_id)
-        REFERENCES document_nodes(id, material_version_id) ON DELETE NO ACTION,
+        REFERENCES document_nodes(id, material_version_id) ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED,
     CONSTRAINT chk_chunks_index CHECK (chunk_index >= 1),
     CONSTRAINT chk_chunks_content CHECK (length(content) > 0),
     CONSTRAINT chk_chunks_token_count CHECK (token_count IS NULL OR token_count > 0),
     CONSTRAINT chk_chunks_page_start CHECK (page_start IS NULL OR page_start >= 1),
+    CONSTRAINT chk_chunks_page_end CHECK (page_end IS NULL OR page_end >= 1),
     CONSTRAINT chk_chunks_page_range CHECK (page_start IS NULL OR page_end IS NULL OR page_end >= page_start),
     CONSTRAINT chk_chunks_content_type CHECK (content_type IN ('TEXT','TABLE')),
     CONSTRAINT chk_chunks_extraction_method CHECK (extraction_method IN ('NATIVE','OCR')),

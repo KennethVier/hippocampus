@@ -992,7 +992,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Chunks are coherent, traceable and bounded.
 - **Definition of Done:** Chunking tests pass.
 - **Authority:** Documents 13,18,21
-- **Evidence / link:** P3-14 implementation adds V13 Chunk persistence, deterministic CHUNKER_V1 identity, bounded hierarchy-aware PAGE_TEXT/TABLE_TEXT chunking, exact ordered TextBlock links, conservative visual links, transactional replay verification, typed configuration, and CHUNK stage registration. Focused non-container validation passed 36 tests; PostgreSQL/Testcontainers validation is pending because Docker is unavailable in the execution environment.
+- **Evidence / link:** P3-14 implementation adds V13 Chunk persistence, deterministic CHUNKER_V1 identity, bounded hierarchy-aware PAGE_TEXT/TABLE_TEXT chunking, exact ordered TextBlock links, conservative visual links, transactional replay verification, typed configuration, and CHUNK stage registration. Correction-focused non-container validation passed 48 tests with zero failures/errors/skips. Full verification was attempted but PostgreSQL/Testcontainers and OCR integration validation remain unavailable locally because the Docker socket and Tesseract executable are absent; authoritative exact-head CI remains required before fresh general review.
 - **Notes / blockers:** _None_
 
 ## P3-15 — Implement progress/heartbeat/retry
