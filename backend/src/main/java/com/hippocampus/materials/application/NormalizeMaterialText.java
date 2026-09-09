@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -28,6 +29,9 @@ public final class NormalizeMaterialText {
         this.pageBatchSize = pageBatchSize;
     }
     public void execute(UUID materialVersionId) {
+        execute(materialVersionId, (current, total) -> {});
+    }
+    public void execute(UUID materialVersionId, BiConsumer<Long, Long> progress) {
         Objects.requireNonNull(materialVersionId); requireNoTransaction();
         int pages = sources.requirePageCount(materialVersionId);
         Map<String, Integer> candidates = new java.util.HashMap<>();
@@ -45,9 +49,11 @@ public final class NormalizeMaterialText {
                 output.add(normalized(block, block.content()));
             }
             persistence.execute(materialVersionId, output);
+            progress.accept((long) last, (long) pages);
             requireNoTransaction();
         }
         finalization.execute(materialVersionId, pages);
+        progress.accept((long) pages, (long) pages);
     }
     private static TextBlock normalized(TextBlock source, String content) {
         if (source.blockType() != TextBlockType.PAGE_TEXT && source.blockType() != TextBlockType.TABLE_TEXT) {

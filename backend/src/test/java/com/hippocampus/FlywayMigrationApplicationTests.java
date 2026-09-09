@@ -436,6 +436,8 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 Map.entry("status", "character varying:NO"),
                 Map.entry("priority", "integer:NO"),
                 Map.entry("progress", "numeric:YES"),
+                Map.entry("progress_current", "bigint:YES"),
+                Map.entry("progress_total", "bigint:YES"),
                 Map.entry("attempt_count", "integer:NO"),
                 Map.entry("max_attempts", "integer:NO"),
                 Map.entry("locked_at", "timestamp with time zone:YES"),
@@ -462,6 +464,8 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 "MATERIAL_VALIDATE", "MATERIAL_EXTRACT", "STRUCTURE_DETECT", "VISUAL_EXTRACT",
                 "NORMALIZE", "CHUNK", "EMBED", "INDEX", "ACTIVATE", "REINDEX", "CLEANUP");
         assertCheckConstraintContains("processing_jobs", "chk_processing_jobs_progress", "progress");
+        assertCheckConstraintContains("processing_jobs", "chk_processing_jobs_progress_counts",
+                "progress_current", "progress_total");
         assertCheckConstraintContains("processing_jobs", "chk_processing_jobs_attempt_count", "attempt_count");
         assertCheckConstraintContains("processing_jobs", "chk_processing_jobs_max_attempts", "max_attempts");
         assertCheckConstraintContains("processing_jobs", "chk_processing_jobs_attempt_limit",
@@ -470,6 +474,10 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 "material_version_id", "job_type", "processing_version", "PENDING", "RUNNING", "RETRY");
         assertIndex("processing_jobs", "idx_processing_jobs_pending_claim_fifo", false,
                 "created_at", "id", "status", "PENDING", "attempt_count", "max_attempts");
+        assertIndex("processing_jobs", "idx_processing_jobs_retry_due", false,
+                "next_attempt_at", "created_at", "id", "RETRY", "attempt_count", "max_attempts");
+        assertIndex("processing_jobs", "idx_processing_jobs_running_heartbeat", false,
+                "last_heartbeat_at", "id", "RUNNING", "attempt_count", "max_attempts");
     }
 
     private static void assertMaterialTopicLinkVocabularyChecks() throws SQLException {

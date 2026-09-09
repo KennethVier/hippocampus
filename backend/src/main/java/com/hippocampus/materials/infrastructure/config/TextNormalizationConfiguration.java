@@ -12,8 +12,10 @@ import com.hippocampus.materials.application.NormalizeMaterialStageHandler;
 import com.hippocampus.materials.application.PersistNormalizedText;
 import com.hippocampus.materials.application.FinalizeTextNormalization;
 import com.hippocampus.materials.application.ProcessingStageHandler;
+import com.hippocampus.materials.application.ReportProcessingJobProgress;
 import com.hippocampus.materials.domain.ExtractionNormalizationPolicy;
 import com.hippocampus.materials.infrastructure.persistence.JdbcTextNormalizationRepository;
+import org.springframework.beans.factory.ObjectProvider;
 
 @AutoConfiguration(after = {PdfExtractionConfiguration.class, DocumentStructurePersistenceConfiguration.class})
 @ConditionalOnBean({JdbcClient.class, PlatformTransactionManager.class, PdfExtractionProperties.class})
@@ -45,7 +47,10 @@ public class TextNormalizationConfiguration {
     }
 
     @Bean
-    ProcessingStageHandler normalizeMaterialStageHandler(NormalizeMaterialText normalization) {
-        return new NormalizeMaterialStageHandler(normalization);
+    ProcessingStageHandler normalizeMaterialStageHandler(NormalizeMaterialText normalization,
+            ObjectProvider<ReportProcessingJobProgress> progress) {
+        ReportProcessingJobProgress reporter = progress.getIfAvailable();
+        return reporter == null ? new NormalizeMaterialStageHandler(normalization)
+                : new NormalizeMaterialStageHandler(normalization, reporter);
     }
 }

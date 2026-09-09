@@ -5,6 +5,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
+import java.time.Clock;
+import java.time.Duration;
+import org.springframework.beans.factory.ObjectProvider;
 
 import com.hippocampus.materials.application.ClaimNextProcessingJob;
 import com.hippocampus.materials.infrastructure.persistence.JdbcProcessingJobClaimRepository;
@@ -23,7 +26,10 @@ public class ProcessingJobClaimConfiguration {
     }
 
     @Bean
-    ClaimNextProcessingJob claimNextProcessingJob(ProcessingJobClaimRepository jobs) {
-        return new ClaimNextProcessingJob(jobs);
+    ClaimNextProcessingJob claimNextProcessingJob(ProcessingJobClaimRepository jobs,
+            ObjectProvider<Clock> clocks, ObjectProvider<ProcessingRecoveryProperties> properties) {
+        ProcessingRecoveryProperties recovery = properties.getIfAvailable();
+        return new ClaimNextProcessingJob(jobs, clocks.getIfAvailable(Clock::systemUTC),
+                recovery == null ? Duration.ofMinutes(1) : recovery.staleTimeout());
     }
 }

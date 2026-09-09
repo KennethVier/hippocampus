@@ -11,12 +11,14 @@ import com.hippocampus.materials.application.ExtractPdfPages;
 import com.hippocampus.materials.application.FinalizePdfExtraction;
 import com.hippocampus.materials.application.PersistPdfPageBatch;
 import com.hippocampus.materials.application.ProcessingStageHandler;
+import com.hippocampus.materials.application.ReportProcessingJobProgress;
 import com.hippocampus.materials.infrastructure.persistence.JdbcPdfExtractionPersistence;
 import com.hippocampus.materials.infrastructure.persistence.JpaDocumentStructureRepository;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataDocumentNodeRepository;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataTextBlockRepository;
 import com.hippocampus.materials.port.DocumentStructureRepository;
 import com.hippocampus.materials.port.PdfExtractionPersistence;
+import org.springframework.beans.factory.ObjectProvider;
 
 @AutoConfiguration(
         after = PdfExtractionConfiguration.class,
@@ -55,7 +57,10 @@ public class DocumentStructurePersistenceConfiguration {
     ProcessingStageHandler extractMaterialStageHandler(
             ExtractPdfPages extraction,
             PersistPdfPageBatch batches,
-            FinalizePdfExtraction finalization) {
-        return new ExtractMaterialStageHandler(extraction, batches, finalization);
+            FinalizePdfExtraction finalization,
+            ObjectProvider<ReportProcessingJobProgress> progress) {
+        ReportProcessingJobProgress reporter = progress.getIfAvailable();
+        return reporter == null ? new ExtractMaterialStageHandler(extraction, batches, finalization)
+                : new ExtractMaterialStageHandler(extraction, batches, finalization, reporter);
     }
 }

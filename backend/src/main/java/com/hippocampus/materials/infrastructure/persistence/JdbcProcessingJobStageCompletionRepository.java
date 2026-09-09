@@ -6,6 +6,7 @@ import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import com.hippocampus.materials.domain.ProcessingJobType;
+import com.hippocampus.materials.domain.ClaimedProcessingJob;
 import com.hippocampus.materials.port.ProcessingJobStageCompletionRepository;
 
 public final class JdbcProcessingJobStageCompletionRepository
@@ -15,10 +16,16 @@ public final class JdbcProcessingJobStageCompletionRepository
                 UPDATE processing_jobs
                 SET status = 'COMPLETED',
                     completed_at = CURRENT_TIMESTAMP,
+                    progress = CASE WHEN progress_total IS NOT NULL THEN 100.00 ELSE progress END,
+                    progress_current = CASE WHEN progress_total IS NOT NULL THEN progress_total ELSE progress_current END,
+                    locked_at = NULL, locked_by = NULL, last_heartbeat_at = NULL, next_attempt_at = NULL,
+                    error_code = NULL, error_message = NULL,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :jobId
                   AND status = 'RUNNING'
                   AND job_type = :executedStage
+                  AND locked_by = :workerId
+                  AND attempt_count = :attemptNumber
                 RETURNING user_id, material_version_id, priority, max_attempts, processing_version
             ), inserted AS (
                 INSERT INTO processing_jobs (
@@ -47,12 +54,13 @@ public final class JdbcProcessingJobStageCompletionRepository
 
     @Override
     public boolean completeSuccessfulStage(
-            UUID jobId,
-            ProcessingJobType executedStage,
+            ClaimedProcessingJob job,
             ProcessingJobType nextDurableStage) {
         Boolean completed = jdbcClient.sql(COMPLETE_SUCCESSFUL_STAGE)
-                .param("jobId", jobId)
-                .param("executedStage", executedStage.name())
+                .param("jobId", job.jobId())
+                .param("executedStage", job.jobType().name())
+                .param("workerId", job.workerId())
+                .param("attemptNumber", job.attemptNumber())
                 .param("nextJobId", UUID.randomUUID())
                 .param("nextStage", nextDurableStage == null ? null : nextDurableStage.name(), Types.VARCHAR)
                 .query(Boolean.class)

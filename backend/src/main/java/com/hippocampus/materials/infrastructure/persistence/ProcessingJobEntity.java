@@ -49,6 +49,12 @@ public class ProcessingJobEntity {
     @Column(name = "progress", precision = 5, scale = 2)
     private BigDecimal progress;
 
+    @Column(name = "progress_current")
+    private Long progressCurrent;
+
+    @Column(name = "progress_total")
+    private Long progressTotal;
+
     @Column(name = "attempt_count", nullable = false)
     private int attemptCount;
 
@@ -123,6 +129,10 @@ public class ProcessingJobEntity {
     public void setPriority(int priority) { this.priority = priority; }
     public BigDecimal getProgress() { return progress; }
     public void setProgress(BigDecimal progress) { this.progress = progress; }
+    public Long getProgressCurrent() { return progressCurrent; }
+    public void setProgressCurrent(Long progressCurrent) { this.progressCurrent = progressCurrent; }
+    public Long getProgressTotal() { return progressTotal; }
+    public void setProgressTotal(Long progressTotal) { this.progressTotal = progressTotal; }
     public int getAttemptCount() { return attemptCount; }
     public void setAttemptCount(int attemptCount) { this.attemptCount = attemptCount; }
     public int getMaxAttempts() { return maxAttempts; }

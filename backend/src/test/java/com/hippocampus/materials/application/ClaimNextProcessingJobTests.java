@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.Optional;
+import static org.mockito.ArgumentMatchers.any;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -45,18 +46,18 @@ class ClaimNextProcessingJobTests {
     @Test
     void acceptsMaximumLengthOperationalIdentifier() {
         String workerId = "w".repeat(128);
-        when(jobs.claimNextEligible(workerId)).thenReturn(Optional.empty());
+        when(jobs.claimNextEligible(org.mockito.ArgumentMatchers.eq(workerId), any(), any())).thenReturn(Optional.empty());
 
         claimNextJob.execute(workerId);
 
-        verify(jobs).claimNextEligible(workerId);
+        verify(jobs).claimNextEligible(org.mockito.ArgumentMatchers.eq(workerId), any(), any());
     }
 
     @Test
     void propagatesDatabaseFailureRatherThanReportingNoEligibleWork() {
         DataAccessResourceFailureException failure =
                 new DataAccessResourceFailureException("database unavailable");
-        when(jobs.claimNextEligible("worker-db-failure")).thenThrow(failure);
+        when(jobs.claimNextEligible(org.mockito.ArgumentMatchers.eq("worker-db-failure"), any(), any())).thenThrow(failure);
 
         assertThatThrownBy(() -> claimNextJob.execute("worker-db-failure"))
                 .isSameAs(failure);

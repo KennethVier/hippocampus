@@ -16,6 +16,15 @@ spring:
 hippocampus:
   materials:
     processing:
+      recovery:
+        enabled: ${HIPPOCAMPUS_PROCESSING_RECOVERY_ENABLED:true}
+        # Operational implementation defaults; Documents 21/24 do not define fixed timing policy.
+        worker-id: ${HIPPOCAMPUS_PROCESSING_WORKER_ID:worker-${random.uuid}}
+        poll-interval: ${HIPPOCAMPUS_PROCESSING_POLL_INTERVAL:PT1S}
+        heartbeat-interval: ${HIPPOCAMPUS_PROCESSING_HEARTBEAT_INTERVAL:PT10S}
+        stale-timeout: ${HIPPOCAMPUS_PROCESSING_STALE_TIMEOUT:PT1M}
+        initial-retry-delay: ${HIPPOCAMPUS_PROCESSING_INITIAL_RETRY_DELAY:PT5S}
+        maximum-retry-delay: ${HIPPOCAMPUS_PROCESSING_MAX_RETRY_DELAY:PT1M}
       pdf:
         page-batch-size: ${HIPPOCAMPUS_PDF_PAGE_BATCH_SIZE:20}
         max-pages: ${HIPPOCAMPUS_MAX_PDF_PAGES:2000}

@@ -362,7 +362,7 @@ class PdfExtractionPersistenceIntegrationTests extends PostgresIntegrationTestSu
                     jobId, ProcessingJobType.MATERIAL_EXTRACT, versionId, "processor-v1");
             ExecuteClaimedProcessingJob completionFails = new ExecuteClaimedProcessingJob(
                     new ProcessingDispatcher(List.of(handler)),
-                    new CompleteProcessingStage((ignoredId, ignoredStage, ignoredNext) -> false));
+                    new CompleteProcessingStage((ignoredJob, ignoredNext) -> false));
 
             assertThatThrownBy(() -> completionFails.execute(job))
                     .isInstanceOf(ProcessingStageCompletionException.class);
@@ -468,8 +468,8 @@ class PdfExtractionPersistenceIntegrationTests extends PostgresIntegrationTestSu
         jdbc.sql("""
                 INSERT INTO processing_jobs
                     (id, user_id, material_version_id, job_type, status, priority, attempt_count,
-                     max_attempts, processing_version, created_at, updated_at)
-                VALUES (?, ?, ?, 'MATERIAL_EXTRACT', 'RUNNING', 0, 1, 3, 'processor-v1',
+                     max_attempts, locked_by, locked_at, processing_version, created_at, updated_at)
+                VALUES (?, ?, ?, 'MATERIAL_EXTRACT', 'RUNNING', 0, 1, 3, 'test-worker', CURRENT_TIMESTAMP, 'processor-v1',
                         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """).params(jobId, userId, versionId).update();
         return jobId;

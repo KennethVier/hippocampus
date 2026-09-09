@@ -9,6 +9,10 @@ spring:
       ddl-auto: validate
 
 hippocampus:
+  materials:
+    processing:
+      recovery:
+        enabled: false
   security:
     cors:
       allowed-origins: http://localhost:5173
