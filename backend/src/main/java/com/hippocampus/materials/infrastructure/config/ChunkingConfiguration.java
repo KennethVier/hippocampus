@@ -18,10 +18,13 @@ import com.hippocampus.materials.infrastructure.persistence.JdbcChunkRepository;
 
 import tools.jackson.databind.ObjectMapper;
 
-@AutoConfiguration(after = TextNormalizationConfiguration.class)
-@ConditionalOnBean({JdbcClient.class, PlatformTransactionManager.class,
-        PdfExtractionProperties.class, PdfStructureInspectionProperties.class})
-@EnableConfigurationProperties(ChunkingProperties.class)
+@AutoConfiguration(after = {
+        PdfExtractionConfiguration.class,
+        PdfStructureInspectionConfiguration.class,
+        TextNormalizationConfiguration.class
+})
+@ConditionalOnBean({JdbcClient.class, PlatformTransactionManager.class, PdfExtractionProperties.class})
+@EnableConfigurationProperties({ChunkingProperties.class, PdfStructureInspectionProperties.class})
 public class ChunkingConfiguration {
     @Bean
     JdbcChunkRepository chunkRepository(
