@@ -1,6 +1,8 @@
 package com.hippocampus.materials.infrastructure.persistence;
 
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.sql.Types;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import com.hippocampus.materials.domain.ClaimedProcessingJob;
@@ -31,7 +33,7 @@ public final class JdbcProcessingJobExecutionRepository implements ProcessingJob
     }
     @Override public boolean retry(ClaimedProcessingJob job, String code, Instant next, Instant now) {
         return fenced("UPDATE processing_jobs SET status='RETRY',next_attempt_at=:next,error_code=:code,error_message=NULL,locked_by=NULL,locked_at=NULL,last_heartbeat_at=NULL,updated_at=:now WHERE"
-                + FENCE, job, now).param("next", next).param("code", code).update() == 1;
+                + FENCE, job, now).param("next", timestamp(next)).param("code", code).update() == 1;
     }
     @Override public boolean fail(ClaimedProcessingJob job, String code, Instant now) {
         return fenced("UPDATE processing_jobs SET status='FAILED',next_attempt_at=NULL,error_code=:code,error_message=NULL,locked_by=NULL,locked_at=NULL,last_heartbeat_at=NULL,completed_at=:now,updated_at=:now WHERE"
@@ -39,6 +41,10 @@ public final class JdbcProcessingJobExecutionRepository implements ProcessingJob
     }
     private JdbcClient.StatementSpec fenced(String sql, ClaimedProcessingJob job, Instant now) {
         return jdbc.sql(sql).param("id", job.jobId()).param("worker", job.workerId())
-                .param("attempt", job.attemptNumber()).param("now", now);
+                .param("attempt", job.attemptNumber()).param("now", timestamp(now));
+    }
+
+    private static OffsetDateTime timestamp(Instant instant) {
+        return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
     }
 }

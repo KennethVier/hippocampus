@@ -5,6 +5,8 @@ import java.sql.SQLException;
 import java.util.Optional;
 import java.util.UUID;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -63,8 +65,8 @@ public final class JdbcProcessingJobClaimRepository implements ProcessingJobClai
     public Optional<ClaimedProcessingJob> claimNextEligible(String workerId, Instant now, Instant staleCutoff) {
         return jdbcClient.sql(CLAIM_NEXT_ELIGIBLE)
                 .param("workerId", workerId)
-                .param("now", now)
-                .param("staleCutoff", staleCutoff)
+                .param("now", timestamp(now))
+                .param("staleCutoff", timestamp(staleCutoff))
                 .query(JdbcProcessingJobClaimRepository::mapClaim)
                 .optional();
     }
@@ -78,5 +80,9 @@ public final class JdbcProcessingJobClaimRepository implements ProcessingJobClai
                 result.getString("locked_by"),
                 result.getInt("attempt_count"),
                 result.getInt("max_attempts"));
+    }
+
+    private static OffsetDateTime timestamp(Instant instant) {
+        return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
     }
 }
