@@ -967,7 +967,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Normalization
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready For Review
 - **Goal:** Remove noise without damaging medical notation.
 - **Build:** Handle repeated headers/footers, line wraps/hyphenation conservatively; preserve Na+, Ca2+, β1, C5-T1 etc.
 - **How it works:** Normalization keeps original provenance.
@@ -976,7 +976,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Searchable text improves without term corruption.
 - **Definition of Done:** Normalization regression suite passes.
 - **Authority:** Documents 21
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** PR [#128](https://github.com/KennethVier/hippocampus/pull/128); [final corrective-pass evidence](P3-13-VALIDATION.md) records the complete PASS self-audit, exact focused Maven command and fresh result: 116 tests, 0 failures, 0 errors, 0 skips, BUILD SUCCESS; `git diff --check` passed. Accepted ADR-0004 and additive V12 preserve immutable raw extraction evidence and nullable `normalized_content`. Bounded two-pass processing retains at most 32 exact candidate signatures; existing native/OCR/table source limits are reused. Persistence/finalization lock current eligibility, verify complete source/node/page provenance and enforce exact retry, partial convergence and fail-closed conflicts. Durable finalization independently rejects incomplete/unknown state. Real DB P3-04/P3-12 replay regressions preserve complete rows and normalized values; application, configuration and NORMALIZE-to-CHUNK regressions pass. Corrective commit `fix(materials): finalize P3-13 normalization review` contains this tracker update; its exact SHA and exact-head quality evidence are recorded in the linked PR Validation section. External general review and the later independent security gate remain pending; no SECURITY PASS or Done claim is made.
 - **Notes / blockers:** _None_
 
 ## P3-14 — Implement hierarchy-aware chunker

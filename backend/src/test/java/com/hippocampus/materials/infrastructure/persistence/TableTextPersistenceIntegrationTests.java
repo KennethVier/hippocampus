@@ -33,6 +33,26 @@ class TableTextPersistenceIntegrationTests extends PostgresIntegrationTestSuppor
     }
 
     @Test
+    void tableExtractionReplayPreservesNormalizedTabsNewlinesAndCompleteProvenance() {
+        try (var context = startApplicationWithFlyway()) {
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            UUID version = readyPdf(jdbc, context, 1);
+            var persistence = new JdbcTableTextPersistence(jdbc, 10, 1000);
+            var transactions = new TransactionTemplate(context.getBean(PlatformTransactionManager.class));
+            var table = table(version, root(jdbc, version), 1, 2, "Drug\tDose\nA\t1",
+                    TextBlockExtractionMethod.OCR, TextBlockQuality.LIMITED);
+            inTransaction(transactions, () -> persistence.persistOrVerify(version, 1, table));
+            inTransaction(transactions, () -> persistence.finalizeExtraction(version, 1, 1));
+            jdbc.sql("UPDATE text_blocks SET normalized_content = content WHERE material_version_id = ? AND block_type = 'TABLE_TEXT'").param(version).update();
+            var before = jdbc.sql("SELECT row_to_json(tb)::text FROM text_blocks tb WHERE material_version_id = ? ORDER BY ordinal").param(version).query(String.class).list();
+            inTransaction(transactions, () -> persistence.persistOrVerify(version, 1, table));
+            inTransaction(transactions, () -> persistence.finalizeExtraction(version, 1, 1));
+            assertThat(jdbc.sql("SELECT row_to_json(tb)::text FROM text_blocks tb WHERE material_version_id = ? ORDER BY ordinal").param(version).query(String.class).list()).isEqualTo(before);
+            assertThat(jdbc.sql("SELECT normalized_content FROM text_blocks WHERE material_version_id = ? AND block_type = 'TABLE_TEXT'").param(version).query(String.class).single()).isEqualTo(table.content());
+        }
+    }
+
+    @Test
     void exactAndPartialReplayConvergeAndPageExtractionReplayLeavesTablesUnchanged() {
         try (var context = startApplicationWithFlyway()) {
             JdbcClient jdbc = context.getBean(JdbcClient.class);

@@ -12,3 +12,4 @@ com.hippocampus.materials.infrastructure.config.PdfStructureInspectionConfigurat
 com.hippocampus.materials.infrastructure.config.DocumentStructurePersistenceConfiguration
 com.hippocampus.materials.infrastructure.config.DetectedDocumentStructureConfiguration
 com.hippocampus.materials.infrastructure.config.PdfVisualExtractionConfiguration
+com.hippocampus.materials.infrastructure.config.TextNormalizationConfiguration

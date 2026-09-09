@@ -1384,6 +1384,7 @@ When ADRs exist, add an index:
 | [ADR-0001](adr/ADR-0001-mobile-client-architecture-and-authentication-boundary.md) | Mobile Client Architecture and Authentication Boundary | ACCEPTED | 2026-08-27 | ARCHITECTURE, FRONTEND, SECURITY, BACKEND, TESTING |
 | [ADR-0002](adr/ADR-0002-v1-student-credential-mechanism.md) | V1 Student Credential Mechanism | ACCEPTED | 2026-08-28 | SECURITY, BACKEND, DATA, ARCHITECTURE |
 | [ADR-0003](adr/ADR-0003-learning-organization-archive-lifecycle.md) | Learning Organization Archive Lifecycle | ACCEPTED | 2026-08-30 | DOMAIN, DATA, BACKEND |
+| [ADR-0004](adr/ADR-0004-durable-text-normalization-contract.md) | Durable Text Normalization Contract | ACCEPTED | 2026-09-08 | DATA, INGESTION, DOMAIN |
 
 This table begins empty at initial v1 freeze unless a real pending
 decision already exists.

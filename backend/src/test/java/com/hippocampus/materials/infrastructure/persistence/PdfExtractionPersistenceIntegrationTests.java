@@ -58,6 +58,24 @@ class PdfExtractionPersistenceIntegrationTests extends PostgresIntegrationTestSu
     }
 
     @Test
+    void extractionReplayPreservesNormalizedContentAndCompleteSourceProvenance() {
+        try (var context = startApplicationWithFlyway()) {
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            UUID version = insertPdf(jdbc, "PROCESSING");
+            var batch = batch(page(1, "one\nline"), ocrPage(2, "OCR", TextBlockQuality.LIMITED));
+            var persistence = context.getBean(PersistPdfPageBatch.class);
+            var finalization = context.getBean(FinalizePdfExtraction.class);
+            persistence.execute(version, batch);
+            finalization.execute(version, 2);
+            jdbc.sql("UPDATE text_blocks SET normalized_content = 'normalized value' WHERE material_version_id = ?").param(version).update();
+            var before = jdbc.sql("SELECT row_to_json(tb)::text FROM text_blocks tb WHERE material_version_id = ? ORDER BY ordinal").param(version).query(String.class).list();
+            persistence.execute(version, batch);
+            finalization.execute(version, 2);
+            assertThat(jdbc.sql("SELECT row_to_json(tb)::text FROM text_blocks tb WHERE material_version_id = ? ORDER BY ordinal").param(version).query(String.class).list()).isEqualTo(before);
+        }
+    }
+
+    @Test
     void persistsMultipleBatchesIncludingBlankPageAndFinalizesExactly() {
         try (var context = startApplicationWithFlyway()) {
             JdbcClient jdbc = context.getBean(JdbcClient.class);

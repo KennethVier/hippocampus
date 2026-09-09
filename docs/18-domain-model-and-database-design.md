@@ -549,6 +549,7 @@ page_number INT NULL
 block_type VARCHAR NOT NULL
 ordinal INT NOT NULL
 content TEXT NOT NULL
+normalized_content TEXT NULL
 extraction_method VARCHAR NOT NULL
 quality VARCHAR NULL
 created_at TIMESTAMPTZ NOT NULL
@@ -566,6 +567,8 @@ TRANSCRIPT
 ```
 
 TextBlocks preserve normalized source structure.
+
+`content` remains immutable extraction evidence. `normalized_content`, when present, is the additive derived semantic form owned by the NORMALIZE stage; downstream chunking consumes that field only after successful normalization.
 
 Chunks are derived retrieval units.
 

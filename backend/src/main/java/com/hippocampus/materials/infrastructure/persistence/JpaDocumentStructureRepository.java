@@ -65,6 +65,6 @@ public final class JpaDocumentStructureRepository implements DocumentStructureRe
         return new TextBlock(
                 block.getId(), block.getMaterialVersionId(), block.getDocumentNodeId(), block.getPageNumber(),
                 block.getBlockType(), block.getOrdinal(), block.getContent(), block.getExtractionMethod(),
-                block.getQuality(), block.getCreatedAt());
+                block.getQuality(), block.getCreatedAt(), block.getNormalizedContent());
     }
 }

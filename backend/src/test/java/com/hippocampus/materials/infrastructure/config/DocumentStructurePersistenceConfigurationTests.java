@@ -23,7 +23,7 @@ import com.hippocampus.materials.port.PdfExtractionPersistence;
 
 class DocumentStructurePersistenceConfigurationTests {
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(DocumentStructurePersistenceConfiguration.class));
+            .withConfiguration(AutoConfigurations.of(DocumentStructurePersistenceConfiguration.class, TextNormalizationConfiguration.class));
 
     @Test
     void databaseOnlyContextCreatesPersistenceWithoutExtractionHandler() {
@@ -51,6 +51,35 @@ class DocumentStructurePersistenceConfigurationTests {
             assertThat(context.getBean(ProcessingStageHandler.class))
                     .isInstanceOf(ExtractMaterialStageHandler.class);
         });
+    }
+
+    @Test
+    void normalizationRegistersWithTypedLimitsWithoutDependingOnLaterVisualConfiguration() {
+        runner.withUserConfiguration(NormalizationBeans.class).withPropertyValues(
+                "hippocampus.materials.processing.pdf.table.max-tables-per-page=2",
+                "hippocampus.materials.processing.pdf.table.max-tables-per-document=10",
+                "hippocampus.materials.processing.pdf.table.max-rows-per-table=10",
+                "hippocampus.materials.processing.pdf.table.max-columns-per-table=4",
+                "hippocampus.materials.processing.pdf.table.max-table-text-chars=40").run(context -> {
+            assertThat(context).hasNotFailed()
+                    .hasSingleBean(com.hippocampus.materials.application.NormalizeMaterialText.class)
+                    .hasSingleBean(com.hippocampus.materials.application.PersistNormalizedText.class)
+                    .hasSingleBean(com.hippocampus.materials.application.FinalizeTextNormalization.class);
+            assertThat(context.getBean(ProcessingStageHandler.class))
+                    .isInstanceOf(com.hippocampus.materials.application.NormalizeMaterialStageHandler.class);
+        });
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class NormalizationBeans extends DatabaseBeans {
+        @Bean
+        PdfExtractionProperties pdfExtractionProperties() {
+            var properties = mock(PdfExtractionProperties.class);
+            org.mockito.Mockito.when(properties.pageBatchSize()).thenReturn(2);
+            org.mockito.Mockito.when(properties.maxNativeTextCharsPerPage()).thenReturn(20);
+            org.mockito.Mockito.when(properties.ocrMaxTextChars()).thenReturn(30);
+            return properties;
+        }
     }
 
     @Configuration(proxyBeanMethods = false)
