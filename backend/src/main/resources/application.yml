@@ -59,6 +59,12 @@ hippocampus:
           max-layout-lines-per-page: ${HIPPOCAMPUS_PDF_STRUCTURE_MAX_LAYOUT_LINES_PER_PAGE:4096}
           max-candidates-per-document: ${HIPPOCAMPUS_PDF_STRUCTURE_MAX_CANDIDATES_PER_DOCUMENT:10000}
           max-nodes-per-document: ${HIPPOCAMPUS_PDF_STRUCTURE_MAX_NODES_PER_DOCUMENT:4096}
+      chunk:
+        chunking-version: CHUNKER_V1
+        target-token-count: ${HIPPOCAMPUS_CHUNK_TARGET_TOKENS:800}
+        hard-token-count: ${HIPPOCAMPUS_CHUNK_HARD_TOKENS:1000}
+        overlap-token-count: ${HIPPOCAMPUS_CHUNK_OVERLAP_TOKENS:100}
+        persistence-batch-size: ${HIPPOCAMPUS_CHUNK_PERSISTENCE_BATCH_SIZE:100}
   security:
     login:
       max-attempts: 60

@@ -1,0 +1,3 @@
+package com.hippocampus.materials.infrastructure.config;
+import static org.assertj.core.api.Assertions.*; import org.junit.jupiter.api.Test;
+class ChunkingPropertiesTests {@Test void acceptsDefaults(){var p=new ChunkingProperties("CHUNKER_V1",800,1000,100,100);assertThat(p.hardTokenCount()).isEqualTo(1000);}@Test void rejectsInvalidLimits(){assertThatThrownBy(()->new ChunkingProperties("CHUNKER_V2",800,1000,100,100)).isInstanceOf(IllegalArgumentException.class);assertThatThrownBy(()->new ChunkingProperties("CHUNKER_V1",800,700,100,100)).isInstanceOf(IllegalArgumentException.class);assertThatThrownBy(()->new ChunkingProperties("CHUNKER_V1",800,1000,800,100)).isInstanceOf(IllegalArgumentException.class);}}

@@ -13,3 +13,4 @@ com.hippocampus.materials.infrastructure.config.DocumentStructurePersistenceConf
 com.hippocampus.materials.infrastructure.config.DetectedDocumentStructureConfiguration
 com.hippocampus.materials.infrastructure.config.PdfVisualExtractionConfiguration
 com.hippocampus.materials.infrastructure.config.TextNormalizationConfiguration
+com.hippocampus.materials.infrastructure.config.ChunkingConfiguration

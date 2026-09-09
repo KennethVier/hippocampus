@@ -983,7 +983,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Chunking
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready For Review
 - **Goal:** Create retrieval units from coherent source sections.
 - **Build:** Chunk ordered blocks by semantic/document boundaries, token budget and conservative overlap; store heading path/page range/version.
 - **How it works:** Chunks are not topics.
@@ -992,7 +992,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Chunks are coherent, traceable and bounded.
 - **Definition of Done:** Chunking tests pass.
 - **Authority:** Documents 13,18,21
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** P3-14 implementation adds V13 Chunk persistence, deterministic CHUNKER_V1 identity, bounded hierarchy-aware PAGE_TEXT/TABLE_TEXT chunking, exact ordered TextBlock links, conservative visual links, transactional replay verification, typed configuration, and CHUNK stage registration. Focused non-container validation passed 36 tests; PostgreSQL/Testcontainers validation is pending because Docker is unavailable in the execution environment.
 - **Notes / blockers:** _None_
 
 ## P3-15 — Implement progress/heartbeat/retry
