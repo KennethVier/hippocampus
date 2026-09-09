@@ -55,9 +55,12 @@ public final class ChunkMaterialText {
     }
 
     public void execute(UUID materialVersionId) {
-        execute(materialVersionId, (current, total) -> {});
+        execute(materialVersionId, () -> {}, (current, total) -> {});
     }
     public void execute(UUID materialVersionId, BiConsumer<Long, Long> progress) {
+        execute(materialVersionId, () -> {}, progress);
+    }
+    public void execute(UUID materialVersionId, Runnable ownershipCheck, BiConsumer<Long, Long> progress) {
         Objects.requireNonNull(materialVersionId);
         requireNoTransaction();
         int pageCount = sources.requirePageCount(materialVersionId);
@@ -82,32 +85,35 @@ public final class ChunkMaterialText {
                         sourceOrder = Math.incrementExact(sourceOrder);
                         session.accept(sourceUnit(block, paragraph, sourceOrder), draft -> {
                             emittedCount[0] = Math.incrementExact(emittedCount[0]);
-                            collectOne(materialVersionId, draft, pending, emittedCount[0], progress);
+                            collectOne(materialVersionId, draft, pending, emittedCount[0], ownershipCheck, progress);
                         });
                     }
                 } else if (block.blockType() == TextBlockType.TABLE_TEXT) {
                     sourceOrder = Math.incrementExact(sourceOrder);
                     session.accept(sourceUnit(block, block.normalizedContent(), sourceOrder), draft -> {
                         emittedCount[0] = Math.incrementExact(emittedCount[0]);
-                        collectOne(materialVersionId, draft, pending, emittedCount[0], progress);
+                        collectOne(materialVersionId, draft, pending, emittedCount[0], ownershipCheck, progress);
                     });
                 }
             }
         }
         for (ChunkDraft draft : session.finish()) {
             emittedCount[0] = Math.incrementExact(emittedCount[0]);
-            collectOne(materialVersionId, draft, pending, emittedCount[0], progress);
+            collectOne(materialVersionId, draft, pending, emittedCount[0], ownershipCheck, progress);
         }
+        ownershipCheck.run();
         persistPending(materialVersionId, pending);
         progress.accept((long) emittedCount[0], (long) emittedCount[0]);
+        ownershipCheck.run();
         finalization.execute(materialVersionId,
                 new ChunkingExecutionSummary(pageCount, emittedCount[0], emittedCount[0]));
     }
 
     private void collectOne(UUID materialVersionId, ChunkDraft draft, List<ChunkDraft> pending,
-            int emittedCount, BiConsumer<Long, Long> progress) {
+            int emittedCount, Runnable ownershipCheck, BiConsumer<Long, Long> progress) {
         pending.add(associateVisuals(draft));
         if (pending.size() == persistenceBatchSize) {
+            ownershipCheck.run();
             persistPending(materialVersionId, pending);
             progress.accept((long) emittedCount, null);
         }

@@ -12,5 +12,5 @@ CREATE INDEX idx_processing_jobs_retry_due
     WHERE status = 'RETRY' AND attempt_count < max_attempts;
 
 CREATE INDEX idx_processing_jobs_running_heartbeat
-    ON processing_jobs (last_heartbeat_at, id)
+    ON processing_jobs ((COALESCE(last_heartbeat_at, locked_at, started_at, updated_at, created_at)), id)
     WHERE status = 'RUNNING' AND attempt_count < max_attempts;

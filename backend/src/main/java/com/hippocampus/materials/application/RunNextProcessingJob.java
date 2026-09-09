@@ -3,10 +3,20 @@ package com.hippocampus.materials.application;
 public final class RunNextProcessingJob {
     private final ClaimNextProcessingJob claims;
     private final ExecuteClaimedProcessingJob execution;
-    public RunNextProcessingJob(ClaimNextProcessingJob claims, ExecuteClaimedProcessingJob execution) {
-        this.claims = claims; this.execution = execution;
+    private final ProcessingFailureClassifier failures;
+    public RunNextProcessingJob(ClaimNextProcessingJob claims, ExecuteClaimedProcessingJob execution,
+            ProcessingFailureClassifier failures) {
+        this.claims = claims; this.execution = execution; this.failures = failures;
     }
-    public boolean execute(String workerId) {
-        return claims.execute(workerId).map(job -> { execution.execute(job); return true; }).orElse(false);
+    public ProcessingRunResult execute(String workerId) {
+        return claims.execute(workerId).<ProcessingRunResult>map(job -> {
+            try {
+                execution.execute(job);
+                return new ProcessingRunResult.Completed(job.jobId(), job.jobType());
+            } catch (RuntimeException failure) {
+                return new ProcessingRunResult.Failed(
+                        job.jobId(), job.jobType(), failures.classify(failure).errorCode());
+            }
+        }).orElseGet(ProcessingRunResult.NoWork::new);
     }
 }

@@ -12,6 +12,7 @@ public final class NormalizeMaterialStageHandler implements ProcessingStageHandl
     @Override public void handle(ClaimedProcessingJob job) {
         if (job.materialVersionId() == null) throw new IllegalArgumentException("NORMALIZE requires a material version");
         if (progress == null) normalization.execute(job.materialVersionId());
-        else normalization.execute(job.materialVersionId(), (current, total) -> progress.report(job, current, total));
+        else normalization.execute(job.materialVersionId(), () -> progress.verifyOwnership(job),
+                (current, total) -> progress.report(job, current, total));
     }
 }

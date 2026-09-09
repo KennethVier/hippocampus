@@ -1,6 +1,5 @@
 package com.hippocampus.materials.infrastructure.config;
 
-import java.time.Clock;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -22,12 +21,11 @@ import com.hippocampus.materials.port.*;
 @EnableConfigurationProperties(ProcessingRecoveryProperties.class)
 @EnableScheduling
 public class ProcessingRecoveryConfiguration {
-    @Bean Clock processingClock() { return Clock.systemUTC(); }
     @Bean ProcessingJobExecutionRepository processingJobExecutionRepository(JdbcClient jdbc) {
         return new JdbcProcessingJobExecutionRepository(jdbc);
     }
-    @Bean UpdateProcessingJobExecution updateProcessingJobExecution(ProcessingJobExecutionRepository jobs, Clock clock) {
-        return new UpdateProcessingJobExecution(jobs, clock);
+    @Bean UpdateProcessingJobExecution updateProcessingJobExecution(ProcessingJobExecutionRepository jobs) {
+        return new UpdateProcessingJobExecution(jobs);
     }
     @Bean ReportProcessingJobProgress reportProcessingJobProgress(UpdateProcessingJobExecution updates) {
         return new ReportProcessingJobProgress(updates);
@@ -37,7 +35,7 @@ public class ProcessingRecoveryConfiguration {
     }
     @Bean ProcessingFailureClassifier processingFailureClassifier() { return new ProcessingFailureClassifier(); }
     @Bean FinalizeProcessingFailure finalizeProcessingFailure(ProcessingJobExecutionRepository jobs,
-            ProcessingRetryPolicy retries, Clock clock) { return new FinalizeProcessingFailure(jobs, retries, clock); }
+            ProcessingRetryPolicy retries) { return new FinalizeProcessingFailure(jobs, retries); }
     @Bean(name = "taskScheduler") TaskScheduler taskScheduler() {
         ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
         scheduler.setPoolSize(2);
@@ -49,8 +47,9 @@ public class ProcessingRecoveryConfiguration {
             UpdateProcessingJobExecution updates, ProcessingRecoveryProperties properties) {
         return new SpringProcessingHeartbeatMonitor(taskScheduler, updates, properties.heartbeatInterval());
     }
-    @Bean RunNextProcessingJob runNextProcessingJob(ClaimNextProcessingJob claims, ExecuteClaimedProcessingJob execution) {
-        return new RunNextProcessingJob(claims, execution);
+    @Bean RunNextProcessingJob runNextProcessingJob(ClaimNextProcessingJob claims,
+            ExecuteClaimedProcessingJob execution, ProcessingFailureClassifier failures) {
+        return new RunNextProcessingJob(claims, execution, failures);
     }
     @Bean @ConditionalOnProperty(prefix = "hippocampus.materials.processing.recovery", name = "enabled", havingValue = "true")
     ProcessingJobPoller processingJobPoller(RunNextProcessingJob runner, ProcessingRecoveryProperties properties) {

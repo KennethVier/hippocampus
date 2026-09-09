@@ -35,9 +35,11 @@ public final class ExtractMaterialStageHandler implements ProcessingStageHandler
     public void handle(ClaimedProcessingJob job) {
         PdfDocumentMetadata metadata = extraction.execute(
                 job, batch -> {
+                    if (progress != null) progress.verifyOwnership(job);
                     batches.execute(job.materialVersionId(), batch);
                     if (progress != null) progress.report(job, batch.lastPage(), null);
                 });
+        if (progress != null) progress.verifyOwnership(job);
         finalization.execute(job.materialVersionId(), metadata.pageCount());
         if (progress != null) progress.report(job, metadata.pageCount(), (long) metadata.pageCount());
     }

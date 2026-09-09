@@ -22,4 +22,11 @@ class ProcessingFailureClassifierTests {
         assertThat(unknown.kind()).isEqualTo(ProcessingFailure.Kind.FATAL);
         assertThat(unknown.errorCode()).isEqualTo("PROCESSING_INTERNAL_ERROR").doesNotContain("secret", "source");
     }
+
+    @Test void retriesOcrTimeoutWrappedByProductionPdfExtractionBoundary() {
+        PdfExtractionException wrapped = new PdfExtractionException(
+                PdfExtractionException.Kind.OCR_FAILED, new OcrException(OcrException.Kind.TIMEOUT));
+        assertThat(classifier.classify(wrapped))
+                .isEqualTo(new ProcessingFailure(ProcessingFailure.Kind.TRANSIENT, "OCR_UNAVAILABLE"));
+    }
 }

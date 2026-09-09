@@ -1,7 +1,6 @@
 package com.hippocampus.materials.application;
 
 import java.time.Duration;
-import java.time.Instant;
 
 public final class ProcessingRetryPolicy {
     private final Duration initialDelay;
@@ -15,12 +14,12 @@ public final class ProcessingRetryPolicy {
         this.maximumDelay = maximumDelay;
     }
 
-    public Instant nextAttemptAt(int completedAttempt, Instant now) {
+    public Duration delayAfter(int completedAttempt) {
         long multiplier = 1L << Math.min(30, Math.max(0, completedAttempt - 1));
         Duration delay;
         try { delay = initialDelay.multipliedBy(multiplier); }
         catch (ArithmeticException ignored) { delay = maximumDelay; }
         if (delay.compareTo(maximumDelay) > 0) delay = maximumDelay;
-        return now.plus(delay);
+        return delay;
     }
 }

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.time.Instant;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
@@ -23,13 +24,17 @@ class ProcessingJobRecoveryIntegrationTests extends PostgresIntegrationTestSuppo
             JdbcProcessingJobClaimRepository claims = new JdbcProcessingJobClaimRepository(context.getBean(JdbcClient.class));
             UUID early = insert("RETRY", 1, NOW.plusSeconds(1), null, null);
             UUID due = insert("RETRY", 1, NOW, null, null);
-            assertThat(claims.claimNextEligible("worker-a", NOW, NOW.minusSeconds(60))).get()
+            execute("UPDATE processing_jobs SET next_attempt_at=CURRENT_TIMESTAMP + interval '1 hour' WHERE id='" + early + "'");
+            execute("UPDATE processing_jobs SET next_attempt_at=CURRENT_TIMESTAMP - interval '1 second' WHERE id='" + due + "'");
+            assertThat(claims.claimNextEligible("worker-a", 60)).get()
                     .extracting(ClaimedProcessingJob::jobId).isEqualTo(due);
-            assertThat(claims.claimNextEligible("worker-a", NOW, NOW.minusSeconds(60))).isEmpty();
+            assertThat(claims.claimNextEligible("worker-a", 60)).isEmpty();
             execute("UPDATE processing_jobs SET status='COMPLETED' WHERE id='" + early + "'");
             UUID healthy = insert("RUNNING", 1, null, NOW.minusSeconds(59), "old-worker");
             UUID stale = insert("RUNNING", 1, null, NOW.minusSeconds(61), "old-worker");
-            ClaimedProcessingJob reclaimed = claims.claimNextEligible("worker-b", NOW, NOW.minusSeconds(60)).orElseThrow();
+            execute("UPDATE processing_jobs SET last_heartbeat_at=CURRENT_TIMESTAMP - interval '59 seconds' WHERE id='" + healthy + "'");
+            execute("UPDATE processing_jobs SET last_heartbeat_at=CURRENT_TIMESTAMP - interval '61 seconds' WHERE id='" + stale + "'");
+            ClaimedProcessingJob reclaimed = claims.claimNextEligible("worker-b", 60).orElseThrow();
             assertThat(reclaimed.jobId()).isEqualTo(stale);
             assertThat(reclaimed.attemptNumber()).isEqualTo(2);
             assertThat(reclaimed.workerId()).isEqualTo("worker-b");
@@ -44,20 +49,41 @@ class ProcessingJobRecoveryIntegrationTests extends PostgresIntegrationTestSuppo
             JdbcProcessingJobExecutionRepository execution = new JdbcProcessingJobExecutionRepository(jdbc);
             JdbcProcessingJobStageCompletionRepository completion = new JdbcProcessingJobStageCompletionRepository(jdbc);
             UUID id = insert("PENDING", 0, null, null, null);
-            ClaimedProcessingJob first = claims.claimNextEligible("worker-a", NOW, NOW.minusSeconds(60)).orElseThrow();
-            assertThat(execution.progress(first, 4, 10L, NOW.plusSeconds(1))).isTrue();
-            assertThat(execution.progress(first, 3, 10L, NOW.plusSeconds(2))).isFalse();
-            assertThat(execution.retry(first, "STORAGE_UNAVAILABLE", NOW.plusSeconds(5), NOW.plusSeconds(2))).isTrue();
-            assertThat(claims.claimNextEligible("worker-b", NOW.plusSeconds(4), NOW.minusSeconds(56))).isEmpty();
-            ClaimedProcessingJob second = claims.claimNextEligible("worker-b", NOW.plusSeconds(5), NOW.minusSeconds(55)).orElseThrow();
+            ClaimedProcessingJob first = claims.claimNextEligible("worker-a", 60).orElseThrow();
+            assertThat(execution.progress(first, 4, 10L)).isTrue();
+            assertThat(execution.progress(first, 3, 10L)).isTrue();
+            assertThat(rowLong(id, "progress_current")).isEqualTo(4);
+            assertThat(execution.retry(first, "STORAGE_UNAVAILABLE", Duration.ofSeconds(5))).isTrue();
+            assertThat(claims.claimNextEligible("worker-b", 60)).isEmpty();
+            execute("UPDATE processing_jobs SET next_attempt_at=CURRENT_TIMESTAMP WHERE id='" + id + "'");
+            ClaimedProcessingJob second = claims.claimNextEligible("worker-b", 60).orElseThrow();
             assertThat(second.jobId()).isEqualTo(id);
-            assertThat(execution.heartbeat(first, NOW.plusSeconds(6))).isFalse();
-            assertThat(execution.progress(first, 8, 10L, NOW.plusSeconds(6))).isFalse();
-            assertThat(execution.fail(first, "PROCESSING_INTERNAL_ERROR", NOW.plusSeconds(6))).isFalse();
+            assertThat(execution.heartbeat(first)).isFalse();
+            assertThat(execution.progress(first, 8, 10L)).isFalse();
+            assertThat(execution.fail(first, "PROCESSING_INTERNAL_ERROR")).isFalse();
             assertThat(completion.completeSuccessfulStage(first, null)).isFalse();
             assertThat(rowLong(id, "progress_current")).isEqualTo(4);
-            assertThat(execution.progress(second, 8, null, NOW.plusSeconds(7))).isTrue();
+            assertThat(execution.progress(second, 2, null)).isTrue();
+            assertThat(rowLong(id, "progress_current")).isEqualTo(4);
+            assertThat(execution.progress(second, 8, null)).isTrue();
             assertThat(rowLong(id, "progress_total")).isEqualTo(10);
+        }
+    }
+
+    @Test void reclaimsLegacyNullHeartbeatAndFailsStaleExhaustedAttempt() throws Exception {
+        try (var context = startApplicationWithFlyway()) {
+            JdbcProcessingJobClaimRepository claims = new JdbcProcessingJobClaimRepository(context.getBean(JdbcClient.class));
+            UUID exhausted = insert("RUNNING", 3, null, null, "exhausted-worker");
+            execute("UPDATE processing_jobs SET locked_at=CURRENT_TIMESTAMP - interval '2 minutes', last_heartbeat_at=NULL WHERE id='" + exhausted + "'");
+            assertThat(claims.claimNextEligible("recovery-worker", 60)).isEmpty();
+            assertThat(rowString(exhausted, "status")).isEqualTo("FAILED");
+            assertThat(rowString(exhausted, "error_code")).isEqualTo("PROCESSING_RETRY_EXHAUSTED");
+
+            UUID legacy = insert("RUNNING", 2, null, null, "legacy-worker");
+            execute("UPDATE processing_jobs SET locked_at=CURRENT_TIMESTAMP - interval '2 minutes', last_heartbeat_at=NULL WHERE id='" + legacy + "'");
+            ClaimedProcessingJob reclaimed = claims.claimNextEligible("recovery-worker", 60).orElseThrow();
+            assertThat(reclaimed.jobId()).isEqualTo(legacy);
+            assertThat(reclaimed.attemptNumber()).isEqualTo(3);
         }
     }
 
@@ -68,13 +94,14 @@ class ProcessingJobRecoveryIntegrationTests extends PostgresIntegrationTestSuppo
             JdbcProcessingJobClaimRepository claims = new JdbcProcessingJobClaimRepository(jdbc);
             JdbcProcessingJobExecutionRepository execution = new JdbcProcessingJobExecutionRepository(jdbc);
             id = insert("PENDING", 0, null, null, null);
-            ClaimedProcessingJob first = claims.claimNextEligible("before-restart", NOW, NOW.minusSeconds(60)).orElseThrow();
-            assertThat(execution.progress(first, 2, 5L, NOW)).isTrue();
-            assertThat(execution.retry(first, "STORAGE_UNAVAILABLE", NOW.plusSeconds(5), NOW)).isTrue();
+            ClaimedProcessingJob first = claims.claimNextEligible("before-restart", 60).orElseThrow();
+            assertThat(execution.progress(first, 2, 5L)).isTrue();
+            assertThat(execution.retry(first, "STORAGE_UNAVAILABLE", Duration.ofSeconds(5))).isTrue();
+            execute("UPDATE processing_jobs SET next_attempt_at=CURRENT_TIMESTAMP WHERE id='" + id + "'");
         }
         try (var secondContext = startApplicationWithFlyway()) {
             JdbcProcessingJobClaimRepository claims = new JdbcProcessingJobClaimRepository(secondContext.getBean(JdbcClient.class));
-            ClaimedProcessingJob resumed = claims.claimNextEligible("after-restart", NOW.plusSeconds(5), NOW.minusSeconds(55)).orElseThrow();
+            ClaimedProcessingJob resumed = claims.claimNextEligible("after-restart", 60).orElseThrow();
             assertThat(resumed.jobId()).isEqualTo(id);
             assertThat(resumed.attemptNumber()).isEqualTo(2);
             assertThat(rowLong(id, "progress_current")).isEqualTo(2);

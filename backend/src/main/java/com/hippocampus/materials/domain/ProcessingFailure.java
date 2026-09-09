@@ -8,5 +8,5 @@ public record ProcessingFailure(Kind kind, String errorCode) {
         if (errorCode == null || errorCode.isBlank()) throw new IllegalArgumentException("Error code is required");
     }
 
-    public enum Kind { TRANSIENT, FATAL }
+    public enum Kind { TRANSIENT, FATAL, PARTIAL }
 }

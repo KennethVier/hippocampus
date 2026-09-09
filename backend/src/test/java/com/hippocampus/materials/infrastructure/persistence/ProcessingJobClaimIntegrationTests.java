@@ -141,8 +141,8 @@ class ProcessingJobClaimIntegrationTests extends PostgresIntegrationTestSupport 
     @Test
     void doesNotClaimIneligibleStatesOrAttemptExhaustedPendingJob() throws SQLException {
         try (var context = startApplicationWithFlyway()) {
+            insertJob(null, ProcessingJobStatus.RUNNING, 1, 3, OLD_TIME, Instant.now(), null);
             for (ProcessingJobStatus status : List.of(
-                    ProcessingJobStatus.RUNNING,
                     ProcessingJobStatus.RETRY,
                     ProcessingJobStatus.COMPLETED,
                     ProcessingJobStatus.FAILED,

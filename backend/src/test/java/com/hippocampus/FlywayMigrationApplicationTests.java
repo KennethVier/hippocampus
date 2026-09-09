@@ -477,7 +477,8 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertIndex("processing_jobs", "idx_processing_jobs_retry_due", false,
                 "next_attempt_at", "created_at", "id", "RETRY", "attempt_count", "max_attempts");
         assertIndex("processing_jobs", "idx_processing_jobs_running_heartbeat", false,
-                "last_heartbeat_at", "id", "RUNNING", "attempt_count", "max_attempts");
+                "COALESCE", "last_heartbeat_at", "locked_at", "started_at", "updated_at", "created_at",
+                "id", "RUNNING", "attempt_count", "max_attempts");
     }
 
     private static void assertMaterialTopicLinkVocabularyChecks() throws SQLException {

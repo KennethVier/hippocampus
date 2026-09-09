@@ -4,9 +4,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Optional;
 import java.util.UUID;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -16,13 +13,31 @@ import com.hippocampus.materials.port.ProcessingJobClaimRepository;
 
 public final class JdbcProcessingJobClaimRepository implements ProcessingJobClaimRepository {
     private static final String CLAIM_NEXT_ELIGIBLE = """
-            WITH candidate AS (
+            WITH exhausted AS (
+                UPDATE processing_jobs
+                SET status = 'FAILED',
+                    error_code = 'PROCESSING_RETRY_EXHAUSTED',
+                    error_message = NULL,
+                    locked_at = NULL,
+                    locked_by = NULL,
+                    last_heartbeat_at = NULL,
+                    next_attempt_at = NULL,
+                    completed_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE status = 'RUNNING'
+                  AND attempt_count >= max_attempts
+                  AND COALESCE(last_heartbeat_at, locked_at, started_at, updated_at, created_at)
+                      < CURRENT_TIMESTAMP - make_interval(secs => :staleTimeoutSeconds)
+                RETURNING id
+            ), candidate AS (
                 SELECT pj.id
                 FROM processing_jobs pj
                 WHERE (
                       pj.status = 'PENDING'
-                      OR (pj.status = 'RETRY' AND pj.next_attempt_at <= :now)
-                      OR (pj.status = 'RUNNING' AND pj.last_heartbeat_at < :staleCutoff)
+                      OR (pj.status = 'RETRY' AND pj.next_attempt_at <= CURRENT_TIMESTAMP)
+                      OR (pj.status = 'RUNNING'
+                          AND COALESCE(pj.last_heartbeat_at, pj.locked_at, pj.started_at, pj.updated_at, pj.created_at)
+                              < CURRENT_TIMESTAMP - make_interval(secs => :staleTimeoutSeconds))
                   )
                   AND pj.attempt_count < pj.max_attempts
                   AND (
@@ -36,19 +51,19 @@ public final class JdbcProcessingJobClaimRepository implements ProcessingJobClai
                             AND m.status <> 'DELETED'
                       )
                 )
-                ORDER BY pj.priority DESC, pj.created_at ASC, pj.id ASC
+                ORDER BY pj.created_at ASC, pj.id ASC
                 LIMIT 1
                 FOR UPDATE OF pj SKIP LOCKED
             )
             UPDATE processing_jobs pj
             SET status = 'RUNNING',
                 attempt_count = pj.attempt_count + 1,
-                locked_at = :now,
+                locked_at = CURRENT_TIMESTAMP,
                 locked_by = :workerId,
-                last_heartbeat_at = :now,
+                last_heartbeat_at = CURRENT_TIMESTAMP,
                 next_attempt_at = NULL,
-                started_at = COALESCE(pj.started_at, :now),
-                updated_at = :now
+                started_at = COALESCE(pj.started_at, CURRENT_TIMESTAMP),
+                updated_at = CURRENT_TIMESTAMP
             FROM candidate
             WHERE pj.id = candidate.id
             RETURNING pj.id, pj.job_type, pj.material_version_id, pj.processing_version,
@@ -62,11 +77,10 @@ public final class JdbcProcessingJobClaimRepository implements ProcessingJobClai
     }
 
     @Override
-    public Optional<ClaimedProcessingJob> claimNextEligible(String workerId, Instant now, Instant staleCutoff) {
+    public Optional<ClaimedProcessingJob> claimNextEligible(String workerId, long staleTimeoutSeconds) {
         return jdbcClient.sql(CLAIM_NEXT_ELIGIBLE)
                 .param("workerId", workerId)
-                .param("now", timestamp(now))
-                .param("staleCutoff", timestamp(staleCutoff))
+                .param("staleTimeoutSeconds", staleTimeoutSeconds)
                 .query(JdbcProcessingJobClaimRepository::mapClaim)
                 .optional();
     }
@@ -80,9 +94,5 @@ public final class JdbcProcessingJobClaimRepository implements ProcessingJobClai
                 result.getString("locked_by"),
                 result.getInt("attempt_count"),
                 result.getInt("max_attempts"));
-    }
-
-    private static OffsetDateTime timestamp(Instant instant) {
-        return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
     }
 }

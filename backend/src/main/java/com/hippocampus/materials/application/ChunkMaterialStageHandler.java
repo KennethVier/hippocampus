@@ -28,6 +28,7 @@ public final class ChunkMaterialStageHandler implements ProcessingStageHandler {
             throw new IllegalArgumentException("CHUNK requires a material version");
         }
         if (progress == null) chunking.execute(job.materialVersionId());
-        else chunking.execute(job.materialVersionId(), (current, total) -> progress.report(job, current, total));
+        else chunking.execute(job.materialVersionId(), () -> progress.verifyOwnership(job),
+                (current, total) -> progress.report(job, current, total));
     }
 }
