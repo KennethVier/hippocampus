@@ -140,7 +140,14 @@ class ChunkPersistenceIntegrationTests extends ChunkPersistenceTestFixture {
         persistence.execute(version, List.of(draft()));
         if (mutation.contains("gen_random_uuid")) {
             UUID replacement = UUID.randomUUID();
-            jdbc.sql("INSERT INTO text_blocks SELECT ?,material_version_id,document_node_id,page_number,block_type,2,content,normalized_content,extraction_method,quality,created_at FROM text_blocks WHERE id=?")
+            jdbc.sql("""
+                    INSERT INTO text_blocks (
+                        id, material_version_id, document_node_id, page_number, block_type, ordinal,
+                        content, extraction_method, quality, created_at, normalized_content)
+                    SELECT ?, material_version_id, document_node_id, page_number, block_type, 2,
+                        content, extraction_method, quality, created_at, normalized_content
+                    FROM text_blocks WHERE id=?
+                    """)
                     .params(replacement, block).update();
             jdbc.sql("UPDATE chunk_text_block_links SET text_block_id=?").param(replacement).update();
         } else {
@@ -233,7 +240,6 @@ class ChunkPersistenceIntegrationTests extends ChunkPersistenceTestFixture {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "UPDATE text_blocks SET ordinal=1 WHERE block_type='TABLE_TEXT'",
             "UPDATE text_blocks SET normalized_content='changed' WHERE block_type='TABLE_TEXT'",
             "UPDATE text_blocks SET extraction_method='OCR',quality='STRONG' WHERE block_type='TABLE_TEXT'"
     })
@@ -243,6 +249,20 @@ class ChunkPersistenceIntegrationTests extends ChunkPersistenceTestFixture {
                 .params(UUID.randomUUID(), version, node).update();
         jdbc.sql(mutation).update();
         assertThatThrownBy(this::finalizeOne).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void schemaRejectsTableOrdinalInsidePageTextNamespace() {
+        jdbc.sql("""
+                INSERT INTO text_blocks(
+                    id,material_version_id,document_node_id,page_number,block_type,ordinal,
+                    content,normalized_content,extraction_method,quality,created_at)
+                VALUES (?,?,?,1,'TABLE_TEXT',2,'A\tB','A\tB','NATIVE','STRONG',CURRENT_TIMESTAMP)
+                """).params(UUID.randomUUID(), version, node).update();
+
+        assertThatThrownBy(() -> jdbc.sql(
+                "UPDATE text_blocks SET ordinal=1 WHERE block_type='TABLE_TEXT'").update())
+                .isInstanceOf(org.springframework.dao.DuplicateKeyException.class);
     }
 
     @Test
