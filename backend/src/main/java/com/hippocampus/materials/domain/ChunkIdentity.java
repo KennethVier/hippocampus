@@ -2,7 +2,7 @@ package com.hippocampus.materials.domain;
 import java.nio.ByteBuffer; import java.nio.charset.StandardCharsets; import java.security.MessageDigest; import java.security.NoSuchAlgorithmException; import java.util.UUID;
 public final class ChunkIdentity {
     public static final String VERSION = "CHUNKER_V1";
-    public static final UUID NAMESPACE = UUID.fromString("b90c569a-c3f1-5f55-8b7f-d3de85356a44");
+    public static final UUID NAMESPACE = UUID.fromString("bc9da86d-4f4f-5f4f-9f59-8cc72e70b86a");
     private ChunkIdentity() {}
     public static UUID forChunk(UUID version, int index) {
         if (index < 1) throw new IllegalArgumentException("chunkIndex must be positive");
