@@ -2,25 +2,31 @@ import { useQuery } from '@tanstack/react-query'
 
 import { getMaterialProcessing, getMaterialStructure } from '../api/materialsApi'
 import type { MaterialProcessing } from '../api/materialContracts'
+import { materialKeys } from '../queries/materialQueries'
+
+function processingPollingInterval(query: { state: { data?: MaterialProcessing; dataUpdateCount?: number } }) {
+  const readiness = query.state.data?.readiness
+  if (readiness !== 'UPLOADED' && readiness !== 'PROCESSING') return false
+
+  const updates = Math.min(query.state.dataUpdateCount ?? 0, 5)
+  return Math.min(2000 * 2 ** updates, 15000)
+}
 
 export function useMaterialProcessing(materialId: string | null) {
   return useQuery({
-    queryKey: ['materials', 'processing', materialId],
+    queryKey: materialKeys.processing(materialId ?? 'invalid'),
     queryFn: ({ signal }) => {
       if (!materialId || materialId === 'invalid') throw new Error('Missing material id')
       return getMaterialProcessing(materialId, signal)
     },
     enabled: materialId !== null && materialId !== 'invalid',
-    refetchInterval: (query) => {
-      const readiness = query.state.data?.readiness
-      return readiness === 'PROCESSING' ? 4000 : false
-    },
+    refetchInterval: processingPollingInterval,
   })
 }
 
 export function useMaterialStructure(materialId: string | null) {
   return useQuery({
-    queryKey: ['materials', 'structure', materialId],
+    queryKey: materialKeys.structure(materialId ?? 'invalid'),
     queryFn: ({ signal }) => {
       if (!materialId || materialId === 'invalid') throw new Error('Missing material id')
       return getMaterialStructure(materialId, signal)

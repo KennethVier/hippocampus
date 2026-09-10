@@ -3,6 +3,15 @@ import { z } from 'zod'
 const instant = z.iso.datetime({ offset: true })
 const nonEmpty = z.string().trim().min(1)
 
+export interface MaterialStructureNode {
+  id: string
+  nodeType: string
+  title: string | null
+  startPage: number | null
+  endPage: number | null
+  children: MaterialStructureNode[]
+}
+
 export const materialSchema = z.strictObject({
   id: z.uuid(), title: nonEmpty, materialType: nonEmpty,
   originalFilename: z.string().nullable(), mimeType: z.string().nullable(),
@@ -20,7 +29,7 @@ export const materialProcessingSchema = z.strictObject({
   progress: z.number().finite().nullable(), limitation: z.string().nullable(), updatedAt: instant,
 })
 
-export const materialStructureNodeSchema = z.strictObject({
+export const materialStructureNodeSchema: z.ZodType<MaterialStructureNode> = z.strictObject({
   id: z.uuid(), nodeType: nonEmpty, title: z.string().nullable(), startPage: z.number().int().nullable(),
   endPage: z.number().int().nullable(), children: z.array(z.lazy(() => materialStructureNodeSchema)),
 })
@@ -40,14 +49,6 @@ export type Material = z.infer<typeof materialSchema>
 export type MaterialPage = z.infer<typeof materialPageSchema>
 export type MaterialUpload = z.infer<typeof materialUploadSchema>
 export type MaterialProcessing = z.infer<typeof materialProcessingSchema>
-export type MaterialStructureNode = {
-  id: string
-  nodeType: string
-  title: string | null
-  startPage: number | null
-  endPage: number | null
-  children: MaterialStructureNode[]
-}
 export type MaterialStructureResponse = {
   available: boolean
   root: MaterialStructureNode | null

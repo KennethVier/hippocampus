@@ -28,19 +28,22 @@ export function MaterialDetailPage() {
   if (material.isPending) return <section className="materials-page"><Skeleton label="Loading Material" /><Skeleton /></section>
   if (material.isError) return <ErrorState title="Material could not be loaded" description="Try again when you are ready." action={<Button onClick={() => void material.refetch()}>Try again</Button>} />
   const current = material.data
-  const processingStatus = processing.data ? displayProcessingStatus(processing.data.readiness) : displayMaterialStatus(current.status)
-  const statusSummary = processing.data && processing.data.progress !== null ? `${processingStatus} · ${Math.round(processing.data.progress)}%` : processingStatus
+  const processingReady = processing.isSuccess && processing.data !== undefined
+  const processingStatus = processingReady ? displayProcessingStatus(processing.data.readiness) : displayMaterialStatus(current.status)
+  const statusSummary = processingReady && processing.data.progress !== null ? `${processingStatus} · ${Math.round(processing.data.progress)}%` : processingStatus
   const structureRoot = structure.data?.root
 
   return <section className="materials-page" aria-labelledby="material-title">
     <nav aria-label="Breadcrumb"><Link to="/materials">Materials</Link><span aria-hidden="true"> / </span><span>{current.title}</span></nav>
     <header className="materials-header"><div><p className="materials-eyebrow">Material</p><div className="materials-title-row"><h1 id="material-title">{current.title}</h1><Badge>{displayMaterialStatus(current.status)}</Badge></div></div><Button onClick={() => { deletion.reset(); setDeleteOpen(true) }} variant="tertiary">Delete material</Button></header>
-    <section aria-live="polite" className="material-processing-panel">
-      <h2>Processing</h2>
-      <p>{statusSummary}</p>
-      {processing.data && processing.data.progress !== null ? <div><strong>{processing.data.readiness}</strong> <span>{Math.round(processing.data.progress)}%</span></div> : null}
-      {processing.data && processing.data.limitation ? <p>{processing.data.limitation}</p> : null}
-    </section>
+    {processingReady ? (
+      <section aria-live="polite" className="material-processing-panel">
+        <h2>Processing</h2>
+        <p>{statusSummary}</p>
+        {processing.data.progress !== null ? <div><strong>{processing.data.readiness}</strong> <span>{Math.round(processing.data.progress)}%</span></div> : null}
+        {processing.data.limitation ? <p>{processing.data.limitation}</p> : null}
+      </section>
+    ) : null}
     <dl className="material-detail-metadata">
       {current.originalFilename ? <><dt>Original file</dt><dd>{current.originalFilename}</dd></> : null}
       <dt>Material type</dt><dd>{current.materialType}</dd>
