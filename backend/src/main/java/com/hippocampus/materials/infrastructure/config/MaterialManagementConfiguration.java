@@ -45,8 +45,9 @@ public class MaterialManagementConfiguration {
     GetMaterialStructure getMaterialStructure(
             CurrentUser currentUser,
             MaterialRepository materials,
-            DocumentStructureRepository structures) {
-        return new GetMaterialStructure(currentUser, materials, structures);
+            DocumentStructureRepository structures,
+            MaterialVersionReadRepository versions) {
+        return new GetMaterialStructure(currentUser, materials, structures, versions);
     }
 
     @Bean

@@ -34,9 +34,9 @@ public class GetMaterialProcessing {
                 versions.findActiveByMaterialId(materialId).orElse(null);
 
         String readiness = material.status();
-        String stage = version != null ? version.status() : null;
+        String stage = version != null ? version.safeStage() : null;
         Double progress = version != null && version.progress() != null ? version.progress().doubleValue() : null;
-        String limitation = version != null && "LIMITED".equalsIgnoreCase(version.stage())
+        String limitation = version != null && "LIMITED".equalsIgnoreCase(version.extractionQuality())
                 ? "Some pages or images could not be processed."
                 : null;
 

@@ -14,6 +14,16 @@ class PdfExtractionPropertiesTests {
     }
 
     @Test
+    void acceptsWindowsEnvironmentValueContainingMultipleAbsolutePaths() {
+        assertThatCode(() -> new PdfExtractionProperties(20, 2000, 1_000_000,
+                "C:\\Program Files\\Tesseract-OCR\\tesseract.exe,C:\\Program Files\\Java\\jdk-25.0.4\\bin\\java.exe",
+                300, 10_000, 10_000, 40_000_000, 8_000, 40_000_000, 40_000_000,
+                25_000_000, 8_000_000, 65_536,
+                200_000, 100_000, 1_000_000, Duration.ofSeconds(30), Duration.ofSeconds(2)))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
     void rejectsEveryNonPositiveLimit() {
         assertThatThrownBy(() -> valid(0, 2000, 100)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> valid(20, 0, 100)).isInstanceOf(IllegalArgumentException.class);

@@ -10,8 +10,9 @@ public interface MaterialVersionReadRepository {
     record MaterialVersionSnapshot(
             UUID materialId,
             UUID versionId,
-            String status,
+            String readiness,
             java.math.BigDecimal progress,
-            String stage,
+            String safeStage,
+            String extractionQuality,
             Instant updatedAt) {}
 }

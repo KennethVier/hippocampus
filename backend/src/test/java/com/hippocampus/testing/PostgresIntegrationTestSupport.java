@@ -72,9 +72,7 @@ public abstract class PostgresIntegrationTestSupport {
         var sources = new Class<?>[additionalSources.length + 1];
         sources[0] = HippocampusApplication.class;
         System.arraycopy(additionalSources, 0, sources, 1, additionalSources.length);
-        String trustedExecutable = Path.of(
-                System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java")
-                .toAbsolutePath().normalize().toString();
+        String ocrExecutable = resolveOcrExecutable();
         var defaultArguments = new String[] {
                 "--spring.autoconfigure.exclude=",
                 "--spring.datasource.url=" + POSTGRES.getJdbcUrl(),
@@ -86,7 +84,7 @@ public abstract class PostgresIntegrationTestSupport {
                 "--spring.flyway.password=" + POSTGRES.getPassword(),
                 "--spring.flyway.baseline-on-migrate=false",
                 "--server.port=0",
-                "--hippocampus.materials.processing.pdf.ocr-executable=" + trustedExecutable
+                "--hippocampus.materials.processing.pdf.ocr-executable=" + ocrExecutable
         };
         var applicationArguments = Arrays.copyOf(defaultArguments, defaultArguments.length + additionalArguments.length);
         System.arraycopy(additionalArguments, 0, applicationArguments, defaultArguments.length, additionalArguments.length);
@@ -94,6 +92,25 @@ public abstract class PostgresIntegrationTestSupport {
                 .web(WebApplicationType.SERVLET)
                 .profiles("test")
                 .run(applicationArguments);
+    }
+
+    private static String resolveOcrExecutable() {
+        String[] candidates = {
+                System.getenv("HIPPOCAMPUS_TESSERACT_EXECUTABLE"),
+                isWindows() ? "C:\\Program Files\\Tesseract-OCR\\tesseract.exe" : "/usr/bin/tesseract"
+        };
+
+        for (String candidate : candidates) {
+            if (candidate == null) continue;
+            for (String value : candidate.split("[,;]")) {
+                String trimmed = value.trim();
+                if (!trimmed.isEmpty()) {
+                    return trimmed;
+                }
+            }
+        }
+
+        return isWindows() ? "C:\\Program Files\\Tesseract-OCR\\tesseract.exe" : "/usr/bin/tesseract";
     }
 
     private static boolean isWindows() {

@@ -175,7 +175,7 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
                             .with(authenticatedAs(users.userA())))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.readiness").value("PARTIALLY_READY"))
-                    .andExpect(jsonPath("$.stage").value("PARTIALLY_READY"))
+                    .andExpect(jsonPath("$.stage").value("OCR"))
                     .andExpect(jsonPath("$.progress").value(72.5))
                     .andExpect(jsonPath("$.limitation").value("Some pages or images could not be processed."));
 

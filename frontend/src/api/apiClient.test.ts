@@ -1,10 +1,14 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError, apiClient } from './apiClient'
 
 const CORRELATION_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301'
 const BODY_CORRELATION_ID = '8f14e45f-ea3d-4b7e-8bb2-f1b9785f6f75'
 const ACCEPT_HEADER_VALUE = 'application/json, application/problem+json'
+
+beforeEach(() => {
+  vi.stubEnv('VITE_API_BASE_URL', '')
+})
 
 afterEach(() => {
   vi.unstubAllGlobals()
