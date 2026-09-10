@@ -5,10 +5,12 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.Map;
 
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.core.env.MapPropertySource;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
@@ -88,10 +90,42 @@ public abstract class PostgresIntegrationTestSupport {
         };
         var applicationArguments = Arrays.copyOf(defaultArguments, defaultArguments.length + additionalArguments.length);
         System.arraycopy(additionalArguments, 0, applicationArguments, defaultArguments.length, additionalArguments.length);
-        return new SpringApplicationBuilder(sources)
-                .web(WebApplicationType.SERVLET)
-                .profiles("test")
-                .run(applicationArguments);
+        String propertyName = "hippocampus.materials.processing.pdf.ocr-executable";
+        String testPropertyName = "hippocampus.test.ocr-executable";
+        String environmentPropertyName = "HIPPOCAMPUS_TESSERACT_EXECUTABLE";
+        String previousOcrExecutable = System.getProperty(propertyName);
+        String previousTestOcrExecutable = System.getProperty(testPropertyName);
+        String previousEnvironmentOcrExecutable = System.getProperty(environmentPropertyName);
+        System.setProperty(propertyName, ocrExecutable);
+        System.setProperty(testPropertyName, ocrExecutable);
+        System.setProperty(environmentPropertyName, ocrExecutable);
+        try {
+            return new SpringApplicationBuilder(sources)
+                    .web(WebApplicationType.SERVLET)
+                    .initializers(context -> context.getEnvironment().getPropertySources().addFirst(
+                            new MapPropertySource("hippocampus-test-ocr-executable", Map.of(
+                                    propertyName, ocrExecutable,
+                                    testPropertyName, ocrExecutable,
+                                    environmentPropertyName, ocrExecutable))))
+                    .profiles("test")
+                    .run(applicationArguments);
+        } finally {
+            if (previousOcrExecutable == null) {
+                System.clearProperty(propertyName);
+            } else {
+                System.setProperty(propertyName, previousOcrExecutable);
+            }
+            if (previousTestOcrExecutable == null) {
+                System.clearProperty(testPropertyName);
+            } else {
+                System.setProperty(testPropertyName, previousTestOcrExecutable);
+            }
+            if (previousEnvironmentOcrExecutable == null) {
+                System.clearProperty(environmentPropertyName);
+            } else {
+                System.setProperty(environmentPropertyName, previousEnvironmentOcrExecutable);
+            }
+        }
     }
 
     private static String resolveOcrExecutable() {

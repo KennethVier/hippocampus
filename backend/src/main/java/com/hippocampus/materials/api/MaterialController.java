@@ -64,8 +64,7 @@ public class MaterialController {
                 result.readiness(),
                 result.stage(),
                 result.progress(),
-                result.limitation(),
-                result.updatedAt());
+                result.limitation());
     }
 
     @GetMapping("/{materialId}/structure")

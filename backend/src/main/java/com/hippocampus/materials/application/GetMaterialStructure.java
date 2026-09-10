@@ -39,7 +39,7 @@ public class GetMaterialStructure {
         MaterialMetadata material = materials.findVisibleOwnedById(materialId, ownerId)
                 .orElseThrow(MaterialFailures::notFound);
 
-        UUID versionId = versions.findActiveByMaterialId(materialId)
+        UUID versionId = versions.findActiveOrLatestByMaterialId(materialId)
                 .map(MaterialVersionReadRepository.MaterialVersionSnapshot::versionId)
                 .orElse(null);
         if (versionId == null) {
@@ -64,8 +64,11 @@ public class GetMaterialStructure {
                 .filter(node -> node.parentId() == null && node.nodeType().name().equals("DOCUMENT"))
                 .findFirst()
                 .orElse(null);
+        if (root == null) {
+            return new MaterialStructureResult(false, null);
+        }
 
-        return new MaterialStructureResult(true, root == null ? null : MaterialStructureResult.fromNode(root, childrenByParent));
+        return new MaterialStructureResult(true, MaterialStructureResult.fromNode(root, childrenByParent));
     }
 
     public record MaterialStructureResult(boolean available, MaterialNode root) {

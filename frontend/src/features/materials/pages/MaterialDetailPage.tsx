@@ -8,7 +8,7 @@ import { deleteMaterial, getMaterial } from '../api/materialsApi'
 import { DeleteMaterialConfirmation } from '../components/DeleteMaterialConfirmation'
 import type { MaterialStructureNode } from '../api/materialContracts'
 import { useMaterialProcessing, useMaterialStructure } from '../hooks/useMaterialProcessing'
-import { displayMaterialStatus, displayProcessingStatus } from '../materialPresentation'
+import { displayMaterialStatus, displayProcessingStage, displayProcessingStatus } from '../materialPresentation'
 import { deleteErrorMessage } from '../materialsErrors'
 import { materialKeys } from '../queries/materialQueries'
 import '../materials.css'
@@ -28,9 +28,14 @@ export function MaterialDetailPage() {
   if (material.isPending) return <section className="materials-page"><Skeleton label="Loading Material" /><Skeleton /></section>
   if (material.isError) return <ErrorState title="Material could not be loaded" description="Try again when you are ready." action={<Button onClick={() => void material.refetch()}>Try again</Button>} />
   const current = material.data
-  const processingReady = processing.isSuccess && processing.data !== undefined
+  const processingReady = processing.data !== undefined
   const processingStatus = processingReady ? displayProcessingStatus(processing.data.readiness) : displayMaterialStatus(current.status)
   const statusSummary = processingReady && processing.data.progress !== null ? `${processingStatus} · ${Math.round(processing.data.progress)}%` : processingStatus
+  const processingStage = processingReady ? displayProcessingStage(processing.data.stage) : null
+  const processingLimitation = processingReady
+    && (processing.data.readiness === 'PARTIALLY_READY' || processing.data.readiness === 'FAILED')
+    ? processing.data.limitation
+    : null
   const structureRoot = structure.data?.root
 
   return <section className="materials-page" aria-labelledby="material-title">
@@ -40,8 +45,9 @@ export function MaterialDetailPage() {
       <section aria-live="polite" className="material-processing-panel">
         <h2>Processing</h2>
         <p>{statusSummary}</p>
-        {processing.data.progress !== null ? <div><strong>{processing.data.readiness}</strong> <span>{Math.round(processing.data.progress)}%</span></div> : null}
-        {processing.data.limitation ? <p>{processing.data.limitation}</p> : null}
+        {processingStage ? <p>{processingStage}</p> : null}
+        {processing.data.progress !== null ? <div><strong>Progress</strong> <span>{Math.round(processing.data.progress)}%</span></div> : null}
+        {processingLimitation ? <p>{processingLimitation}</p> : null}
       </section>
     ) : null}
     <dl className="material-detail-metadata">
@@ -71,11 +77,13 @@ function renderStructureTree(
 ) {
   const hasChildren = node.children.length > 0
   const expandedNode = expanded[node.id] ?? true
+  const label = `${node.title ?? node.nodeType}${node.startPage !== null && node.endPage !== null ? ` (${node.startPage}-${node.endPage})` : ''}`
   return <li key={node.id}>
-    <button type="button" onClick={() => setExpanded((prev) => ({ ...prev, [node.id]: !expandedNode }))} aria-expanded={expandedNode}>
-      {node.title ?? node.nodeType}
-      {node.startPage !== null && node.endPage !== null ? ` (${node.startPage}-${node.endPage})` : ''}
-    </button>
+    {hasChildren ? (
+      <button type="button" onClick={() => setExpanded((prev) => ({ ...prev, [node.id]: !expandedNode }))} aria-expanded={expandedNode}>
+        {label}
+      </button>
+    ) : <span>{label}</span>}
     {hasChildren && expandedNode ? <ul>{node.children.map((child) => renderStructureTree(child, expanded, setExpanded))}</ul> : null}
   </li>
 }

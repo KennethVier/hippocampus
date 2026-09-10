@@ -3,6 +3,8 @@ package com.hippocampus.materials.infrastructure.config;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
+import java.nio.file.Path;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -57,7 +59,7 @@ class PdfExtractionConfigurationTests {
 
     private static String[] ocrProperties() {
         return new String[] {
-            "hippocampus.materials.processing.pdf.ocr-executable=/usr/bin/tesseract",
+            "hippocampus.materials.processing.pdf.ocr-executable=" + absoluteExecutable(),
             "hippocampus.materials.processing.pdf.ocr-render-dpi=300",
             "hippocampus.materials.processing.pdf.ocr-max-width-pixels=10000",
             "hippocampus.materials.processing.pdf.ocr-max-height-pixels=10000",
@@ -74,6 +76,13 @@ class PdfExtractionConfigurationTests {
             "hippocampus.materials.processing.pdf.ocr-timeout=PT30S",
             "hippocampus.materials.processing.pdf.ocr-termination-grace=PT2S"
         };
+    }
+
+    private static String absoluteExecutable() {
+        return Path.of(
+                System.getProperty("java.home"), "bin",
+                System.getProperty("os.name", "").startsWith("Windows") ? "java.exe" : "java")
+                .toAbsolutePath().normalize().toString();
     }
 
     @Configuration(proxyBeanMethods = false)

@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.hamcrest.Matchers.nullValue;
 
 import java.util.UUID;
 
@@ -149,35 +150,31 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
             own.setActiveVersionId(active.getId());
             materials.saveAndFlush(own);
 
-            var ctor = DocumentNodeEntity.class.getDeclaredConstructor();
-            ctor.setAccessible(true);
-            DocumentNodeEntity root = (DocumentNodeEntity) ctor.newInstance();
-            ReflectionTestUtils.setField(root, "id", UUID.randomUUID());
-            ReflectionTestUtils.setField(root, "materialVersionId", active.getId());
-            ReflectionTestUtils.setField(root, "parentId", null);
-            ReflectionTestUtils.setField(root, "nodeType", com.hippocampus.materials.domain.DocumentNodeType.DOCUMENT);
-            ReflectionTestUtils.setField(root, "title", "Document");
-            ReflectionTestUtils.setField(root, "ordinal", 1);
-            ReflectionTestUtils.setField(root, "startPage", 1);
-            ReflectionTestUtils.setField(root, "endPage", 8);
-            ReflectionTestUtils.setField(root, "startOffset", 0L);
-            ReflectionTestUtils.setField(root, "endOffset", 100L);
-            ReflectionTestUtils.setField(root, "detectionOrigin", com.hippocampus.materials.domain.DocumentNodeDetectionOrigin.NATIVE);
-            ReflectionTestUtils.setField(root, "detectionConfidence", "HIGH");
-            ReflectionTestUtils.setField(root, "createdAt", java.time.Instant.now());
-            nodes.saveAndFlush(root);
+            DocumentNodeEntity root = insertNode(nodes, active.getId(), null,
+                    com.hippocampus.materials.domain.DocumentNodeType.DOCUMENT, "Document", 1, 1, 8);
+            DocumentNodeEntity second = insertNode(nodes, active.getId(), root.getId(),
+                    com.hippocampus.materials.domain.DocumentNodeType.CHAPTER, "2 Second", 2, 5, 8);
+            DocumentNodeEntity first = insertNode(nodes, active.getId(), root.getId(),
+                    com.hippocampus.materials.domain.DocumentNodeType.CHAPTER, "1 First", 1, 1, 4);
+            DocumentNodeEntity section = insertNode(nodes, active.getId(), first.getId(),
+                    com.hippocampus.materials.domain.DocumentNodeType.SECTION, "1.1 Cells", 1, 2, 4);
+            assertThat(second.getId()).isNotNull();
 
             MaterialEntity foreign = createMaterial(materials, users.userB().userId(), "foreign.pdf", "UPLOADED");
 
             MockMvc mvc = mvc(context);
 
-            mvc.perform(get("/api/materials/{id}/processing", own.getId())
+            MvcResult processing = mvc.perform(get("/api/materials/{id}/processing", own.getId())
                             .with(authenticatedAs(users.userA())))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.readiness").value("PARTIALLY_READY"))
-                    .andExpect(jsonPath("$.stage").value("OCR"))
+                    .andExpect(jsonPath("$.stage").value(nullValue()))
                     .andExpect(jsonPath("$.progress").value(72.5))
-                    .andExpect(jsonPath("$.limitation").value("Some pages or images could not be processed."));
+                    .andExpect(jsonPath("$.limitation").value("Some pages or images could not be processed."))
+                    .andExpect(jsonPath("$.updatedAt").doesNotExist())
+                    .andReturn();
+            assertThat(processing.getResponse().getContentAsString())
+                    .doesNotContain("OCR", "NATIVE", "updatedAt");
 
             mvc.perform(get("/api/materials/{id}/processing", foreign.getId())
                             .with(authenticatedAs(users.userA())))
@@ -191,12 +188,54 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
                     .andExpect(jsonPath("$.root.id").value(root.getId().toString()))
                     .andExpect(jsonPath("$.root.title").value("Document"))
                     .andExpect(jsonPath("$.root.nodeType").value("DOCUMENT"))
-                    .andExpect(jsonPath("$.root.children.length()").value(0));
+                    .andExpect(jsonPath("$.root.children.length()").value(2))
+                    .andExpect(jsonPath("$.root.children[0].id").value(first.getId().toString()))
+                    .andExpect(jsonPath("$.root.children[0].nodeType").value("CHAPTER"))
+                    .andExpect(jsonPath("$.root.children[0].children.length()").value(1))
+                    .andExpect(jsonPath("$.root.children[0].children[0].id").value(section.getId().toString()))
+                    .andExpect(jsonPath("$.root.children[0].children[0].nodeType").value("SECTION"))
+                    .andExpect(jsonPath("$.root.children[1].id").value(second.getId().toString()));
 
             mvc.perform(get("/api/materials/{id}/structure", foreign.getId())
                             .with(authenticatedAs(users.userA())))
                     .andExpect(notFoundWithoutForeignData("foreign.pdf"))
                     .andExpect(jsonPath("$.code").value("MATERIAL_NOT_FOUND"));
+        }
+    }
+
+    @Test
+    void structureUsesLatestVersionWhenNoActiveVersionAndReturnsNoStructureContract() throws Exception {
+        try (ConfigurableApplicationContext context = startApplicationWithFlyway()) {
+            OwnershipTestUsers users = OwnershipTestUsers.persistWith(
+                    context.getBean(UserRepository.class), "material-management-latest-structure");
+            SpringDataMaterialRepository materials = context.getBean(SpringDataMaterialRepository.class);
+            SpringDataMaterialVersionRepository versions = context.getBean(SpringDataMaterialVersionRepository.class);
+            SpringDataDocumentNodeRepository nodes = context.getBean(SpringDataDocumentNodeRepository.class);
+
+            MaterialEntity own = createMaterial(materials, users.userA().userId(), "latest.pdf", "PROCESSING");
+            MaterialVersionEntity historical = versions.saveAndFlush(new MaterialVersionEntity(own.getId(), 1, "FAILED"));
+            MaterialVersionEntity latest = versions.saveAndFlush(new MaterialVersionEntity(own.getId(), 2, "PROCESSING"));
+            DocumentNodeEntity root = insertNode(nodes, latest.getId(), null,
+                    com.hippocampus.materials.domain.DocumentNodeType.DOCUMENT, "Latest document", 1, 1, 3);
+            insertNode(nodes, historical.getId(), null,
+                    com.hippocampus.materials.domain.DocumentNodeType.DOCUMENT, "Historical document", 1, 1, 1);
+
+            MaterialEntity noStructure = createMaterial(materials, users.userA().userId(), "no-structure.pdf", "PROCESSING");
+            versions.saveAndFlush(new MaterialVersionEntity(noStructure.getId(), 1, "PROCESSING"));
+
+            MockMvc mvc = mvc(context);
+            mvc.perform(get("/api/materials/{id}/structure", own.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.available").value(true))
+                    .andExpect(jsonPath("$.root.id").value(root.getId().toString()))
+                    .andExpect(jsonPath("$.root.title").value("Latest document"));
+
+            mvc.perform(get("/api/materials/{id}/structure", noStructure.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.available").value(false))
+                    .andExpect(jsonPath("$.root").value(nullValue()));
         }
     }
 
@@ -299,6 +338,35 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
         versions.saveAndFlush(version);
         material.setActiveVersionId(version.getId());
         return materials.saveAndFlush(material);
+    }
+
+    private static DocumentNodeEntity insertNode(
+            SpringDataDocumentNodeRepository nodes,
+            UUID versionId,
+            UUID parentId,
+            com.hippocampus.materials.domain.DocumentNodeType nodeType,
+            String title,
+            int ordinal,
+            int startPage,
+            int endPage) throws Exception {
+        var ctor = DocumentNodeEntity.class.getDeclaredConstructor();
+        ctor.setAccessible(true);
+        DocumentNodeEntity node = (DocumentNodeEntity) ctor.newInstance();
+        ReflectionTestUtils.setField(node, "id", UUID.randomUUID());
+        ReflectionTestUtils.setField(node, "materialVersionId", versionId);
+        ReflectionTestUtils.setField(node, "parentId", parentId);
+        ReflectionTestUtils.setField(node, "nodeType", nodeType);
+        ReflectionTestUtils.setField(node, "title", title);
+        ReflectionTestUtils.setField(node, "ordinal", ordinal);
+        ReflectionTestUtils.setField(node, "startPage", startPage);
+        ReflectionTestUtils.setField(node, "endPage", endPage);
+        ReflectionTestUtils.setField(node, "startOffset", 0L);
+        ReflectionTestUtils.setField(node, "endOffset", 100L);
+        ReflectionTestUtils.setField(node, "detectionOrigin",
+                com.hippocampus.materials.domain.DocumentNodeDetectionOrigin.NATIVE);
+        ReflectionTestUtils.setField(node, "detectionConfidence", "HIGH");
+        ReflectionTestUtils.setField(node, "createdAt", java.time.Instant.now());
+        return nodes.saveAndFlush(node);
     }
 
     private static MockMvc mvc(ConfigurableApplicationContext context) {

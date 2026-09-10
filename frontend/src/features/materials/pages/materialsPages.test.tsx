@@ -6,21 +6,54 @@ import { ApiError, type UploadProgress } from '../../../api/apiClient'
 import { createAppQueryClient } from '../../../app/providers/queryClient'
 import { clearPrivateClientState } from '../../auth/clearPrivateClientState'
 import * as api from '../api/materialsApi'
-import type { MaterialPage, MaterialUpload } from '../api/materialContracts'
+import type { MaterialPage, MaterialProcessing, MaterialStructureNode, MaterialStructureResponse, MaterialUpload } from '../api/materialContracts'
+import { processingPollingInterval } from '../hooks/useMaterialProcessing'
 import { MaterialDetailPage } from './MaterialDetailPage'
 import { MaterialsPage } from './MaterialsPage'
 
 const id = '3f2504e0-4f89-41d3-9a0c-0305e82c3301'
 const material = { id, title: '<script>Private notes</script>', materialType: 'TEXT', originalFilename: null, mimeType: null, status: 'UPLOADED', activeVersionId: null, createdAt: '2026-09-01T10:00:00Z', updatedAt: '2026-09-01T10:01:00Z' }
-const upload: MaterialUpload = { materialId: id, versionId: '9a7b3302-b431-45e1-90e3-298c9d80918f', title: 'notes.txt', materialType: 'TEXT', originalFilename: 'notes.txt', mimeType: 'text/plain', fileSizeBytes: 5, materialStatus: 'UPLOADED', processingStatus: 'UPLOADED', createdAt: '2026-09-01T10:00:00Z' }
+const versionId = '9a7b3302-b431-45e1-90e3-298c9d80918f'
+const upload: MaterialUpload = { materialId: id, versionId, title: 'notes.txt', materialType: 'TEXT', originalFilename: 'notes.txt', mimeType: 'text/plain', fileSizeBytes: 5, materialStatus: 'UPLOADED', processingStatus: 'UPLOADED', createdAt: '2026-09-01T10:00:00Z' }
 const empty: MaterialPage = { items: [], page: 0, size: 12, totalElements: 0, totalPages: 0 }
-afterEach(() => { cleanup(); vi.restoreAllMocks() })
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks() })
 
 function renderAt(path: string) {
   const client = createAppQueryClient()
   const router = createMemoryRouter([{ path: '/materials', element: <MaterialsPage /> }, { path: '/materials/:materialId', element: <MaterialDetailPage /> }], { initialEntries: [path] })
   render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
   return { router, client }
+}
+
+function materialProcessing(readiness: string, overrides: Partial<MaterialProcessing> = {}): MaterialProcessing {
+  return { materialId: id, versionId, readiness, stage: null, progress: null, limitation: null, ...overrides }
+}
+
+function node(
+  nodeId: string,
+  nodeType: string,
+  title: string,
+  startPage: number,
+  endPage: number,
+  children: MaterialStructureNode[] = [],
+): MaterialStructureNode {
+  return { id: nodeId, nodeType, title, startPage, endPage, children }
+}
+
+function structure(root: MaterialStructureNode | null): MaterialStructureResponse {
+  return { available: root !== null, root }
+}
+
+function mockDetail(processing: MaterialProcessing, tree = structure(null)) {
+  vi.spyOn(api, 'getMaterial').mockResolvedValue({ ...material, status: processing.readiness })
+  vi.spyOn(api, 'getMaterialStructure').mockResolvedValue(tree)
+  return vi.spyOn(api, 'getMaterialProcessing').mockResolvedValue(processing)
+}
+
+async function advanceTimers(milliseconds: number) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(milliseconds)
+  })
 }
 
 describe('Materials page', () => {
@@ -85,8 +118,107 @@ describe('Materials page', () => {
 
 describe('Material detail', () => {
   it('shows only normal nullable metadata and conceals invalid/missing IDs', async () => {
-    vi.spyOn(api, 'getMaterial').mockResolvedValue(material); renderAt(`/materials/${id}`); expect(await screen.findByRole('heading', { name: material.title })).toBeInTheDocument(); expect(screen.queryByText(/Unknown|N\/A|null/)).not.toBeInTheDocument(); expect(screen.queryByText(/bytes|processing/i)).not.toBeInTheDocument(); cleanup()
+    vi.spyOn(api, 'getMaterial').mockResolvedValue(material); vi.spyOn(api, 'getMaterialProcessing').mockRejectedValue(new Error()); vi.spyOn(api, 'getMaterialStructure').mockResolvedValue(structure(null)); renderAt(`/materials/${id}`); expect(await screen.findByRole('heading', { name: material.title })).toBeInTheDocument(); expect(screen.queryByText(/Unknown|N\/A|null/)).not.toBeInTheDocument(); expect(screen.queryByText(/bytes|processing/i)).not.toBeInTheDocument(); cleanup()
     renderAt('/materials/not-a-uuid'); expect(screen.getByRole('heading', { name: 'Material unavailable' })).toBeInTheDocument(); cleanup()
     vi.spyOn(api, 'getMaterial').mockRejectedValue(new ApiError({ kind: 'http', status: 404, code: 'MATERIAL_NOT_FOUND', message: 'hidden' })); renderAt(`/materials/${id}`); expect(await screen.findByRole('heading', { name: 'Material unavailable' })).toBeInTheDocument(); expect(screen.queryByText(id)).not.toBeInTheDocument()
+  })
+
+  it.each(['UPLOADED', 'PROCESSING'])('polls while readiness is %s', async (readiness) => {
+    vi.useFakeTimers()
+    const nextPoll = vi.fn()
+    const interval = processingPollingInterval({ state: { data: materialProcessing(readiness), dataUpdateCount: 1 } })
+
+    setTimeout(nextPoll, interval || 0)
+    await advanceTimers(4_999)
+    expect(nextPoll).not.toHaveBeenCalled()
+    await advanceTimers(1)
+    expect(nextPoll).toHaveBeenCalledTimes(1)
+  })
+
+  it('backs off polling at five ten twenty then thirty seconds capped', async () => {
+    vi.useFakeTimers()
+    const intervals = [1, 2, 3, 4, 5].map((dataUpdateCount) =>
+      processingPollingInterval({ state: { data: materialProcessing('PROCESSING'), dataUpdateCount } }))
+    expect(intervals).toEqual([5_000, 10_000, 20_000, 30_000, 30_000])
+
+    const cappedPoll = vi.fn()
+    setTimeout(cappedPoll, intervals.at(-1) || 0)
+    await advanceTimers(29_999)
+    expect(cappedPoll).not.toHaveBeenCalled()
+    await advanceTimers(1)
+    expect(cappedPoll).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['READY', 'PARTIALLY_READY', 'FAILED'])('stops polling on terminal readiness %s', (readiness) => {
+    expect(processingPollingInterval({ state: { data: materialProcessing(readiness), dataUpdateCount: 1 } }))
+      .toBe(false)
+  })
+
+  it('continues polling after a transient request failure', async () => {
+    vi.useFakeTimers()
+    const retryPoll = vi.fn()
+    const interval = processingPollingInterval({
+      state: { data: materialProcessing('PROCESSING'), dataUpdateCount: 1, fetchFailureCount: 1 },
+    })
+    expect(interval).toBe(10_000)
+
+    setTimeout(retryPoll, interval || 0)
+    await advanceTimers(9_999)
+    expect(retryPoll).not.toHaveBeenCalled()
+    await advanceTimers(1)
+    expect(retryPoll).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['READY', 'Ready to study'],
+    ['PARTIALLY_READY', 'Ready with limitations'],
+    ['FAILED', 'Needs attention before study'],
+  ])('renders controlled terminal readiness text for %s', async (readiness, label) => {
+    mockDetail(materialProcessing(readiness, { limitation: 'Some pages or images could not be processed.' }))
+    renderAt(`/materials/${id}`)
+    expect(await screen.findByText(label)).toBeInTheDocument()
+    expect(screen.queryByText(readiness)).not.toBeInTheDocument()
+  })
+
+  it('handles null progress as indeterminate without inventing a percent', async () => {
+    mockDetail(materialProcessing('PROCESSING', { progress: null }))
+    renderAt(`/materials/${id}`)
+    expect(await screen.findByRole('heading', { name: 'Processing' })).toBeInTheDocument()
+    expect(screen.queryByText('0%')).not.toBeInTheDocument()
+    expect(screen.queryByText('Progress')).not.toBeInTheDocument()
+  })
+
+  it('uses generic safe text for unknown readiness and hides raw internal jargon', async () => {
+    mockDetail(materialProcessing('VECTOR_INDEX_BUILDING', {
+      stage: 'OCR',
+      limitation: 'RAW_INTERNAL_LIMITATION',
+      progress: 44,
+    }))
+    renderAt(`/materials/${id}`)
+    expect(await screen.findByText(/Processing status is being updated/)).toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent('VECTOR_INDEX_BUILDING')
+    expect(document.body).not.toHaveTextContent('OCR')
+    expect(document.body).not.toHaveTextContent('NATIVE')
+    expect(document.body).not.toHaveTextContent('RAW_INTERNAL_LIMITATION')
+  })
+
+  it('renders nested structure collapse controls only for nodes with children', async () => {
+    const section = node('11111111-1111-4111-8111-111111111111', 'SECTION', '1.1 Cells', 2, 4)
+    const chapter = node('22222222-2222-4222-8222-222222222222', 'CHAPTER', '1 First', 1, 4, [section])
+    const root = node('33333333-3333-4333-8333-333333333333', 'DOCUMENT', 'Document', 1, 10, [chapter])
+    mockDetail(materialProcessing('READY'), structure(root))
+    renderAt(`/materials/${id}`)
+
+    const documentButton = await screen.findByRole('button', { name: 'Document (1-10)' })
+    const chapterButton = screen.getByRole('button', { name: '1 First (1-4)' })
+    expect(documentButton).toHaveAttribute('aria-expanded', 'true')
+    expect(chapterButton).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.queryByRole('button', { name: '1.1 Cells (2-4)' })).not.toBeInTheDocument()
+    expect(screen.getByText('1.1 Cells (2-4)').tagName).toBe('SPAN')
+    expect(screen.getByText('1.1 Cells (2-4)')).not.toHaveAttribute('aria-expanded')
+
+    fireEvent.click(chapterButton)
+    expect(chapterButton).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('1.1 Cells (2-4)')).not.toBeInTheDocument()
   })
 })

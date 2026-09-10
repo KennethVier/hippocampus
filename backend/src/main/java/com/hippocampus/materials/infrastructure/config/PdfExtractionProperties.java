@@ -37,14 +37,12 @@ public record PdfExtractionProperties(
         if (maxNativeTextCharsPerPage <= 0) {
             throw new IllegalArgumentException("max-native-text-chars-per-page must be positive");
         }
-        String normalizedOcrExecutable = normalizeOcrExecutable(ocrExecutable);
-        if (normalizedOcrExecutable == null || normalizedOcrExecutable.isBlank()) {
+        if (Objects.requireNonNull(ocrExecutable, "ocr-executable must not be null").isBlank()) {
             throw new IllegalArgumentException("ocr-executable must not be blank");
         }
-        if (!isAbsoluteTrustedPath(normalizedOcrExecutable)) {
+        if (!Path.of(ocrExecutable).isAbsolute()) {
             throw new IllegalArgumentException("ocr-executable must be an absolute trusted path");
         }
-        ocrExecutable = normalizedOcrExecutable;
         if (ocrRenderDpi <= 0 || ocrMaxWidthPixels <= 0 || ocrMaxHeightPixels <= 0
                 || ocrMaxPixels <= 0 || ocrMaxInputBytes <= 0 || ocrMaxStdoutBytes <= 0
                 || ocrMaxSourceImageDimension <= 0 || ocrMaxSourceImagePixels <= 0
@@ -72,28 +70,4 @@ public record PdfExtractionProperties(
         }
     }
 
-    private static String normalizeOcrExecutable(String candidate) {
-        if (candidate == null) {
-            return null;
-        }
-        for (String value : candidate.split("[,;]")) {
-            String trimmed = value.trim();
-            if (!trimmed.isEmpty()) {
-                return trimmed;
-            }
-        }
-        return candidate.trim();
-    }
-
-    private static boolean isAbsoluteTrustedPath(String candidate) {
-        if (candidate == null || candidate.isBlank()) {
-            return false;
-        }
-        if (Path.of(candidate).isAbsolute()) {
-            return true;
-        }
-        return candidate.startsWith("/")
-                || candidate.matches("[A-Za-z]:[\\/].*")
-                || candidate.matches("[A-Za-z]:\\\\.*");
-    }
 }

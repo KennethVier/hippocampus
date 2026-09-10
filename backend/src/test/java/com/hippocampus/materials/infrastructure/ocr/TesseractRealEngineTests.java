@@ -8,10 +8,13 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 
 import javax.imageio.ImageIO;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 import com.hippocampus.materials.domain.TextBlockQuality;
@@ -19,12 +22,16 @@ import com.hippocampus.materials.port.OcrInput;
 import com.hippocampus.materials.port.OcrResult;
 
 class TesseractRealEngineTests {
+    private static final String TESSERACT_EXECUTABLE = tesseractExecutable();
+
     private final TesseractCliOcrAdapter adapter = new TesseractCliOcrAdapter(
-            "/usr/bin/tesseract", 2_000_000, 1_000_000, 65_536,
+            TESSERACT_EXECUTABLE, 2_000_000, 1_000_000, 65_536,
             10_000, 10_000, 100_000, Duration.ofSeconds(10), Duration.ofSeconds(2));
 
     @Test
     void recognizesStrongEnglishMedicalFixture() throws Exception {
+        assumeTesseractAvailable();
+
         OcrResult result = adapter.recognize(image("CARDIAC OUTPUT", 48, Color.BLACK, 900, 160));
 
         assertThat(result).isInstanceOfSatisfying(OcrResult.RecognizedText.class, recognized -> {
@@ -35,6 +42,8 @@ class TesseractRealEngineTests {
 
     @Test
     void reportsPoorQualityForDegradedMedicalSymbolFixture() throws Exception {
+        assumeTesseractAvailable();
+
         OcrResult result = adapter.recognize(degradedMedicalImage());
 
         assertThat(result).isInstanceOfSatisfying(OcrResult.RecognizedText.class,
@@ -43,6 +52,8 @@ class TesseractRealEngineTests {
 
     @Test
     void returnsExplicitNoTextForBlankFixture() throws Exception {
+        assumeTesseractAvailable();
+
         assertThat(adapter.recognize(image("", 48, Color.BLACK, 400, 150)))
                 .isInstanceOf(OcrResult.NoUsableText.class);
     }
@@ -88,5 +99,27 @@ class TesseractRealEngineTests {
         assertThat(ImageIO.write(image, "png", encoded)).isTrue();
         image.flush();
         return new OcrInput(encoded.toByteArray(), width, height);
+    }
+
+    private static String tesseractExecutable() {
+        String configured = System.getenv("HIPPOCAMPUS_TESSERACT_EXECUTABLE");
+        if (configured != null) {
+            for (String value : configured.split("[,;]")) {
+                String trimmed = value.trim();
+                if (!trimmed.isEmpty()) {
+                    return trimmed;
+                }
+            }
+        }
+        if (System.getProperty("os.name", "").startsWith("Windows")) {
+            return "C:\\Program Files\\Tesseract-OCR\\tesseract.exe";
+        }
+        return Path.of("/usr/bin/tesseract").toString();
+    }
+
+    private static void assumeTesseractAvailable() {
+        Path executable = Path.of(TESSERACT_EXECUTABLE);
+        Assumptions.assumeTrue(Files.isExecutable(executable),
+                () -> "Tesseract executable not available at " + executable);
     }
 }

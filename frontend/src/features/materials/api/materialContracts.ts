@@ -26,7 +26,7 @@ export const materialPageSchema = z.strictObject({
 
 export const materialProcessingSchema = z.strictObject({
   materialId: z.uuid(), versionId: z.uuid().nullable(), readiness: nonEmpty, stage: z.string().nullable(),
-  progress: z.number().finite().nullable(), limitation: z.string().nullable(), updatedAt: instant,
+  progress: z.number().finite().nullable(), limitation: z.string().nullable(),
 })
 
 export const materialStructureNodeSchema: z.ZodType<MaterialStructureNode> = z.strictObject({

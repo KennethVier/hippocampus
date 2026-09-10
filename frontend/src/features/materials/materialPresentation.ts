@@ -5,11 +5,26 @@ export function displayMaterialStatus(status: string): string {
     case 'READY': return 'Ready'
     case 'PARTIALLY_READY': return 'Partially ready'
     case 'FAILED': return 'Needs attention'
-    case 'UNSUPPORTED': return 'Unsupported'
-    default: return status.replaceAll('_', ' ').toLowerCase().replace(/^./, (value) => value.toUpperCase())
+    default: return 'Status unavailable'
   }
 }
 
 export function displayProcessingStatus(status: string): string {
-  return displayMaterialStatus(status)
+  switch (status) {
+    case 'UPLOADED': return 'Uploaded and waiting to process'
+    case 'PROCESSING': return 'Processing'
+    case 'READY': return 'Ready to study'
+    case 'PARTIALLY_READY': return 'Ready with limitations'
+    case 'FAILED': return 'Needs attention before study'
+    default: return 'Processing status is being updated'
+  }
+}
+
+export function displayProcessingStage(stage: string | null): string | null {
+  switch (stage) {
+    case 'STRUCTURE_DETECTION': return 'Detecting structure'
+    case 'TEXT_NORMALIZATION': return 'Preparing text'
+    case 'CHUNKING': return 'Preparing study sections'
+    default: return null
+  }
 }

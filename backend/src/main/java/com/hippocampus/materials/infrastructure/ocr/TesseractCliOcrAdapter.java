@@ -188,39 +188,13 @@ public final class TesseractCliOcrAdapter implements OcrPort {
     }
 
     private static String requireExecutable(String value) {
-        String normalized = normalizeExecutable(value);
-        if (normalized == null || normalized.isBlank()) {
+        if (Objects.requireNonNull(value).isBlank()) {
             throw new IllegalArgumentException("executable must not be blank");
         }
-        if (!isAbsoluteTrustedPath(normalized)) {
+        if (!Path.of(value).isAbsolute()) {
             throw new IllegalArgumentException("executable must be an absolute trusted path");
         }
-        return normalized;
-    }
-
-    private static String normalizeExecutable(String value) {
-        if (value == null) {
-            return null;
-        }
-        for (String candidate : value.split("[,;]")) {
-            String trimmed = candidate.trim();
-            if (!trimmed.isEmpty()) {
-                return trimmed;
-            }
-        }
-        return value.trim();
-    }
-
-    private static boolean isAbsoluteTrustedPath(String candidate) {
-        if (candidate == null || candidate.isBlank()) {
-            return false;
-        }
-        if (Path.of(candidate).isAbsolute()) {
-            return true;
-        }
-        return candidate.startsWith("/")
-                || candidate.startsWith("\\")
-                || candidate.matches("[A-Za-z]:[\\/].*");
+        return value;
     }
 
     private static int positive(int value) {

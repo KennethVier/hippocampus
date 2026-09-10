@@ -1,6 +1,5 @@
 package com.hippocampus.materials.api;
 
-import java.time.Instant;
 import java.util.UUID;
 
 public record MaterialProcessingResponse(
@@ -9,5 +8,4 @@ public record MaterialProcessingResponse(
         String readiness,
         String stage,
         Double progress,
-        String limitation,
-        Instant updatedAt) {}
+        String limitation) {}

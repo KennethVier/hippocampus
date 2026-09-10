@@ -17,7 +17,7 @@ public final class JpaMaterialVersionReadRepository implements MaterialVersionRe
     }
 
     @Override
-    public Optional<MaterialVersionSnapshot> findActiveByMaterialId(UUID materialId) {
+    public Optional<MaterialVersionSnapshot> findActiveOrLatestByMaterialId(UUID materialId) {
         UUID activeVersionId = materials.findById(materialId)
                 .map(MaterialEntity::getActiveVersionId)
                 .orElse(null);
@@ -38,18 +38,6 @@ public final class JpaMaterialVersionReadRepository implements MaterialVersionRe
                         version.getId(),
                         version.getProcessingStatus(),
                         version.getProcessingProgress(),
-                        normalizeSafeStage(version.getExtractionMethod()),
-                        version.getExtractionQuality(),
-                        version.getActivatedAt() != null ? version.getActivatedAt() : version.getCreatedAt()));
-    }
-
-    private static String normalizeSafeStage(String stage) {
-        if (stage == null) return null;
-        String normalized = stage.trim();
-        if (normalized.isEmpty()) return null;
-        if ("NATIVE".equalsIgnoreCase(normalized) || "OCR".equalsIgnoreCase(normalized)) {
-            return normalized.toUpperCase();
-        }
-        return null;
+                        version.getExtractionQuality()));
     }
 }

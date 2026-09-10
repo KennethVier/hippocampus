@@ -1,6 +1,5 @@
 package com.hippocampus.materials.application;
 
-import java.time.Instant;
 import java.util.UUID;
 
 import org.springframework.transaction.annotation.Transactional;
@@ -31,10 +30,9 @@ public class GetMaterialProcessing {
                 .orElseThrow(MaterialFailures::notFound);
 
         MaterialVersionReadRepository.MaterialVersionSnapshot version =
-                versions.findActiveByMaterialId(materialId).orElse(null);
+                versions.findActiveOrLatestByMaterialId(materialId).orElse(null);
 
         String readiness = material.status();
-        String stage = version != null ? version.safeStage() : null;
         Double progress = version != null && version.progress() != null ? version.progress().doubleValue() : null;
         String limitation = version != null && "LIMITED".equalsIgnoreCase(version.extractionQuality())
                 ? "Some pages or images could not be processed."
@@ -44,10 +42,9 @@ public class GetMaterialProcessing {
                 material.id(),
                 version != null ? version.versionId() : null,
                 readiness,
-                stage,
+                null,
                 progress,
-                limitation,
-                version != null ? version.updatedAt() : material.updatedAt());
+                limitation);
     }
 
     public record MaterialProcessingResult(
@@ -56,6 +53,5 @@ public class GetMaterialProcessing {
             String readiness,
             String stage,
             Double progress,
-            String limitation,
-            Instant updatedAt) {}
+            String limitation) {}
 }

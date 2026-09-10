@@ -4,12 +4,19 @@ import { getMaterialProcessing, getMaterialStructure } from '../api/materialsApi
 import type { MaterialProcessing } from '../api/materialContracts'
 import { materialKeys } from '../queries/materialQueries'
 
-function processingPollingInterval(query: { state: { data?: MaterialProcessing; dataUpdateCount?: number } }) {
+const POLLING_INTERVALS_MS = [5_000, 10_000, 20_000, 30_000] as const
+
+export function processingPollingInterval(query: {
+  state: { data?: MaterialProcessing; dataUpdateCount?: number; fetchFailureCount?: number }
+}) {
   const readiness = query.state.data?.readiness
   if (readiness !== 'UPLOADED' && readiness !== 'PROCESSING') return false
 
-  const updates = Math.min(query.state.dataUpdateCount ?? 0, 5)
-  return Math.min(2000 * 2 ** updates, 15000)
+  const attemptsAfterFirstLoad = Math.max(
+    (query.state.dataUpdateCount ?? 1) + (query.state.fetchFailureCount ?? 0) - 1,
+    0,
+  )
+  return POLLING_INTERVALS_MS[Math.min(attemptsAfterFirstLoad, POLLING_INTERVALS_MS.length - 1)]
 }
 
 export function useMaterialProcessing(materialId: string | null) {
@@ -39,7 +46,10 @@ export function materialProcessingSummary(processing: MaterialProcessing | undef
   if (!processing) return 'Processing status is being updated.'
   if (processing.readiness === 'PARTIALLY_READY') return 'Most of this material is ready. Some pages or images could not be processed.'
   if (processing.readiness === 'FAILED') return 'This material needs attention before it can be used.'
-  if (processing.readiness === 'PROCESSING') return `Processing ${Math.round(processing.progress ?? 0)}%`
+  if (processing.readiness === 'PROCESSING') return processing.progress === null
+    ? 'Processing is underway.'
+    : `Processing ${Math.round(processing.progress)}%`
+  if (processing.readiness === 'UPLOADED') return 'Uploaded and waiting to process.'
   if (processing.readiness === 'READY') return 'Ready to study.'
-  return processing.limitation ?? 'Processing status is being updated.'
+  return 'Processing status is being updated.'
 }
