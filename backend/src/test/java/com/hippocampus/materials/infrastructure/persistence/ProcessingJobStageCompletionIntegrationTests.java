@@ -215,15 +215,20 @@ class ProcessingJobStageCompletionIntegrationTests extends PostgresIntegrationTe
                 PreparedStatement statement = connection.prepareStatement("""
                         INSERT INTO processing_jobs (
                             id, user_id, material_version_id, job_type, status, priority,
-                            attempt_count, max_attempts, processing_version, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, 17, 1, 4, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                            attempt_count, max_attempts, locked_by, locked_at, processing_version, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, 17, 1, 4,
+                            CASE WHEN ?='RUNNING' THEN 'test-worker' END,
+                            CASE WHEN ?='RUNNING' THEN CURRENT_TIMESTAMP END,
+                            ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                         """)) {
             statement.setObject(1, id);
             statement.setObject(2, userId);
             statement.setObject(3, materialVersionId);
             statement.setString(4, type.name());
             statement.setString(5, status.name());
-            statement.setString(6, processingVersion);
+            statement.setString(6, status.name());
+            statement.setString(7, status.name());
+            statement.setString(8, processingVersion);
             statement.executeUpdate();
         }
         return id;

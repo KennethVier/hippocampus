@@ -20,7 +20,7 @@ public class CompleteProcessingStage {
         }
         ProcessingJobType nextDurableStage =
                 ProcessingStageSequence.nextDurablePhaseThreeStage(result.executedStage());
-        if (!jobs.completeSuccessfulStage(job.jobId(), result.executedStage(), nextDurableStage)) {
+        if (!jobs.completeSuccessfulStage(job, nextDurableStage)) {
             throw new ProcessingStageCompletionException(job.jobId(), result.executedStage());
         }
     }

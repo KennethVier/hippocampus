@@ -114,7 +114,7 @@ class ProcessingJobClaimIntegrationTests extends PostgresIntegrationTestSupport 
     }
 
     @Test
-    void persistsCompleteClaimAndLeavesHeartbeatAndOriginalStartTimeUnchanged() throws SQLException {
+    void persistsCompleteClaimAndInitializesHeartbeatWhilePreservingOriginalStartTime() throws SQLException {
         try (var context = startApplicationWithFlyway()) {
             Instant heartbeat = Instant.parse("2025-01-02T00:00:00Z");
             Instant originalStart = Instant.parse("2025-01-03T00:00:00Z");
@@ -125,14 +125,15 @@ class ProcessingJobClaimIntegrationTests extends PostgresIntegrationTestSupport 
                     .execute("node-1:worker_2");
 
             assertThat(claimed).contains(new ClaimedProcessingJob(
-                    jobId, ProcessingJobType.MATERIAL_VALIDATE, null, "processor-v1"));
+                    jobId, ProcessingJobType.MATERIAL_VALIDATE, null, "processor-v1",
+                    "node-1:worker_2", 2, 3));
             JobState state = loadJob(jobId);
             assertThat(state.status()).isEqualTo(ProcessingJobStatus.RUNNING);
             assertThat(state.attemptCount()).isEqualTo(2);
             assertThat(state.lockedBy()).isEqualTo("node-1:worker_2");
             assertThat(state.lockedAt()).isNotNull();
             assertThat(state.startedAt()).isEqualTo(originalStart);
-            assertThat(state.lastHeartbeatAt()).isEqualTo(heartbeat);
+            assertThat(state.lastHeartbeatAt()).isAfter(heartbeat);
             assertThat(state.updatedAt()).isAfter(OLD_TIME);
         }
     }
@@ -140,8 +141,8 @@ class ProcessingJobClaimIntegrationTests extends PostgresIntegrationTestSupport 
     @Test
     void doesNotClaimIneligibleStatesOrAttemptExhaustedPendingJob() throws SQLException {
         try (var context = startApplicationWithFlyway()) {
+            insertJob(null, ProcessingJobStatus.RUNNING, 1, 3, OLD_TIME, Instant.now(), null);
             for (ProcessingJobStatus status : List.of(
-                    ProcessingJobStatus.RUNNING,
                     ProcessingJobStatus.RETRY,
                     ProcessingJobStatus.COMPLETED,
                     ProcessingJobStatus.FAILED,

@@ -10,10 +10,14 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 import com.hippocampus.materials.application.CompleteProcessingStage;
 import com.hippocampus.materials.application.ExecuteClaimedProcessingJob;
+import com.hippocampus.materials.application.FinalizeProcessingFailure;
+import com.hippocampus.materials.application.ProcessingFailureClassifier;
 import com.hippocampus.materials.application.ProcessingDispatcher;
 import com.hippocampus.materials.application.ProcessingStageHandler;
 import com.hippocampus.materials.infrastructure.persistence.JdbcProcessingJobStageCompletionRepository;
 import com.hippocampus.materials.port.ProcessingJobStageCompletionRepository;
+import com.hippocampus.materials.port.ProcessingHeartbeatMonitor;
+import org.springframework.beans.factory.ObjectProvider;
 
 @AutoConfiguration(afterName = {
         "org.springframework.boot.jdbc.autoconfigure.JdbcClientAutoConfiguration",
@@ -40,7 +44,15 @@ public class ProcessingJobDispatchConfiguration {
     @Bean
     ExecuteClaimedProcessingJob executeClaimedProcessingJob(
             ProcessingDispatcher dispatcher,
-            CompleteProcessingStage completion) {
-        return new ExecuteClaimedProcessingJob(dispatcher, completion);
+            CompleteProcessingStage completion,
+            ObjectProvider<ProcessingFailureClassifier> classifiers,
+            ObjectProvider<FinalizeProcessingFailure> failureFinalizers,
+            ObjectProvider<ProcessingHeartbeatMonitor> heartbeatMonitors) {
+        ProcessingFailureClassifier classifier = classifiers.getIfAvailable();
+        FinalizeProcessingFailure finalizer = failureFinalizers.getIfAvailable();
+        ProcessingHeartbeatMonitor heartbeat = heartbeatMonitors.getIfAvailable();
+        return classifier == null || finalizer == null || heartbeat == null
+                ? new ExecuteClaimedProcessingJob(dispatcher, completion)
+                : new ExecuteClaimedProcessingJob(dispatcher, completion, classifier, finalizer, heartbeat);
     }
 }

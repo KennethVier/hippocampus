@@ -12,11 +12,13 @@ import com.hippocampus.materials.application.ChunkMaterialText;
 import com.hippocampus.materials.application.FinalizeChunking;
 import com.hippocampus.materials.application.PersistChunkBatch;
 import com.hippocampus.materials.application.ProcessingStageHandler;
+import com.hippocampus.materials.application.ReportProcessingJobProgress;
 import com.hippocampus.materials.domain.DeterministicChunkTokenCounter;
 import com.hippocampus.materials.domain.HierarchyAwareChunkingPolicy;
 import com.hippocampus.materials.infrastructure.persistence.JdbcChunkRepository;
 
 import tools.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.ObjectProvider;
 
 @AutoConfiguration(after = {
         PdfExtractionConfiguration.class,
@@ -59,7 +61,10 @@ public class ChunkingConfiguration {
     }
 
     @Bean
-    ProcessingStageHandler chunkMaterialStageHandler(ChunkMaterialText chunking) {
-        return new ChunkMaterialStageHandler(chunking);
+    ProcessingStageHandler chunkMaterialStageHandler(ChunkMaterialText chunking,
+            ObjectProvider<ReportProcessingJobProgress> progress) {
+        ReportProcessingJobProgress reporter = progress.getIfAvailable();
+        return reporter == null ? new ChunkMaterialStageHandler(chunking)
+                : new ChunkMaterialStageHandler(chunking, reporter);
     }
 }

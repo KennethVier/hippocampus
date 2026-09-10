@@ -1,6 +1,7 @@
 package com.hippocampus.materials.application;
 
 import java.util.Optional;
+import java.time.Duration;
 import java.util.regex.Pattern;
 
 import org.springframework.transaction.annotation.Transactional;
@@ -13,15 +14,21 @@ public class ClaimNextProcessingJob {
     private static final Pattern WORKER_ID = Pattern.compile("[A-Za-z0-9._:-]+");
 
     private final ProcessingJobClaimRepository jobs;
+    private final Duration staleTimeout;
 
     public ClaimNextProcessingJob(ProcessingJobClaimRepository jobs) {
+        this(jobs, Duration.ofMinutes(1));
+    }
+
+    public ClaimNextProcessingJob(ProcessingJobClaimRepository jobs, Duration staleTimeout) {
         this.jobs = jobs;
+        this.staleTimeout = staleTimeout;
     }
 
     @Transactional
     public Optional<ClaimedProcessingJob> execute(String workerId) {
         validateWorkerId(workerId);
-        return jobs.claimNextEligible(workerId);
+        return jobs.claimNextEligible(workerId, staleTimeout.toSeconds());
     }
 
     private static void validateWorkerId(String workerId) {

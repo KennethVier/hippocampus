@@ -6,5 +6,5 @@ import com.hippocampus.materials.domain.ClaimedProcessingJob;
 
 public interface ProcessingJobClaimRepository {
 
-    Optional<ClaimedProcessingJob> claimNextEligible(String workerId);
+    Optional<ClaimedProcessingJob> claimNextEligible(String workerId, long staleTimeoutSeconds);
 }

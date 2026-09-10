@@ -7,9 +7,14 @@ import com.hippocampus.materials.domain.ProcessingJobType;
 
 public final class ChunkMaterialStageHandler implements ProcessingStageHandler {
     private final ChunkMaterialText chunking;
+    private final ReportProcessingJobProgress progress;
 
     public ChunkMaterialStageHandler(ChunkMaterialText chunking) {
+        this(chunking, null);
+    }
+    public ChunkMaterialStageHandler(ChunkMaterialText chunking, ReportProcessingJobProgress progress) {
         this.chunking = Objects.requireNonNull(chunking);
+        this.progress = progress;
     }
 
     @Override
@@ -22,6 +27,8 @@ public final class ChunkMaterialStageHandler implements ProcessingStageHandler {
         if (job.materialVersionId() == null) {
             throw new IllegalArgumentException("CHUNK requires a material version");
         }
-        chunking.execute(job.materialVersionId());
+        if (progress == null) chunking.execute(job.materialVersionId());
+        else chunking.execute(job.materialVersionId(), () -> progress.verifyOwnership(job),
+                (current, total) -> progress.report(job, current, total));
     }
 }
