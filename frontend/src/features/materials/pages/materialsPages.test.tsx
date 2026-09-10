@@ -11,7 +11,7 @@ import { MaterialDetailPage } from './MaterialDetailPage'
 import { MaterialsPage } from './MaterialsPage'
 
 const id = '3f2504e0-4f89-41d3-9a0c-0305e82c3301'
-const material = { id, title: '<script>Private notes</script>', materialType: 'TEXT', originalFilename: null, mimeType: null, status: 'UPLOADED', createdAt: '2026-09-01T10:00:00Z', updatedAt: '2026-09-01T10:01:00Z' }
+const material = { id, title: '<script>Private notes</script>', materialType: 'TEXT', originalFilename: null, mimeType: null, status: 'UPLOADED', activeVersionId: null, createdAt: '2026-09-01T10:00:00Z', updatedAt: '2026-09-01T10:01:00Z' }
 const upload: MaterialUpload = { materialId: id, versionId: '9a7b3302-b431-45e1-90e3-298c9d80918f', title: 'notes.txt', materialType: 'TEXT', originalFilename: 'notes.txt', mimeType: 'text/plain', fileSizeBytes: 5, materialStatus: 'UPLOADED', processingStatus: 'UPLOADED', createdAt: '2026-09-01T10:00:00Z' }
 const empty: MaterialPage = { items: [], page: 0, size: 12, totalElements: 0, totalPages: 0 }
 afterEach(() => { cleanup(); vi.restoreAllMocks() })

@@ -10,5 +10,6 @@ public record MaterialMetadata(
         String originalFilename,
         String mimeType,
         String status,
+        UUID activeVersionId,
         Instant createdAt,
         Instant updatedAt) {}

@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { type Dispatch, type SetStateAction, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { z } from 'zod'
 import { ApiError } from '../../../api/apiClient'
 import { Badge, Button, ErrorState, Skeleton } from '../../../components/ui'
 import { deleteMaterial, getMaterial } from '../api/materialsApi'
 import { DeleteMaterialConfirmation } from '../components/DeleteMaterialConfirmation'
-import { displayMaterialStatus } from '../materialPresentation'
+import type { MaterialStructureNode } from '../api/materialContracts'
+import { useMaterialProcessing, useMaterialStructure } from '../hooks/useMaterialProcessing'
+import { displayMaterialStatus, displayProcessingStatus } from '../materialPresentation'
 import { deleteErrorMessage } from '../materialsErrors'
 import { materialKeys } from '../queries/materialQueries'
 import '../materials.css'
@@ -14,7 +16,10 @@ import '../materials.css'
 export function MaterialDetailPage() {
   const rawId = useParams().materialId; const id = rawId && z.uuid().safeParse(rawId).success ? rawId : null
   const queryClient = useQueryClient(); const navigate = useNavigate(); const [deleteOpen, setDeleteOpen] = useState(false)
+  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({})
   const material = useQuery({ queryKey: materialKeys.detail(id ?? 'invalid'), queryFn: ({ signal }) => getMaterial(id ?? '', signal), enabled: id !== null })
+  const processing = useMaterialProcessing(id)
+  const structure = useMaterialStructure(id)
   const deletion = useMutation({ mutationFn: deleteMaterial, onSuccess: async () => {
     if (id) queryClient.removeQueries({ queryKey: materialKeys.detail(id), exact: true })
     await queryClient.invalidateQueries({ queryKey: materialKeys.lists() }); setDeleteOpen(false); navigate('/materials')
@@ -23,9 +28,19 @@ export function MaterialDetailPage() {
   if (material.isPending) return <section className="materials-page"><Skeleton label="Loading Material" /><Skeleton /></section>
   if (material.isError) return <ErrorState title="Material could not be loaded" description="Try again when you are ready." action={<Button onClick={() => void material.refetch()}>Try again</Button>} />
   const current = material.data
+  const processingStatus = processing.data ? displayProcessingStatus(processing.data.status) : displayMaterialStatus(current.status)
+  const statusSummary = processing.data ? `${processingStatus} · ${Math.round(processing.data.progress)}%` : processingStatus
+  const structureRoot = structure.data
+
   return <section className="materials-page" aria-labelledby="material-title">
     <nav aria-label="Breadcrumb"><Link to="/materials">Materials</Link><span aria-hidden="true"> / </span><span>{current.title}</span></nav>
     <header className="materials-header"><div><p className="materials-eyebrow">Material</p><div className="materials-title-row"><h1 id="material-title">{current.title}</h1><Badge>{displayMaterialStatus(current.status)}</Badge></div></div><Button onClick={() => { deletion.reset(); setDeleteOpen(true) }} variant="tertiary">Delete material</Button></header>
+    <section aria-live="polite" className="material-processing-panel">
+      <h2>Processing</h2>
+      <p>{statusSummary}</p>
+      {processing.data ? <div><strong>{processing.data.status}</strong> <span>{Math.round(processing.data.progress)}%</span></div> : null}
+      {processing.data && processing.data.limitation ? <p>{processing.data.limitation}</p> : null}
+    </section>
     <dl className="material-detail-metadata">
       {current.originalFilename ? <><dt>Original file</dt><dd>{current.originalFilename}</dd></> : null}
       <dt>Material type</dt><dd>{current.materialType}</dd>
@@ -34,7 +49,32 @@ export function MaterialDetailPage() {
       <dt>Added</dt><dd>{new Date(current.createdAt).toLocaleString()}</dd>
       <dt>Last updated</dt><dd>{new Date(current.updatedAt).toLocaleString()}</dd>
     </dl>
+    {structureRoot && (structureRoot.id || structureRoot.nodeType || structureRoot.children.length > 0) ? (
+      <section>
+        <h2>Structure</h2>
+        <ul>
+          {renderStructureTree(structureRoot, expandedNodes, setExpandedNodes)}
+        </ul>
+      </section>
+    ) : null}
     <DeleteMaterialConfirmation name={current.title} open={deleteOpen} pending={deletion.isPending} error={deletion.error ? deleteErrorMessage(deletion.error) : undefined} onClose={() => setDeleteOpen(false)} onConfirm={() => deletion.mutate(current.id)} />
   </section>
 }
+
+function renderStructureTree(
+  node: MaterialStructureNode,
+  expanded: Record<string, boolean>,
+  setExpanded: Dispatch<SetStateAction<Record<string, boolean>>>
+) {
+  const hasChildren = node.children.length > 0
+  const expandedNode = expanded[node.id] ?? true
+  return <li key={node.id}>
+    <button type="button" onClick={() => setExpanded((prev) => ({ ...prev, [node.id]: !expandedNode }))} aria-expanded={expandedNode}>
+      {node.title ?? node.nodeType}
+      {node.startPage !== null && node.endPage !== null ? ` (${node.startPage}-${node.endPage})` : ''}
+    </button>
+    {hasChildren && expandedNode ? <ul>{node.children.map((child) => renderStructureTree(child, expanded, setExpanded))}</ul> : null}
+  </li>
+}
+
 function UnavailableMaterial() { return <ErrorState title="Material unavailable" description="This material could not be found or is not available to you." action={<Link className="materials-link-action" to="/materials">Back to Materials</Link>} /> }

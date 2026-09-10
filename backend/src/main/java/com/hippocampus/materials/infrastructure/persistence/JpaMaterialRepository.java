@@ -56,6 +56,7 @@ public final class JpaMaterialRepository implements MaterialRepository {
     private static MaterialMetadata metadata(MaterialEntity entity) {
         return new MaterialMetadata(
                 entity.getId(), entity.getTitle(), entity.getMaterialType(), entity.getOriginalFilename(),
-                entity.getMimeType(), entity.getStatus(), entity.getCreatedAt(), entity.getUpdatedAt());
+                entity.getMimeType(), entity.getStatus(), entity.getActiveVersionId(),
+                entity.getCreatedAt(), entity.getUpdatedAt());
     }
 }

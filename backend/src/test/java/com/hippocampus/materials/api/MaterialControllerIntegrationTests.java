@@ -28,12 +28,15 @@ import org.springframework.web.context.WebApplicationContext;
 import com.hippocampus.identity.infrastructure.persistence.UserRepository;
 import com.hippocampus.materials.infrastructure.persistence.MaterialEntity;
 import com.hippocampus.materials.infrastructure.persistence.MaterialVersionEntity;
+import com.hippocampus.materials.infrastructure.persistence.DocumentNodeEntity;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialRepository;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialVersionRepository;
+import com.hippocampus.materials.infrastructure.persistence.SpringDataDocumentNodeRepository;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 import com.hippocampus.testing.security.OwnershipTestUser;
 import com.hippocampus.testing.security.OwnershipTestUsers;
 import com.hippocampus.shared.infrastructure.web.CorrelationIdFilter;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import io.micrometer.core.instrument.MeterRegistry;
 
@@ -125,6 +128,71 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
 
             mvc.perform(get("/api/materials/{id}", own.getId()))
                     .andExpect(status().isUnauthorized());
+        }
+    }
+
+    @Test
+    void processingAndStructureAreOwnerScopedAndExposeAllowedProjection() throws Exception {
+        try (ConfigurableApplicationContext context = startApplicationWithFlyway()) {
+            OwnershipTestUsers users = OwnershipTestUsers.persistWith(
+                    context.getBean(UserRepository.class), "material-management-processing");
+            SpringDataMaterialRepository materials = context.getBean(SpringDataMaterialRepository.class);
+            SpringDataMaterialVersionRepository versions = context.getBean(SpringDataMaterialVersionRepository.class);
+            SpringDataDocumentNodeRepository nodes = context.getBean(SpringDataDocumentNodeRepository.class);
+
+            MaterialEntity own = createMaterial(materials, users.userA().userId(), "structural.pdf", "PARTIALLY_READY");
+            MaterialVersionEntity active = versions.saveAndFlush(new MaterialVersionEntity(own.getId(), 1, "PARTIALLY_READY"));
+            active.setProcessingProgress(new java.math.BigDecimal("72.50"));
+            active.setExtractionMethod("OCR");
+            active.setExtractionQuality("LIMITED");
+            versions.saveAndFlush(active);
+            own.setActiveVersionId(active.getId());
+            materials.saveAndFlush(own);
+
+            DocumentNodeEntity root = new DocumentNodeEntity();
+            ReflectionTestUtils.setField(root, "id", UUID.randomUUID());
+            ReflectionTestUtils.setField(root, "materialVersionId", active.getId());
+            ReflectionTestUtils.setField(root, "parentId", null);
+            ReflectionTestUtils.setField(root, "nodeType", com.hippocampus.materials.domain.DocumentNodeType.DOCUMENT);
+            ReflectionTestUtils.setField(root, "title", "Document");
+            ReflectionTestUtils.setField(root, "ordinal", 1);
+            ReflectionTestUtils.setField(root, "startPage", 1);
+            ReflectionTestUtils.setField(root, "endPage", 8);
+            ReflectionTestUtils.setField(root, "startOffset", 0L);
+            ReflectionTestUtils.setField(root, "endOffset", 100L);
+            ReflectionTestUtils.setField(root, "detectionOrigin", com.hippocampus.materials.domain.DocumentNodeDetectionOrigin.NATIVE);
+            ReflectionTestUtils.setField(root, "detectionConfidence", "HIGH");
+            ReflectionTestUtils.setField(root, "createdAt", java.time.Instant.now());
+            nodes.saveAndFlush(root);
+
+            MaterialEntity foreign = createMaterial(materials, users.userB().userId(), "foreign.pdf", "UPLOADED");
+
+            MockMvc mvc = mvc(context);
+
+            mvc.perform(get("/api/materials/{id}/processing", own.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("PARTIALLY_READY"))
+                    .andExpect(jsonPath("$.progress").value(72.5))
+                    .andExpect(jsonPath("$.limitation").value("Some pages or images could not be processed."));
+
+            mvc.perform(get("/api/materials/{id}/processing", foreign.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(notFoundWithoutForeignData("foreign.pdf"))
+                    .andExpect(jsonPath("$.code").value("MATERIAL_NOT_FOUND"));
+
+            mvc.perform(get("/api/materials/{id}/structure", own.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(root.getId().toString()))
+                    .andExpect(jsonPath("$.title").value("Document"))
+                    .andExpect(jsonPath("$.nodeType").value("DOCUMENT"))
+                    .andExpect(jsonPath("$.children.length()").value(0));
+
+            mvc.perform(get("/api/materials/{id}/structure", foreign.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(notFoundWithoutForeignData("foreign.pdf"))
+                    .andExpect(jsonPath("$.code").value("MATERIAL_NOT_FOUND"));
         }
     }
 

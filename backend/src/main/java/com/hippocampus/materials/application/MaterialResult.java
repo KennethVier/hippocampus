@@ -12,12 +12,14 @@ public record MaterialResult(
         String originalFilename,
         String mimeType,
         String status,
+    UUID activeVersionId,
         Instant createdAt,
         Instant updatedAt) {
 
     public static MaterialResult from(MaterialMetadata material) {
         return new MaterialResult(
                 material.id(), material.title(), material.materialType(), material.originalFilename(),
-                material.mimeType(), material.status(), material.createdAt(), material.updatedAt());
+        material.mimeType(), material.status(), material.activeVersionId(),
+        material.createdAt(), material.updatedAt());
     }
 }

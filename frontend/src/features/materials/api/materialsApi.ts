@@ -1,5 +1,5 @@
 import { ApiError, apiClient, type UploadProgress } from '../../../api/apiClient'
-import { materialPageSchema, materialSchema, materialUploadSchema, type Material, type MaterialPage, type MaterialUpload } from './materialContracts'
+import { materialPageSchema, materialProcessingSchema, materialSchema, materialStructureNodeSchema, materialUploadSchema, type Material, type MaterialPage, type MaterialProcessing, type MaterialStructureNode, type MaterialUpload } from './materialContracts'
 
 export const MATERIALS_PAGE_SIZE = 12
 
@@ -20,6 +20,14 @@ export async function listMaterials(page: number, size: number, signal?: AbortSi
 export async function getMaterial(materialId: string, signal?: AbortSignal): Promise<Material> {
   const response = await apiClient.requestJson<unknown>(`/api/materials/${encodeURIComponent(materialId)}`, { signal })
   return parse(materialSchema, required(response))
+}
+export async function getMaterialProcessing(materialId: string, signal?: AbortSignal): Promise<MaterialProcessing> {
+  const response = await apiClient.requestJson<unknown>(`/api/materials/${encodeURIComponent(materialId)}/processing`, { signal })
+  return parse(materialProcessingSchema, required(response))
+}
+export async function getMaterialStructure(materialId: string, signal?: AbortSignal): Promise<MaterialStructureNode> {
+  const response = await apiClient.requestJson<unknown>(`/api/materials/${encodeURIComponent(materialId)}/structure`, { signal })
+  return parse(materialStructureNodeSchema, required(response))
 }
 export async function uploadMaterial(file: File, onProgress: (progress: UploadProgress) => void, signal: AbortSignal): Promise<MaterialUpload> {
   const form = new FormData(); form.append('file', file)
