@@ -7,7 +7,7 @@ import com.hippocampus.materials.domain.ClaimedProcessingJob;
 import com.hippocampus.materials.port.ProcessingJobExecutionRepository;
 
 public final class JdbcProcessingJobExecutionRepository implements ProcessingJobExecutionRepository {
-    private static final String FENCE = " id=:id AND status='RUNNING' AND locked_by=:worker AND attempt_count=:attempt ";
+    private static final String FENCE = " id=:id AND status='RUNNING' AND locked_by=:worker AND attempt_count=:attempt AND job_type=:type AND material_version_id IS NOT DISTINCT FROM :version AND processing_version=:processingVersion ";
     private final JdbcClient jdbc;
     public JdbcProcessingJobExecutionRepository(JdbcClient jdbc) { this.jdbc = jdbc; }
 
@@ -39,6 +39,7 @@ public final class JdbcProcessingJobExecutionRepository implements ProcessingJob
     }
     private JdbcClient.StatementSpec fenced(String sql, ClaimedProcessingJob job) {
         return jdbc.sql(sql).param("id", job.jobId()).param("worker", job.workerId())
-                .param("attempt", job.attemptNumber());
+                .param("attempt", job.attemptNumber()).param("type", job.jobType().name())
+                .param("version", job.materialVersionId(), Types.OTHER).param("processingVersion", job.processingVersion());
     }
 }

@@ -20,7 +20,7 @@ import com.hippocampus.materials.port.ProcessingJobClaimRepository;
 class ClaimNextProcessingJobTests {
 
     private final ProcessingJobClaimRepository jobs = mock(ProcessingJobClaimRepository.class);
-    private final ClaimNextProcessingJob claimNextJob = new ClaimNextProcessingJob(jobs);
+    private final ClaimNextProcessingJob claimNextJob = new ClaimNextProcessingJob(jobs, java.time.Duration.ofMinutes(1), mock(DeriveMaterialReadiness.class));
 
     @ParameterizedTest
     @NullSource
@@ -46,7 +46,7 @@ class ClaimNextProcessingJobTests {
     @Test
     void acceptsMaximumLengthOperationalIdentifier() {
         String workerId = "w".repeat(128);
-        when(jobs.claimNextEligible(org.mockito.ArgumentMatchers.eq(workerId), anyLong())).thenReturn(Optional.empty());
+        when(jobs.claimNextEligible(org.mockito.ArgumentMatchers.eq(workerId), anyLong())).thenReturn(new com.hippocampus.materials.domain.ProcessingClaimOutcome(Optional.empty(), Optional.empty()));
 
         claimNextJob.execute(workerId);
 

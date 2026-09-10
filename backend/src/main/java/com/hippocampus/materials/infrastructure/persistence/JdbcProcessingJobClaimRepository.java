@@ -3,6 +3,7 @@ package com.hippocampus.materials.infrastructure.persistence;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Optional;
+import com.hippocampus.materials.domain.ProcessingClaimOutcome;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -62,7 +63,7 @@ public final class JdbcProcessingJobClaimRepository implements ProcessingJobClai
                 ORDER BY pj.created_at ASC, pj.id ASC
                 LIMIT 1
                 FOR UPDATE OF pj SKIP LOCKED
-            )
+            ), claimed AS (
             UPDATE processing_jobs pj
             SET status = 'RUNNING',
                 attempt_count = pj.attempt_count + 1,
@@ -76,6 +77,11 @@ public final class JdbcProcessingJobClaimRepository implements ProcessingJobClai
             WHERE pj.id = candidate.id
             RETURNING pj.id, pj.job_type, pj.material_version_id, pj.processing_version,
                       pj.locked_by, pj.attempt_count, pj.max_attempts
+            )
+            SELECT claimed.*, exhausted.id AS exhausted_id
+            FROM (SELECT 1) singleton
+            LEFT JOIN claimed ON true
+            LEFT JOIN exhausted ON true
             """;
 
     private final JdbcClient jdbcClient;
@@ -85,12 +91,14 @@ public final class JdbcProcessingJobClaimRepository implements ProcessingJobClai
     }
 
     @Override
-    public Optional<ClaimedProcessingJob> claimNextEligible(String workerId, long staleTimeoutSeconds) {
+    public ProcessingClaimOutcome claimNextEligible(String workerId, long staleTimeoutSeconds) {
         return jdbcClient.sql(CLAIM_NEXT_ELIGIBLE)
                 .param("workerId", workerId)
                 .param("staleTimeoutSeconds", staleTimeoutSeconds)
-                .query(JdbcProcessingJobClaimRepository::mapClaim)
-                .optional();
+                .query((row, number) -> new ProcessingClaimOutcome(
+                        row.getObject("id") == null ? Optional.empty() : Optional.of(mapClaim(row, number)),
+                        Optional.ofNullable(row.getObject("exhausted_id", UUID.class))))
+                .single();
     }
 
     private static ClaimedProcessingJob mapClaim(ResultSet result, int rowNumber) throws SQLException {

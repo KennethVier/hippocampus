@@ -17,6 +17,7 @@ import com.hippocampus.materials.port.ProcessingJobClaimRepository;
         "org.springframework.boot.transaction.autoconfigure.TransactionAutoConfiguration"
 })
 @ConditionalOnBean({JdbcClient.class, PlatformTransactionManager.class})
+@org.springframework.context.annotation.Import(MaterialReadinessConfiguration.class)
 public class ProcessingJobClaimConfiguration {
 
     @Bean
@@ -26,9 +27,10 @@ public class ProcessingJobClaimConfiguration {
 
     @Bean
     ClaimNextProcessingJob claimNextProcessingJob(ProcessingJobClaimRepository jobs,
-            ObjectProvider<ProcessingRecoveryProperties> properties) {
+            ObjectProvider<ProcessingRecoveryProperties> properties,
+            com.hippocampus.materials.application.DeriveMaterialReadiness readiness) {
         ProcessingRecoveryProperties recovery = properties.getIfAvailable();
         return new ClaimNextProcessingJob(jobs,
-                recovery == null ? Duration.ofMinutes(1) : recovery.staleTimeout());
+                recovery == null ? Duration.ofMinutes(1) : recovery.staleTimeout(), readiness);
     }
 }

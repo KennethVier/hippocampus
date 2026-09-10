@@ -24,6 +24,7 @@ import org.springframework.beans.factory.ObjectProvider;
         "org.springframework.boot.transaction.autoconfigure.TransactionAutoConfiguration"
 })
 @ConditionalOnBean({JdbcClient.class, PlatformTransactionManager.class})
+@org.springframework.context.annotation.Import(MaterialReadinessConfiguration.class)
 public class ProcessingJobDispatchConfiguration {
 
     @Bean
@@ -37,8 +38,9 @@ public class ProcessingJobDispatchConfiguration {
     }
 
     @Bean
-    CompleteProcessingStage completeProcessingStage(ProcessingJobStageCompletionRepository jobs) {
-        return new CompleteProcessingStage(jobs);
+    CompleteProcessingStage completeProcessingStage(ProcessingJobStageCompletionRepository jobs,
+            com.hippocampus.materials.application.DeriveMaterialReadiness readiness) {
+        return new CompleteProcessingStage(jobs, readiness);
     }
 
     @Bean

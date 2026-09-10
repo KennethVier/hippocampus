@@ -20,6 +20,7 @@ import com.hippocampus.materials.port.*;
 @ConditionalOnBean({JdbcClient.class, PlatformTransactionManager.class})
 @EnableConfigurationProperties(ProcessingRecoveryProperties.class)
 @EnableScheduling
+@org.springframework.context.annotation.Import(MaterialReadinessConfiguration.class)
 public class ProcessingRecoveryConfiguration {
     @Bean ProcessingJobExecutionRepository processingJobExecutionRepository(JdbcClient jdbc) {
         return new JdbcProcessingJobExecutionRepository(jdbc);
@@ -35,7 +36,7 @@ public class ProcessingRecoveryConfiguration {
     }
     @Bean ProcessingFailureClassifier processingFailureClassifier() { return new ProcessingFailureClassifier(); }
     @Bean FinalizeProcessingFailure finalizeProcessingFailure(ProcessingJobExecutionRepository jobs,
-            ProcessingRetryPolicy retries) { return new FinalizeProcessingFailure(jobs, retries); }
+            ProcessingRetryPolicy retries, DeriveMaterialReadiness readiness) { return new FinalizeProcessingFailure(jobs, retries, readiness); }
     @Bean(name = "taskScheduler") TaskScheduler taskScheduler() {
         ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
         scheduler.setPoolSize(2);
