@@ -1,6 +1,7 @@
 package com.hippocampus.materials.application;
 
 import org.springframework.dao.TransientDataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 import com.hippocampus.materials.domain.ProcessingFailure;
 import com.hippocampus.materials.port.BinaryObjectStoreException;
@@ -12,7 +13,8 @@ import com.hippocampus.materials.port.PdfVisualExtractionException;
 
 public final class ProcessingFailureClassifier {
     public ProcessingFailure classify(RuntimeException failure) {
-        if (failure instanceof TransientDataAccessException) return transientFailure("DB_UNAVAILABLE");
+        if (failure instanceof TransientDataAccessException
+                || failure instanceof DataAccessResourceFailureException) return transientFailure("DB_UNAVAILABLE");
         if (failure instanceof BinaryObjectStoreException) return transientFailure("STORAGE_UNAVAILABLE");
         if (failure instanceof OcrException ocr) return switch (ocr.kind()) {
             case ENGINE_UNAVAILABLE, TIMEOUT, PROCESS_IO_FAILED, TERMINATION_FAILED -> transientFailure("OCR_UNAVAILABLE");

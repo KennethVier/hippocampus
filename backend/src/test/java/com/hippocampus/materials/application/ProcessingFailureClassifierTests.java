@@ -3,6 +3,9 @@ package com.hippocampus.materials.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.QueryTimeoutException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
+import java.sql.SQLException;
 import com.hippocampus.materials.domain.ProcessingFailure;
 import com.hippocampus.materials.port.OcrException;
 import com.hippocampus.materials.port.PdfExtractionException;
@@ -14,6 +17,11 @@ class ProcessingFailureClassifierTests {
                 .isEqualTo(ProcessingFailure.Kind.TRANSIENT);
         assertThat(classifier.classify(new OcrException(OcrException.Kind.TIMEOUT)).kind())
                 .isEqualTo(ProcessingFailure.Kind.TRANSIENT);
+        assertThat(classifier.classify(new DataAccessResourceFailureException("synthetic-secret")).errorCode())
+                .isEqualTo("DB_UNAVAILABLE");
+        assertThat(classifier.classify(new CannotGetJdbcConnectionException(
+                "synthetic-secret", new SQLException("database unavailable"))).errorCode())
+                .isEqualTo("DB_UNAVAILABLE");
     }
     @Test void treatsMalformedAndUnknownFailuresAsFatalWithSafeCodes() {
         assertThat(classifier.classify(new PdfExtractionException(PdfExtractionException.Kind.MALFORMED_PDF)))

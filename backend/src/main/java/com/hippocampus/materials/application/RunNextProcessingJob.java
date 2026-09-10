@@ -13,6 +13,8 @@ public final class RunNextProcessingJob {
             try {
                 execution.execute(job);
                 return new ProcessingRunResult.Completed(job.jobId(), job.jobType());
+            } catch (ProcessingJobOwnershipLostException ownershipLost) {
+                return new ProcessingRunResult.OwnershipLost(job.jobId(), job.jobType());
             } catch (RuntimeException failure) {
                 return new ProcessingRunResult.Failed(
                         job.jobId(), job.jobType(), failures.classify(failure).errorCode());

@@ -13,8 +13,18 @@ import com.hippocampus.materials.port.ProcessingJobClaimRepository;
 
 public final class JdbcProcessingJobClaimRepository implements ProcessingJobClaimRepository {
     private static final String CLAIM_NEXT_ELIGIBLE = """
-            WITH exhausted AS (
-                UPDATE processing_jobs
+            WITH exhausted_candidate AS (
+                SELECT id
+                FROM processing_jobs
+                WHERE status = 'RUNNING'
+                  AND attempt_count >= max_attempts
+                  AND COALESCE(last_heartbeat_at, locked_at, started_at, updated_at, created_at)
+                      < CURRENT_TIMESTAMP - make_interval(secs => :staleTimeoutSeconds)
+                ORDER BY created_at ASC, id ASC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+            ), exhausted AS (
+                UPDATE processing_jobs pj
                 SET status = 'FAILED',
                     error_code = 'PROCESSING_RETRY_EXHAUSTED',
                     error_message = NULL,
@@ -24,11 +34,9 @@ public final class JdbcProcessingJobClaimRepository implements ProcessingJobClai
                     next_attempt_at = NULL,
                     completed_at = CURRENT_TIMESTAMP,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE status = 'RUNNING'
-                  AND attempt_count >= max_attempts
-                  AND COALESCE(last_heartbeat_at, locked_at, started_at, updated_at, created_at)
-                      < CURRENT_TIMESTAMP - make_interval(secs => :staleTimeoutSeconds)
-                RETURNING id
+                FROM exhausted_candidate candidate
+                WHERE pj.id = candidate.id
+                RETURNING pj.id
             ), candidate AS (
                 SELECT pj.id
                 FROM processing_jobs pj

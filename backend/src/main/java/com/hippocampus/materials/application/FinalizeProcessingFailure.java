@@ -13,9 +13,6 @@ public class FinalizeProcessingFailure {
     }
     @Transactional
     public void execute(ClaimedProcessingJob job, ProcessingFailure failure) {
-        if (failure.kind() == ProcessingFailure.Kind.PARTIAL) {
-            throw new IllegalArgumentException("Partial limitations are durable artifact outcomes, not job failures");
-        }
         boolean updated = failure.kind() == ProcessingFailure.Kind.TRANSIENT && job.attemptNumber() < job.maxAttempts()
                 ? jobs.retry(job, failure.errorCode(), retries.delayAfter(job.attemptNumber()))
                 : jobs.fail(job, failure.errorCode());

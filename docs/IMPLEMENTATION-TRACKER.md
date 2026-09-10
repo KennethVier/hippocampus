@@ -999,7 +999,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Processing
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Make long processing recoverable.
 - **Build:** Update page/chunk progress and last heartbeat; classify transient/fatal/partial failures; bounded retries/backoff.
 - **How it works:** Restart resumes from durable intermediate state.
@@ -1008,8 +1008,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Jobs recover without duplicating output.
 - **Definition of Done:** Recovery suite passes.
 - **Authority:** Documents 21,24,25
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** P3-15 adds PostgreSQL-authoritative claim/reclaim, heartbeat, current/total progress, fenced lifecycle writes, bounded retry/backoff, safe typed failure classification, and restart discovery for existing durable jobs. Recovery coverage includes due retries, strict stale detection, legacy NULL-heartbeat recovery, final-attempt exhaustion, lock-skipping exhausted cleanup, stale-worker fencing, replayed lower progress, restart persistence, and an execution-orchestrator transient-failure/reclaim/replay/completion path with unique durable output. Local Cloud compilation and focused non-Docker tests passed; the enabled PostgreSQL/Testcontainers recovery suite is CI-authoritative because Docker is unavailable in this Cloud environment. Exact-head CI and external review remain required before Done.
+- **Notes / blockers:** Partial outcomes in P3-15 remain represented by the existing durable artifact-level quality/limitation metadata permitted by Document 21; they are not throwable job failures and no generic `PARTIAL` processing-job status is introduced. P3-16 remains responsible for deriving Material/MaterialVersion `READY`/`PARTIALLY_READY`/`FAILED` capability state. Initial `MATERIAL_VALIDATE` enqueue remains separately owned and is not added here.
 
 ## P3-16 — Implement material READY/PARTIALLY_READY/FAILED derivation
 

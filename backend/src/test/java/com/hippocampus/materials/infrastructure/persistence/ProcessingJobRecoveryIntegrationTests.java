@@ -1,6 +1,7 @@
 package com.hippocampus.materials.infrastructure.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.time.Instant;
@@ -8,11 +9,23 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import com.hippocampus.materials.domain.ClaimedProcessingJob;
 import com.hippocampus.materials.domain.ProcessingJobType;
+import com.hippocampus.materials.application.CompleteProcessingStage;
+import com.hippocampus.materials.application.ExecuteClaimedProcessingJob;
+import com.hippocampus.materials.application.FinalizeProcessingFailure;
+import com.hippocampus.materials.application.ProcessingDispatcher;
+import com.hippocampus.materials.application.ProcessingFailureClassifier;
+import com.hippocampus.materials.application.ProcessingRetryPolicy;
+import com.hippocampus.materials.application.ProcessingStageHandler;
+import com.hippocampus.materials.port.BinaryObjectStoreException;
+import com.hippocampus.materials.port.ProcessingHeartbeatMonitor;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 
 class ProcessingJobRecoveryIntegrationTests extends PostgresIntegrationTestSupport {
@@ -87,6 +100,33 @@ class ProcessingJobRecoveryIntegrationTests extends PostgresIntegrationTestSuppo
         }
     }
 
+    @Test void lockedStaleExhaustedJobDoesNotBlockClaimingOtherEligibleWork() throws Exception {
+        try (var context = startApplicationWithFlyway()) {
+            JdbcProcessingJobClaimRepository claims = new JdbcProcessingJobClaimRepository(
+                    context.getBean(JdbcClient.class));
+            UUID exhausted = insert("RUNNING", 3, null, null, "exhausted-worker");
+            execute("UPDATE processing_jobs SET locked_at=CURRENT_TIMESTAMP - interval '2 minutes', "
+                    + "last_heartbeat_at=NULL WHERE id='" + exhausted + "'");
+            UUID eligible = insert("PENDING", 0, null, null, null);
+
+            try (Connection lockConnection = openPostgresConnection();
+                    PreparedStatement lock = lockConnection.prepareStatement(
+                            "SELECT id FROM processing_jobs WHERE id=? FOR UPDATE");
+                    var executor = Executors.newSingleThreadExecutor()) {
+                lockConnection.setAutoCommit(false);
+                lock.setObject(1, exhausted);
+                lock.executeQuery();
+
+                ClaimedProcessingJob claimed = executor.submit(
+                        () -> claims.claimNextEligible("other-worker", 60).orElseThrow())
+                        .get(5, TimeUnit.SECONDS);
+
+                assertThat(claimed.jobId()).isEqualTo(eligible);
+                lockConnection.rollback();
+            }
+        }
+    }
+
     @Test void restartRediscoversSameDurableRetryJobAndProgress() throws Exception {
         UUID id;
         try (var firstContext = startApplicationWithFlyway()) {
@@ -107,6 +147,92 @@ class ProcessingJobRecoveryIntegrationTests extends PostgresIntegrationTestSuppo
             assertThat(rowLong(id, "progress_current")).isEqualTo(2);
         }
     }
+
+    @Test void executorRetriesAfterDurableOutputThenReplaysAndCompletesWithoutDuplication() throws Exception {
+        try (var context = startApplicationWithFlyway()) {
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            OwnedFixture fixture = insertOwnedPendingJob();
+            execute("CREATE TABLE recovery_test_outputs (job_id UUID PRIMARY KEY)");
+            AtomicInteger executions = new AtomicInteger();
+            ProcessingStageHandler handler = new ProcessingStageHandler() {
+                @Override public ProcessingJobType jobType() { return ProcessingJobType.MATERIAL_VALIDATE; }
+                @Override public void handle(ClaimedProcessingJob job) {
+                    jdbc.sql("INSERT INTO recovery_test_outputs(job_id) VALUES (:id) ON CONFLICT DO NOTHING")
+                            .param("id", job.jobId()).update();
+                    if (executions.getAndIncrement() == 0) {
+                        throw new BinaryObjectStoreException("synthetic transient outage");
+                    }
+                }
+            };
+            JdbcProcessingJobClaimRepository claims = new JdbcProcessingJobClaimRepository(jdbc);
+            JdbcProcessingJobExecutionRepository execution = new JdbcProcessingJobExecutionRepository(jdbc);
+            ExecuteClaimedProcessingJob executor = new ExecuteClaimedProcessingJob(
+                    new ProcessingDispatcher(java.util.List.of(handler)),
+                    context.getBean(CompleteProcessingStage.class),
+                    new ProcessingFailureClassifier(),
+                    new FinalizeProcessingFailure(execution,
+                            new ProcessingRetryPolicy(Duration.ofSeconds(5), Duration.ofMinutes(1))),
+                    healthyHeartbeat());
+
+            ClaimedProcessingJob first = claims.claimNextEligible("worker-a", 60).orElseThrow();
+            assertThatThrownBy(() -> executor.execute(first))
+                    .isInstanceOf(BinaryObjectStoreException.class);
+            assertThat(rowString(fixture.jobId(), "status")).isEqualTo("RETRY");
+            execute("UPDATE processing_jobs SET next_attempt_at=CURRENT_TIMESTAMP WHERE id='" + fixture.jobId() + "'");
+
+            ClaimedProcessingJob second = claims.claimNextEligible("worker-b", 60).orElseThrow();
+            executor.execute(second);
+
+            assertThat(second.jobId()).isEqualTo(first.jobId());
+            assertThat(second.attemptNumber()).isEqualTo(2);
+            assertThat(rowString(fixture.jobId(), "status")).isEqualTo("COMPLETED");
+            assertThat(jdbc.sql("SELECT count(*) FROM recovery_test_outputs WHERE job_id=:id")
+                    .param("id", fixture.jobId()).query(Long.class).single()).isEqualTo(1L);
+            assertThat(jdbc.sql("SELECT count(*) FROM processing_jobs WHERE material_version_id=:version "
+                            + "AND job_type='MATERIAL_EXTRACT'")
+                    .param("version", fixture.materialVersionId()).query(Long.class).single()).isEqualTo(1L);
+        }
+    }
+
+    private static ProcessingHeartbeatMonitor healthyHeartbeat() {
+        return ignored -> new ProcessingHeartbeatMonitor.Heartbeat() {
+            @Override public void verifyOwnership() { }
+            @Override public void close() { }
+        };
+    }
+
+    private static OwnedFixture insertOwnedPendingJob() throws Exception {
+        UUID user = UUID.randomUUID(); UUID material = UUID.randomUUID(); UUID version = UUID.randomUUID();
+        UUID job = UUID.randomUUID();
+        try (Connection connection = openPostgresConnection()) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "INSERT INTO users(id,email,status,created_at,updated_at) VALUES (?,?,'ACTIVE',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)")) {
+                statement.setObject(1, user); statement.setString(2, user + "@example.test"); statement.executeUpdate();
+            }
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "INSERT INTO materials(id,user_id,title,material_type,status,created_at,updated_at) "
+                            + "VALUES (?,?,'Recovery fixture','PDF','PROCESSING',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)")) {
+                statement.setObject(1, material); statement.setObject(2, user); statement.executeUpdate();
+            }
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "INSERT INTO material_versions(id,material_id,version_number,processing_status,created_at) "
+                            + "VALUES (?,?,1,'PROCESSING',CURRENT_TIMESTAMP)")) {
+                statement.setObject(1, version); statement.setObject(2, material); statement.executeUpdate();
+            }
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "INSERT INTO processing_jobs(id,user_id,material_version_id,job_type,status,priority,attempt_count,"
+                            + "max_attempts,processing_version,created_at,updated_at) "
+                            + "VALUES (?,?,?,'MATERIAL_VALIDATE','PENDING',0,0,3,'v1',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)")) {
+                statement.setObject(1, job); statement.setObject(2, user); statement.setObject(3, version);
+                statement.executeUpdate();
+            }
+            connection.commit();
+        }
+        return new OwnedFixture(job, version);
+    }
+
+    private record OwnedFixture(UUID jobId, UUID materialVersionId) { }
 
     private static UUID insert(String status, int attempts, Instant next, Instant heartbeat, String worker) throws Exception {
         UUID user = UUID.randomUUID(); UUID id = UUID.randomUUID();

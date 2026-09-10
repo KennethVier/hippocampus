@@ -1,7 +1,6 @@
 package com.hippocampus.materials.application;
 
 import static org.mockito.Mockito.*;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.*;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -25,13 +24,6 @@ class FinalizeProcessingFailureTests {
         ClaimedProcessingJob fatal = job(1, 3);
         when(jobs.fail(fatal, "PROCESSING_INTERNAL_ERROR")).thenReturn(true);
         finalizer.execute(fatal, new ProcessingFailure(ProcessingFailure.Kind.FATAL, "PROCESSING_INTERNAL_ERROR"));
-    }
-    @Test void keepsPartialLimitationsOutOfJobFailureTransitions() {
-        ClaimedProcessingJob job = job(1, 3);
-        assertThatThrownBy(() -> finalizer.execute(
-                job, new ProcessingFailure(ProcessingFailure.Kind.PARTIAL, "OCR_QUALITY_LIMITED")))
-                .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(jobs);
     }
     private static ClaimedProcessingJob job(int attempt, int max) {
         return new ClaimedProcessingJob(UUID.randomUUID(), ProcessingJobType.MATERIAL_EXTRACT,
