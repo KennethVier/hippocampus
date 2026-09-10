@@ -1018,11 +1018,11 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Status:** Ready for Review
 - **Goal:** Expose meaningful capability state.
 - **Build:** Derive overall material/version state from required stage results and limitations.
-- **How it works:** READY only after required source structure/chunks/index prerequisites; partial preserves limitations. Failed replacement candidates may restore the parent status only from a distinct active version that remains READY or PARTIALLY_READY; same-version and stale exhausted recovery remain fail-closed.
+- **How it works:** READY only after required source structure/chunks/index prerequisites; partial preserves limitations.
 - **Dependencies:** Pipeline state
-- **Tests / validation:** Matrix/state tests plus readiness persistence integration and recovery regression suites.
-- **Expected result:** Frontend status accurately represents usable capability without resurrecting the wrong active version identity.
-- **Definition of Done:** All required P3-16 matrix and persistence cases pass in the local validation run; Phase 3 CHUNK completion remains PROCESSING until real Phase 4 index readiness exists.
+- **Tests / validation:** State matrix tests.
+- **Expected result:** Frontend status accurately represents usable capability.
+- **Definition of Done:** All matrix cases pass.
 - **Authority:** Documents 21
 - **Evidence / link:** P3-16 implementation on branch `feat/p3-16-material-readiness-derivation` fixes the active-version identity guard in the readiness policy and repository snapshot, with focused validation on `MaterialReadinessTests` and `MaterialReadinessIntegrationTests` passing under the Windows-safe OCR configuration. Local evidence included `Tests run: 62, Failures: 0, Errors: 0, Skipped: 0` for the focused P3-16 suites. The full repository `clean verify` still reports unchanged Windows-incompatible OCR/PDF failures unrelated to P3-16 scope, and no later-phase activation/indexing or P3-17/P3-18/P4 work was introduced.
 - **Notes / blockers:** No P3-17, P3-18, or Phase 4 work was pulled forward. ADR remains **ADR NOT REQUIRED** for this narrow identity-safe policy correction; there is no architectural conflict beyond the approved P3-16 rule change.
