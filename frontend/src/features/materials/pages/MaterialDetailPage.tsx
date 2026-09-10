@@ -19,7 +19,7 @@ export function MaterialDetailPage() {
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({})
   const material = useQuery({ queryKey: materialKeys.detail(id ?? 'invalid'), queryFn: ({ signal }) => getMaterial(id ?? '', signal), enabled: id !== null })
   const processing = useMaterialProcessing(id)
-  const structure = useMaterialStructure(id)
+  const structure = useMaterialStructure(id, processing.data?.structureAvailable === true)
   const deletion = useMutation({ mutationFn: deleteMaterial, onSuccess: async () => {
     if (id) queryClient.removeQueries({ queryKey: materialKeys.detail(id), exact: true })
     await queryClient.invalidateQueries({ queryKey: materialKeys.lists() }); setDeleteOpen(false); navigate('/materials')
@@ -30,7 +30,6 @@ export function MaterialDetailPage() {
   const current = material.data
   const processingReady = processing.data !== undefined
   const processingStatus = processingReady ? displayProcessingStatus(processing.data.readiness) : displayMaterialStatus(current.status)
-  const statusSummary = processingReady && processing.data.progress !== null ? `${processingStatus} · ${Math.round(processing.data.progress)}%` : processingStatus
   const processingStage = processingReady ? displayProcessingStage(processing.data.stage) : null
   const processingLimitation = processingReady
     && (processing.data.readiness === 'PARTIALLY_READY' || processing.data.readiness === 'FAILED')
@@ -44,9 +43,9 @@ export function MaterialDetailPage() {
     {processingReady ? (
       <section aria-live="polite" className="material-processing-panel">
         <h2>Processing</h2>
-        <p>{statusSummary}</p>
+        <p>{processingStatus}</p>
         {processingStage ? <p>{processingStage}</p> : null}
-        {processing.data.progress !== null ? <div><strong>Progress</strong> <span>{Math.round(processing.data.progress)}%</span></div> : null}
+        {processing.data.progress !== null ? <p>Current step: {Math.round(processing.data.progress)}%</p> : null}
         {processingLimitation ? <p>{processingLimitation}</p> : null}
       </section>
     ) : null}

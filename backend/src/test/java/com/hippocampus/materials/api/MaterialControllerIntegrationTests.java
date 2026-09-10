@@ -21,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -143,7 +144,6 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
 
             MaterialEntity own = createMaterial(materials, users.userA().userId(), "structural.pdf", "PARTIALLY_READY");
             MaterialVersionEntity active = versions.saveAndFlush(new MaterialVersionEntity(own.getId(), 1, "PARTIALLY_READY"));
-            active.setProcessingProgress(new java.math.BigDecimal("72.50"));
             active.setExtractionMethod("OCR");
             active.setExtractionQuality("LIMITED");
             versions.saveAndFlush(active);
@@ -169,8 +169,9 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.readiness").value("PARTIALLY_READY"))
                     .andExpect(jsonPath("$.stage").value(nullValue()))
-                    .andExpect(jsonPath("$.progress").value(72.5))
-                    .andExpect(jsonPath("$.limitation").value("Some pages or images could not be processed."))
+                    .andExpect(jsonPath("$.progress").value(nullValue()))
+                    .andExpect(jsonPath("$.limitation").value("Some parts of this material could not be fully processed."))
+                    .andExpect(jsonPath("$.structureAvailable").value(true))
                     .andExpect(jsonPath("$.updatedAt").doesNotExist())
                     .andReturn();
             assertThat(processing.getResponse().getContentAsString())
@@ -200,6 +201,59 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
                             .with(authenticatedAs(users.userA())))
                     .andExpect(notFoundWithoutForeignData("foreign.pdf"))
                     .andExpect(jsonPath("$.code").value("MATERIAL_NOT_FOUND"));
+        }
+    }
+
+    @Test
+    void processingReadsDurableJobProgressAndExposesOnlySafeStage() throws Exception {
+        try (ConfigurableApplicationContext context = startApplicationWithFlyway()) {
+            OwnershipTestUsers users = OwnershipTestUsers.persistWith(
+                    context.getBean(UserRepository.class), "material-management-durable-progress");
+            SpringDataMaterialRepository materials = context.getBean(SpringDataMaterialRepository.class);
+            SpringDataMaterialVersionRepository versions = context.getBean(SpringDataMaterialVersionRepository.class);
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+
+            MaterialEntity own = createMaterial(materials, users.userA().userId(), "durable-progress.pdf", "PROCESSING");
+            MaterialVersionEntity active = versions.saveAndFlush(new MaterialVersionEntity(own.getId(), 1, "PROCESSING"));
+            own.setActiveVersionId(active.getId());
+            materials.saveAndFlush(own);
+
+            assertThat(active.getProcessingProgress()).isNull();
+            jdbc.sql("""
+                    INSERT INTO processing_jobs(
+                        id,user_id,material_version_id,job_type,status,priority,progress,progress_current,progress_total,
+                        attempt_count,max_attempts,locked_by,locked_at,processing_version,error_code,error_message,
+                        created_at,updated_at)
+                    VALUES (?,?,?,?,?,0,72.50,72,100,1,3,'worker-secret',CURRENT_TIMESTAMP,'v1',
+                        'PRIVATE_ERROR','private retry detail',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                    """)
+                    .param(UUID.randomUUID())
+                    .param(users.userA().userId())
+                    .param(active.getId())
+                    .param("STRUCTURE_DETECT")
+                    .param("RUNNING")
+                    .update();
+
+            MockMvc mvc = mvc(context);
+            MvcResult processing = mvc.perform(get("/api/materials/{id}/processing", own.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.readiness").value("PROCESSING"))
+                    .andExpect(jsonPath("$.stage").value("STRUCTURE_DETECTION"))
+                    .andExpect(jsonPath("$.progress").value(72.5))
+                    .andExpect(jsonPath("$.structureAvailable").value(false))
+                    .andExpect(jsonPath("$.updatedAt").doesNotExist())
+                    .andExpect(jsonPath("$.jobType").doesNotExist())
+                    .andExpect(jsonPath("$.workerId").doesNotExist())
+                    .andExpect(jsonPath("$.attemptCount").doesNotExist())
+                    .andExpect(jsonPath("$.maxAttempts").doesNotExist())
+                    .andExpect(jsonPath("$.errorCode").doesNotExist())
+                    .andExpect(jsonPath("$.errorMessage").doesNotExist())
+                    .andReturn();
+
+            assertThat(processing.getResponse().getContentAsString())
+                    .doesNotContain("STRUCTURE_DETECT", "worker-secret", "PRIVATE_ERROR", "private retry detail");
+            assertThat(versions.findById(active.getId()).orElseThrow().getProcessingProgress()).isNull();
         }
     }
 

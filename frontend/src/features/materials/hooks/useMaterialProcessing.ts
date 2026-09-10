@@ -31,24 +31,24 @@ export function useMaterialProcessing(materialId: string | null) {
   })
 }
 
-export function useMaterialStructure(materialId: string | null) {
+export function useMaterialStructure(materialId: string | null, enabled: boolean) {
   return useQuery({
     queryKey: materialKeys.structure(materialId ?? 'invalid'),
     queryFn: ({ signal }) => {
       if (!materialId || materialId === 'invalid') throw new Error('Missing material id')
       return getMaterialStructure(materialId, signal)
     },
-    enabled: materialId !== null && materialId !== 'invalid',
+    enabled: materialId !== null && materialId !== 'invalid' && enabled,
   })
 }
 
 export function materialProcessingSummary(processing: MaterialProcessing | undefined): string {
   if (!processing) return 'Processing status is being updated.'
-  if (processing.readiness === 'PARTIALLY_READY') return 'Most of this material is ready. Some pages or images could not be processed.'
+  if (processing.readiness === 'PARTIALLY_READY') return 'Most of this material is ready. Some parts could not be fully processed.'
   if (processing.readiness === 'FAILED') return 'This material needs attention before it can be used.'
   if (processing.readiness === 'PROCESSING') return processing.progress === null
     ? 'Processing is underway.'
-    : `Processing ${Math.round(processing.progress)}%`
+    : `Current step: ${Math.round(processing.progress)}%`
   if (processing.readiness === 'UPLOADED') return 'Uploaded and waiting to process.'
   if (processing.readiness === 'READY') return 'Ready to study.'
   return 'Processing status is being updated.'

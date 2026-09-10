@@ -40,13 +40,13 @@ test('student uploads, opens, and deletes a Material', async ({ page }) => {
 
 test.describe('material processing status presentation', () => {
   test('shows partial readiness with student-facing limitation text', async ({ page }) => {
-    await mockMaterialDetail(page, 'PARTIALLY_READY', 'Some pages or images could not be processed.')
+    await mockMaterialDetail(page, 'PARTIALLY_READY', 'Some parts of this material could not be fully processed.')
 
     await page.goto(`/materials/${materialId}`)
 
     await expect(page.getByRole('heading', { level: 1, name: 'processing-fixture.pdf' })).toBeVisible()
     await expect(page.getByText('Ready with limitations')).toBeVisible()
-    await expect(page.getByText('Some pages or images could not be processed.')).toBeVisible()
+    await expect(page.getByText('Some parts of this material could not be fully processed.')).toBeVisible()
     await expect(page.getByText('PARTIALLY_READY')).toHaveCount(0)
   })
 
@@ -83,6 +83,7 @@ async function mockMaterialDetail(page: import('@playwright/test').Page, readine
         stage: readiness === 'FAILED' ? 'OCR' : null,
         progress: null,
         limitation,
+        structureAvailable: false,
       }),
     })
   })

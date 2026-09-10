@@ -10,7 +10,7 @@ vi.mock('../../../api/apiClient', async (importOriginal) => {
 import { deleteMaterial, getMaterial, getMaterialProcessing, listMaterials, uploadMaterial } from './materialsApi'
 const id = '3f2504e0-4f89-41d3-9a0c-0305e82c3301'; const versionId = '9a7b3302-b431-45e1-90e3-298c9d80918f'
 const material = { id, title: 'Notes', materialType: 'TEXT', originalFilename: null, mimeType: null, status: 'FUTURE_NONEMPTY_STATUS', createdAt: '2026-09-01T10:00:00Z', updatedAt: '2026-09-01T10:00:01Z' }
-const processing = { materialId: id, versionId, readiness: 'PROCESSING', stage: null, progress: null, limitation: null }
+const processing = { materialId: id, versionId, readiness: 'PROCESSING', stage: null, progress: null, limitation: null, structureAvailable: false }
 const upload = { materialId: id, versionId, title: 'Notes', materialType: 'TEXT', originalFilename: null, mimeType: 'text/plain', fileSizeBytes: 5, materialStatus: 'UPLOADED', processingStatus: 'UPLOADED', createdAt: '2026-09-01T10:00:00Z' }
 afterEach(() => { transport.json.mockReset(); transport.multipart.mockReset() })
 

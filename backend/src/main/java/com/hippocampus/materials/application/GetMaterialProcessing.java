@@ -5,7 +5,9 @@ import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.hippocampus.identity.port.CurrentUser;
+import com.hippocampus.materials.port.DocumentStructureRepository;
 import com.hippocampus.materials.port.MaterialMetadata;
+import com.hippocampus.materials.port.MaterialProcessingStateRepository;
 import com.hippocampus.materials.port.MaterialRepository;
 import com.hippocampus.materials.port.MaterialVersionReadRepository;
 
@@ -13,14 +15,20 @@ public class GetMaterialProcessing {
     private final CurrentUser currentUser;
     private final MaterialRepository materials;
     private final MaterialVersionReadRepository versions;
+    private final MaterialProcessingStateRepository processingStates;
+    private final DocumentStructureRepository structures;
 
     public GetMaterialProcessing(
             CurrentUser currentUser,
             MaterialRepository materials,
-            MaterialVersionReadRepository versions) {
+            MaterialVersionReadRepository versions,
+            MaterialProcessingStateRepository processingStates,
+            DocumentStructureRepository structures) {
         this.currentUser = currentUser;
         this.materials = materials;
         this.versions = versions;
+        this.processingStates = processingStates;
+        this.structures = structures;
     }
 
     @Transactional(readOnly = true)
@@ -33,18 +41,40 @@ public class GetMaterialProcessing {
                 versions.findActiveOrLatestByMaterialId(materialId).orElse(null);
 
         String readiness = material.status();
-        Double progress = version != null && version.progress() != null ? version.progress().doubleValue() : null;
-        String limitation = version != null && "LIMITED".equalsIgnoreCase(version.extractionQuality())
-                ? "Some pages or images could not be processed."
-                : null;
+        MaterialProcessingStateRepository.DurableProcessingState state = version == null
+                ? null
+                : processingStates.findCurrentPhaseThreeState(version.versionId()).orElse(null);
+        Double progress = meaningfulProgress(state);
+        String limitation = limitation(readiness);
+        boolean structureAvailable = version != null && structures.hasDocumentRoot(version.versionId());
 
         return new MaterialProcessingResult(
                 material.id(),
                 version != null ? version.versionId() : null,
                 readiness,
-                null,
+                state != null ? state.stage() : null,
                 progress,
-                limitation);
+                limitation,
+                structureAvailable);
+    }
+
+    private static Double meaningfulProgress(
+            MaterialProcessingStateRepository.DurableProcessingState state) {
+        if (state == null || state.progress() == null
+                || state.progressCurrent() == null || state.progressTotal() == null) {
+            return null;
+        }
+        return state.progress().doubleValue();
+    }
+
+    private static String limitation(String readiness) {
+        if ("PARTIALLY_READY".equals(readiness)) {
+            return "Some parts of this material could not be fully processed.";
+        }
+        if ("FAILED".equals(readiness)) {
+            return "This material could not be processed.";
+        }
+        return null;
     }
 
     public record MaterialProcessingResult(
@@ -53,5 +83,6 @@ public class GetMaterialProcessing {
             String readiness,
             String stage,
             Double progress,
-            String limitation) {}
+            String limitation,
+            boolean structureAvailable) {}
 }

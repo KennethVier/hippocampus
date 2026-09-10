@@ -26,7 +26,7 @@ function renderAt(path: string) {
 }
 
 function materialProcessing(readiness: string, overrides: Partial<MaterialProcessing> = {}): MaterialProcessing {
-  return { materialId: id, versionId, readiness, stage: null, progress: null, limitation: null, ...overrides }
+  return { materialId: id, versionId, readiness, stage: null, progress: null, limitation: null, structureAvailable: false, ...overrides }
 }
 
 function node(
@@ -47,7 +47,7 @@ function structure(root: MaterialStructureNode | null): MaterialStructureRespons
 function mockDetail(processing: MaterialProcessing, tree = structure(null)) {
   vi.spyOn(api, 'getMaterial').mockResolvedValue({ ...material, status: processing.readiness })
   vi.spyOn(api, 'getMaterialStructure').mockResolvedValue(tree)
-  return vi.spyOn(api, 'getMaterialProcessing').mockResolvedValue(processing)
+  return vi.spyOn(api, 'getMaterialProcessing').mockResolvedValue({ ...processing, structureAvailable: tree.available })
 }
 
 async function advanceTimers(milliseconds: number) {
@@ -186,6 +186,30 @@ describe('Material detail', () => {
     expect(await screen.findByRole('heading', { name: 'Processing' })).toBeInTheDocument()
     expect(screen.queryByText('0%')).not.toBeInTheDocument()
     expect(screen.queryByText('Progress')).not.toBeInTheDocument()
+  })
+
+  it('fetches structure once when processing reports it became available', async () => {
+    vi.useFakeTimers()
+    const section = node('11111111-1111-4111-8111-111111111111', 'SECTION', '1.1 Cells', 2, 4)
+    const root = node('33333333-3333-4333-8333-333333333333', 'DOCUMENT', 'Document', 1, 10, [section])
+    const materialSpy = vi.spyOn(api, 'getMaterial').mockResolvedValue({ ...material, status: 'PROCESSING' })
+    vi.spyOn(api, 'getMaterialProcessing')
+      .mockResolvedValueOnce(materialProcessing('PROCESSING', { structureAvailable: false }))
+      .mockResolvedValueOnce(materialProcessing('PROCESSING', { structureAvailable: true }))
+    const structureSpy = vi.spyOn(api, 'getMaterialStructure').mockResolvedValue(structure(root))
+
+    renderAt(`/materials/${id}`)
+    await advanceTimers(0)
+    expect(screen.getByRole('heading', { name: material.title })).toBeInTheDocument()
+    expect(structureSpy).not.toHaveBeenCalled()
+
+    await advanceTimers(10_000)
+    await advanceTimers(0)
+
+    expect(screen.getByRole('button', { name: 'Document (1-10)' })).toBeInTheDocument()
+    expect(screen.getByText('1.1 Cells (2-4)')).toBeInTheDocument()
+    expect(structureSpy).toHaveBeenCalledTimes(1)
+    expect(materialSpy).toHaveBeenCalledTimes(1)
   })
 
   it('uses generic safe text for unknown readiness and hides raw internal jargon', async () => {

@@ -102,6 +102,11 @@ class DetectDocumentStructureTests {
                 id -> new PdfExtractionSource(id, new BinaryObjectKey("materials/source.pdf"), 10),
                 new DocumentStructureRepository() {
                     @Override
+                    public boolean hasDocumentRoot(UUID materialVersionId) {
+                        return true;
+                    }
+
+                    @Override
                     public Optional<DocumentNode> findDocumentRoot(UUID materialVersionId) {
                         return Optional.of(root());
                     }
@@ -138,6 +143,11 @@ class DetectDocumentStructureTests {
 
     private static DocumentStructureRepository repository() {
         return new DocumentStructureRepository() {
+            @Override
+            public boolean hasDocumentRoot(UUID materialVersionId) {
+                return true;
+            }
+
             @Override
             public Optional<DocumentNode> findDocumentRoot(UUID materialVersionId) {
                 return Optional.of(root());

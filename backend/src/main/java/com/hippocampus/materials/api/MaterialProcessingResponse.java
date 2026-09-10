@@ -8,4 +8,5 @@ public record MaterialProcessingResponse(
         String readiness,
         String stage,
         Double progress,
-        String limitation) {}
+        String limitation,
+        boolean structureAvailable) {}

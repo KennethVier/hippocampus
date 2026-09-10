@@ -22,7 +22,10 @@ export function displayProcessingStatus(status: string): string {
 
 export function displayProcessingStage(stage: string | null): string | null {
   switch (stage) {
+    case 'VALIDATING': return 'Validating material'
+    case 'EXTRACTING': return 'Extracting text'
     case 'STRUCTURE_DETECTION': return 'Detecting structure'
+    case 'VISUAL_PROCESSING': return 'Processing visuals'
     case 'TEXT_NORMALIZATION': return 'Preparing text'
     case 'CHUNKING': return 'Preparing study sections'
     default: return null

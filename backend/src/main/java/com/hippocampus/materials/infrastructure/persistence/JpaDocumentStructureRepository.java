@@ -21,6 +21,12 @@ public final class JpaDocumentStructureRepository implements DocumentStructureRe
     }
 
     @Override
+    public boolean hasDocumentRoot(UUID materialVersionId) {
+        return nodes.existsByMaterialVersionIdAndNodeTypeAndParentIdIsNull(
+                materialVersionId, DocumentNodeType.DOCUMENT);
+    }
+
+    @Override
     public Optional<DocumentNode> findDocumentRoot(UUID materialVersionId) {
         return nodes.findByMaterialVersionIdAndNodeTypeAndParentIdIsNull(
                         materialVersionId, DocumentNodeType.DOCUMENT)

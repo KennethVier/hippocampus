@@ -13,6 +13,7 @@ import com.hippocampus.materials.application.GetMaterialStructure;
 import com.hippocampus.materials.application.ListMaterials;
 import com.hippocampus.materials.port.DocumentStructureRepository;
 import com.hippocampus.materials.port.MaterialLifecycleTelemetry;
+import com.hippocampus.materials.port.MaterialProcessingStateRepository;
 import com.hippocampus.materials.port.MaterialRepository;
 import com.hippocampus.materials.port.MaterialVersionReadRepository;
 
@@ -37,8 +38,10 @@ public class MaterialManagementConfiguration {
     GetMaterialProcessing getMaterialProcessing(
             CurrentUser currentUser,
             MaterialRepository materials,
-            MaterialVersionReadRepository versions) {
-        return new GetMaterialProcessing(currentUser, materials, versions);
+            MaterialVersionReadRepository versions,
+            MaterialProcessingStateRepository processingStates,
+            DocumentStructureRepository structures) {
+        return new GetMaterialProcessing(currentUser, materials, versions, processingStates, structures);
     }
 
     @Bean

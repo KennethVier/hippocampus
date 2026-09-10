@@ -132,6 +132,7 @@ class ExtractPdfVisualsTests {
 
     private static DocumentStructureRepository repository(List<DocumentNode> nodes) {
         return new DocumentStructureRepository() {
+            @Override public boolean hasDocumentRoot(UUID id) { return false; }
             @Override public Optional<DocumentNode> findDocumentRoot(UUID id) { return Optional.empty(); }
             @Override public List<DocumentNode> findNodesByMaterialVersion(UUID id) { return nodes; }
             @Override public List<DocumentNode> findChildren(UUID id, UUID parentId) { return List.of(); }
