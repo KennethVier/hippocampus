@@ -1,5 +1,6 @@
 package com.hippocampus.testing;
 
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -71,6 +72,9 @@ public abstract class PostgresIntegrationTestSupport {
         var sources = new Class<?>[additionalSources.length + 1];
         sources[0] = HippocampusApplication.class;
         System.arraycopy(additionalSources, 0, sources, 1, additionalSources.length);
+        String trustedExecutable = Path.of(
+                System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java")
+                .toAbsolutePath().normalize().toString();
         var defaultArguments = new String[] {
                 "--spring.autoconfigure.exclude=",
                 "--spring.datasource.url=" + POSTGRES.getJdbcUrl(),
@@ -81,7 +85,8 @@ public abstract class PostgresIntegrationTestSupport {
                 "--spring.flyway.user=" + POSTGRES.getUsername(),
                 "--spring.flyway.password=" + POSTGRES.getPassword(),
                 "--spring.flyway.baseline-on-migrate=false",
-                "--server.port=0"
+                "--server.port=0",
+                "--hippocampus.materials.processing.pdf.ocr-executable=" + trustedExecutable
         };
         var applicationArguments = Arrays.copyOf(defaultArguments, defaultArguments.length + additionalArguments.length);
         System.arraycopy(additionalArguments, 0, applicationArguments, defaultArguments.length, additionalArguments.length);
@@ -89,5 +94,9 @@ public abstract class PostgresIntegrationTestSupport {
                 .web(WebApplicationType.SERVLET)
                 .profiles("test")
                 .run(applicationArguments);
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").startsWith("Windows");
     }
 }

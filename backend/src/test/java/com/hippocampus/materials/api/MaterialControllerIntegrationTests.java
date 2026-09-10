@@ -149,7 +149,9 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
             own.setActiveVersionId(active.getId());
             materials.saveAndFlush(own);
 
-            DocumentNodeEntity root = new DocumentNodeEntity();
+            var ctor = DocumentNodeEntity.class.getDeclaredConstructor();
+            ctor.setAccessible(true);
+            DocumentNodeEntity root = (DocumentNodeEntity) ctor.newInstance();
             ReflectionTestUtils.setField(root, "id", UUID.randomUUID());
             ReflectionTestUtils.setField(root, "materialVersionId", active.getId());
             ReflectionTestUtils.setField(root, "parentId", null);
@@ -172,7 +174,8 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
             mvc.perform(get("/api/materials/{id}/processing", own.getId())
                             .with(authenticatedAs(users.userA())))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.status").value("PARTIALLY_READY"))
+                    .andExpect(jsonPath("$.readiness").value("PARTIALLY_READY"))
+                    .andExpect(jsonPath("$.stage").value("PARTIALLY_READY"))
                     .andExpect(jsonPath("$.progress").value(72.5))
                     .andExpect(jsonPath("$.limitation").value("Some pages or images could not be processed."));
 
@@ -184,10 +187,11 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
             mvc.perform(get("/api/materials/{id}/structure", own.getId())
                             .with(authenticatedAs(users.userA())))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.id").value(root.getId().toString()))
-                    .andExpect(jsonPath("$.title").value("Document"))
-                    .andExpect(jsonPath("$.nodeType").value("DOCUMENT"))
-                    .andExpect(jsonPath("$.children.length()").value(0));
+                    .andExpect(jsonPath("$.available").value(true))
+                    .andExpect(jsonPath("$.root.id").value(root.getId().toString()))
+                    .andExpect(jsonPath("$.root.title").value("Document"))
+                    .andExpect(jsonPath("$.root.nodeType").value("DOCUMENT"))
+                    .andExpect(jsonPath("$.root.children.length()").value(0));
 
             mvc.perform(get("/api/materials/{id}/structure", foreign.getId())
                             .with(authenticatedAs(users.userA())))

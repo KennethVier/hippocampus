@@ -11,10 +11,10 @@ import com.hippocampus.materials.application.GetMaterial;
 import com.hippocampus.materials.application.GetMaterialProcessing;
 import com.hippocampus.materials.application.GetMaterialStructure;
 import com.hippocampus.materials.application.ListMaterials;
-import com.hippocampus.materials.infrastructure.persistence.SpringDataDocumentNodeRepository;
-import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialVersionRepository;
+import com.hippocampus.materials.port.DocumentStructureRepository;
 import com.hippocampus.materials.port.MaterialLifecycleTelemetry;
 import com.hippocampus.materials.port.MaterialRepository;
+import com.hippocampus.materials.port.MaterialVersionReadRepository;
 
 @AutoConfiguration(after = {
         MaterialLifecycleTelemetryConfiguration.class,
@@ -37,7 +37,7 @@ public class MaterialManagementConfiguration {
     GetMaterialProcessing getMaterialProcessing(
             CurrentUser currentUser,
             MaterialRepository materials,
-            SpringDataMaterialVersionRepository versions) {
+            MaterialVersionReadRepository versions) {
         return new GetMaterialProcessing(currentUser, materials, versions);
     }
 
@@ -45,8 +45,8 @@ public class MaterialManagementConfiguration {
     GetMaterialStructure getMaterialStructure(
             CurrentUser currentUser,
             MaterialRepository materials,
-            SpringDataDocumentNodeRepository nodes) {
-        return new GetMaterialStructure(currentUser, materials, nodes);
+            DocumentStructureRepository structures) {
+        return new GetMaterialStructure(currentUser, materials, structures);
     }
 
     @Bean

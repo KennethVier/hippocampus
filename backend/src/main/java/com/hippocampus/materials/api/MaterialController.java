@@ -61,7 +61,8 @@ public class MaterialController {
         return new MaterialProcessingResponse(
                 result.materialId(),
                 result.versionId(),
-                result.status(),
+                result.readiness(),
+                result.stage(),
                 result.progress(),
                 result.limitation(),
                 result.updatedAt());
@@ -70,22 +71,20 @@ public class MaterialController {
     @GetMapping("/{materialId}/structure")
     MaterialStructureResponse structure(@PathVariable UUID materialId) {
         GetMaterialStructure.MaterialStructureResult result = getMaterialStructure.execute(materialId);
-        return toResponse(result);
+        return new MaterialStructureResponse(
+                result.available(),
+                toNode(result.root()));
     }
 
-    private MaterialStructureResponse toResponse(GetMaterialStructure.MaterialStructureResult result) {
-        if (result == null) {
-            return new MaterialStructureResponse(null, "UNAVAILABLE", null, null, null, java.util.List.of());
-        }
-        return new MaterialStructureResponse(
-                result.id(),
-                result.nodeType(),
-                result.title(),
-                result.startPage(),
-                result.endPage(),
-                result.children() == null ? java.util.List.of() : result.children().stream()
-                        .map(this::toResponse)
-                        .toList());
+    private MaterialStructureResponse.MaterialNode toNode(GetMaterialStructure.MaterialNode node) {
+        if (node == null) return null;
+        return new MaterialStructureResponse.MaterialNode(
+                node.id(),
+                node.nodeType(),
+                node.title(),
+                node.startPage(),
+                node.endPage(),
+                node.children() == null ? java.util.List.of() : node.children().stream().map(this::toNode).toList());
     }
 
     @DeleteMapping("/{materialId}")

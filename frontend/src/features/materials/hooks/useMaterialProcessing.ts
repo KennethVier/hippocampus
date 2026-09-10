@@ -12,8 +12,8 @@ export function useMaterialProcessing(materialId: string | null) {
     },
     enabled: materialId !== null && materialId !== 'invalid',
     refetchInterval: (query) => {
-      const status = query.state.data?.status
-      return status === 'PROCESSING' ? 4000 : false
+      const readiness = query.state.data?.readiness
+      return readiness === 'PROCESSING' ? 4000 : false
     },
   })
 }
@@ -31,9 +31,9 @@ export function useMaterialStructure(materialId: string | null) {
 
 export function materialProcessingSummary(processing: MaterialProcessing | undefined): string {
   if (!processing) return 'Processing status is being updated.'
-  if (processing.status === 'PARTIALLY_READY') return 'Most of this material is ready. Some pages or images could not be processed.'
-  if (processing.status === 'FAILED') return 'This material needs attention before it can be used.'
-  if (processing.status === 'PROCESSING') return `Processing ${Math.round(processing.progress)}%`
-  if (processing.status === 'READY') return 'Ready to study.'
+  if (processing.readiness === 'PARTIALLY_READY') return 'Most of this material is ready. Some pages or images could not be processed.'
+  if (processing.readiness === 'FAILED') return 'This material needs attention before it can be used.'
+  if (processing.readiness === 'PROCESSING') return `Processing ${Math.round(processing.progress ?? 0)}%`
+  if (processing.readiness === 'READY') return 'Ready to study.'
   return processing.limitation ?? 'Processing status is being updated.'
 }

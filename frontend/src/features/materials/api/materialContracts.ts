@@ -6,7 +6,7 @@ const nonEmpty = z.string().trim().min(1)
 export const materialSchema = z.strictObject({
   id: z.uuid(), title: nonEmpty, materialType: nonEmpty,
   originalFilename: z.string().nullable(), mimeType: z.string().nullable(),
-  status: nonEmpty, activeVersionId: z.uuid().nullable(), createdAt: instant, updatedAt: instant,
+  status: nonEmpty, createdAt: instant, updatedAt: instant,
 })
 
 export const materialPageSchema = z.strictObject({
@@ -16,14 +16,18 @@ export const materialPageSchema = z.strictObject({
 })
 
 export const materialProcessingSchema = z.strictObject({
-  materialId: z.uuid(), versionId: z.uuid().nullable(), status: nonEmpty, progress: z.number().finite(),
-  limitation: z.string().nullable(), updatedAt: instant,
+  materialId: z.uuid(), versionId: z.uuid().nullable(), readiness: nonEmpty, stage: z.string().nullable(),
+  progress: z.number().finite().nullable(), limitation: z.string().nullable(), updatedAt: instant,
 })
 
-export const materialStructureNodeSchema: z.ZodType<MaterialStructureNode> = z.lazy(() => z.strictObject({
+export const materialStructureNodeSchema = z.strictObject({
   id: z.uuid(), nodeType: nonEmpty, title: z.string().nullable(), startPage: z.number().int().nullable(),
-  endPage: z.number().int().nullable(), children: z.array(materialStructureNodeSchema),
-}))
+  endPage: z.number().int().nullable(), children: z.array(z.lazy(() => materialStructureNodeSchema)),
+})
+
+export const materialStructureResponseSchema = z.strictObject({
+  available: z.boolean(), root: materialStructureNodeSchema.nullable(),
+})
 
 export const materialUploadSchema = z.strictObject({
   materialId: z.uuid(), versionId: z.uuid(), title: nonEmpty, materialType: nonEmpty,
@@ -43,4 +47,8 @@ export type MaterialStructureNode = {
   startPage: number | null
   endPage: number | null
   children: MaterialStructureNode[]
+}
+export type MaterialStructureResponse = {
+  available: boolean
+  root: MaterialStructureNode | null
 }

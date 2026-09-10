@@ -28,9 +28,9 @@ export function MaterialDetailPage() {
   if (material.isPending) return <section className="materials-page"><Skeleton label="Loading Material" /><Skeleton /></section>
   if (material.isError) return <ErrorState title="Material could not be loaded" description="Try again when you are ready." action={<Button onClick={() => void material.refetch()}>Try again</Button>} />
   const current = material.data
-  const processingStatus = processing.data ? displayProcessingStatus(processing.data.status) : displayMaterialStatus(current.status)
-  const statusSummary = processing.data ? `${processingStatus} · ${Math.round(processing.data.progress)}%` : processingStatus
-  const structureRoot = structure.data
+  const processingStatus = processing.data ? displayProcessingStatus(processing.data.readiness) : displayMaterialStatus(current.status)
+  const statusSummary = processing.data && processing.data.progress !== null ? `${processingStatus} · ${Math.round(processing.data.progress)}%` : processingStatus
+  const structureRoot = structure.data?.root
 
   return <section className="materials-page" aria-labelledby="material-title">
     <nav aria-label="Breadcrumb"><Link to="/materials">Materials</Link><span aria-hidden="true"> / </span><span>{current.title}</span></nav>
@@ -38,7 +38,7 @@ export function MaterialDetailPage() {
     <section aria-live="polite" className="material-processing-panel">
       <h2>Processing</h2>
       <p>{statusSummary}</p>
-      {processing.data ? <div><strong>{processing.data.status}</strong> <span>{Math.round(processing.data.progress)}%</span></div> : null}
+      {processing.data && processing.data.progress !== null ? <div><strong>{processing.data.readiness}</strong> <span>{Math.round(processing.data.progress)}%</span></div> : null}
       {processing.data && processing.data.limitation ? <p>{processing.data.limitation}</p> : null}
     </section>
     <dl className="material-detail-metadata">
@@ -49,7 +49,7 @@ export function MaterialDetailPage() {
       <dt>Added</dt><dd>{new Date(current.createdAt).toLocaleString()}</dd>
       <dt>Last updated</dt><dd>{new Date(current.updatedAt).toLocaleString()}</dd>
     </dl>
-    {structureRoot && (structureRoot.id || structureRoot.nodeType || structureRoot.children.length > 0) ? (
+    {structure.data?.available && structureRoot ? (
       <section>
         <h2>Structure</h2>
         <ul>

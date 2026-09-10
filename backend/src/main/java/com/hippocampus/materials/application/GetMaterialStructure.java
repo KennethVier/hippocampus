@@ -1,31 +1,32 @@
 package com.hippocampus.materials.application;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.transaction.annotation.Transactional;
 
 import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.materials.domain.DocumentNode;
-import com.hippocampus.materials.domain.DocumentNodeType;
-import com.hippocampus.materials.infrastructure.persistence.DocumentNodeEntity;
-import com.hippocampus.materials.infrastructure.persistence.SpringDataDocumentNodeRepository;
+import com.hippocampus.materials.port.DocumentStructureRepository;
 import com.hippocampus.materials.port.MaterialMetadata;
 import com.hippocampus.materials.port.MaterialRepository;
 
 public class GetMaterialStructure {
     private final CurrentUser currentUser;
     private final MaterialRepository materials;
-    private final SpringDataDocumentNodeRepository nodes;
+    private final DocumentStructureRepository structures;
 
     public GetMaterialStructure(
             CurrentUser currentUser,
             MaterialRepository materials,
-            SpringDataDocumentNodeRepository nodes) {
+            DocumentStructureRepository structures) {
         this.currentUser = currentUser;
         this.materials = materials;
-        this.nodes = nodes;
+        this.structures = structures;
     }
 
     @Transactional(readOnly = true)
@@ -33,56 +34,54 @@ public class GetMaterialStructure {
         UUID ownerId = currentUser.authenticatedUser().userId();
         MaterialMetadata material = materials.findVisibleOwnedById(materialId, ownerId)
                 .orElseThrow(MaterialFailures::notFound);
+
         UUID versionId = material.activeVersionId();
         if (versionId == null) {
-            return new MaterialStructureResult(null, "UNAVAILABLE", null, null, null, List.of());
+            return new MaterialStructureResult(false, null);
         }
 
-        DocumentNodeEntity root = nodes.findByMaterialVersionIdAndNodeTypeAndParentIdIsNull(
-                        versionId, DocumentNodeType.DOCUMENT)
+        List<DocumentNode> nodes = structures.findNodesByMaterialVersion(versionId);
+        if (nodes.isEmpty()) {
+            return new MaterialStructureResult(false, null);
+        }
+
+        Map<UUID, List<DocumentNode>> childrenByParent = new HashMap<>();
+        for (DocumentNode node : nodes) {
+            childrenByParent.computeIfAbsent(node.parentId(), ignored -> new ArrayList<>())
+                    .add(node);
+        }
+        for (List<DocumentNode> children : childrenByParent.values()) {
+            children.sort(Comparator.comparing(DocumentNode::ordinal, Comparator.nullsLast(Integer::compareTo)));
+        }
+
+        DocumentNode root = nodes.stream()
+                .filter(node -> node.parentId() == null && node.nodeType().name().equals("DOCUMENT"))
+                .findFirst()
                 .orElse(null);
-        return root == null
-                ? new MaterialStructureResult(null, "UNAVAILABLE", null, null, null, List.of())
-                : MaterialStructureResult.from(root, nodes.findByMaterialVersionIdAndParentIdOrderByOrdinalAsc(
-                        versionId, root.getId()));
+
+        return new MaterialStructureResult(true, root == null ? null : MaterialStructureResult.fromNode(root, childrenByParent));
     }
 
-    public record MaterialStructureResult(
+    public record MaterialStructureResult(boolean available, MaterialNode root) {
+        static MaterialNode fromNode(DocumentNode node, Map<UUID, List<DocumentNode>> childrenByParent) {
+            List<DocumentNode> children = childrenByParent.getOrDefault(node.id(), List.of());
+            return new MaterialNode(
+                    node.id(),
+                    node.nodeType().name(),
+                    node.title(),
+                    node.startPage(),
+                    node.endPage(),
+                    children.stream()
+                            .map(child -> fromNode(child, childrenByParent))
+                            .toList());
+        }
+    }
+
+    public record MaterialNode(
             UUID id,
             String nodeType,
             String title,
             Integer startPage,
             Integer endPage,
-            List<MaterialStructureResult> children) {
-        static MaterialStructureResult from(DocumentNodeEntity root, List<DocumentNodeEntity> children) {
-            return new MaterialStructureResult(
-                    root.getId(),
-                    root.getNodeType().name(),
-                    root.getTitle(),
-                    root.getStartPage(),
-                    root.getEndPage(),
-                    children.stream().map(GetMaterialStructure.MaterialStructureResult::fromEntity).toList());
-        }
-
-        static MaterialStructureResult fromEntity(DocumentNodeEntity node) {
-            List<MaterialStructureResult> nested = List.of();
-            return new MaterialStructureResult(
-                    node.getId(),
-                    node.getNodeType().name(),
-                    node.getTitle(),
-                    node.getStartPage(),
-                    node.getEndPage(),
-                    nested);
-        }
-
-        static MaterialStructureResult from(DocumentNode child, List<MaterialStructureResult> nested) {
-            return new MaterialStructureResult(
-                    child.id(),
-                    child.nodeType().name(),
-                    child.title(),
-                    child.startPage(),
-                    child.endPage(),
-                    nested);
-        }
-    }
+            List<MaterialNode> children) {}
 }

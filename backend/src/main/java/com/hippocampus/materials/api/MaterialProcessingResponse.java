@@ -6,7 +6,8 @@ import java.util.UUID;
 public record MaterialProcessingResponse(
         UUID materialId,
         UUID versionId,
-        String status,
-        double progress,
+        String readiness,
+        String stage,
+        Double progress,
         String limitation,
         Instant updatedAt) {}
