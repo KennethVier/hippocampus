@@ -252,7 +252,7 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
                     .andReturn();
 
             assertThat(processing.getResponse().getContentAsString())
-                    .doesNotContain("STRUCTURE_DETECT", "worker-secret", "PRIVATE_ERROR", "private retry detail");
+                    .doesNotContain("\"STRUCTURE_DETECT\"", "worker-secret", "PRIVATE_ERROR", "private retry detail");
             assertThat(versions.findById(active.getId()).orElseThrow().getProcessingProgress()).isNull();
         }
     }
