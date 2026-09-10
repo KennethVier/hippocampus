@@ -1,5 +1,7 @@
 package com.hippocampus.materials.domain;
 
+import java.util.UUID;
+
 /** Lifecycle facts, independent of persistence and future indexing implementations. */
 public final class MaterialReadiness {
     private MaterialReadiness() {}
@@ -18,10 +20,19 @@ public final class MaterialReadiness {
         if (facts.index() != IndexPrerequisite.SATISFIED) return State.PROCESSING;
         return facts.limitedEvidence() ? State.PARTIALLY_READY : State.READY;
     }
-    public static String parent(State candidate, String currentParent, String activeVersionStatus) {
+    public static String parent(State candidate, String currentParent, UUID activeVersionId,
+            UUID failedVersionId, String activeVersionStatus) {
         if ("DELETED".equals(currentParent)) return currentParent;
-        if (candidate == State.FAILED && ("READY".equals(activeVersionStatus)
-                || "PARTIALLY_READY".equals(activeVersionStatus))) return activeVersionStatus;
+        if (candidate == State.FAILED) {
+            if (activeVersionId != null && failedVersionId != null
+                    && activeVersionId.equals(failedVersionId)) return "FAILED";
+            if (activeVersionId != null && !activeVersionId.equals(failedVersionId)
+                    && ("READY".equals(activeVersionStatus)
+                            || "PARTIALLY_READY".equals(activeVersionStatus))) {
+                return activeVersionStatus;
+            }
+            return "FAILED";
+        }
         return candidate.name();
     }
     public static boolean usable(String method, String quality) {

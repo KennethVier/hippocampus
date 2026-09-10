@@ -2,6 +2,7 @@ package com.hippocampus.materials.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static com.hippocampus.materials.domain.MaterialReadiness.*;
+import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -51,15 +52,23 @@ class MaterialReadinessTests {
     }
     @ParameterizedTest @CsvSource({"READY,READY", "PARTIALLY_READY,PARTIALLY_READY", "PROCESSING,FAILED", ",FAILED"})
     void failedCandidateRestoresOnlyUsableActiveStatus(String active, String expected) {
-        assertThat(parent(State.FAILED,"PROCESSING",active)).isEqualTo(expected);
+        assertThat(parent(State.FAILED,"PROCESSING",UUID.fromString("11111111-1111-1111-1111-111111111111"),UUID.fromString("22222222-2222-2222-2222-222222222222"),active)).isEqualTo(expected);
+    }
+    @Test void failedCandidateDoesNotRestoreFromSameActiveVersion() {
+        UUID version=UUID.fromString("11111111-1111-1111-1111-111111111111");
+        assertThat(parent(State.FAILED,"PROCESSING",version,version,"READY")).isEqualTo("FAILED");
+        assertThat(parent(State.FAILED,"PROCESSING",version,version,"PARTIALLY_READY")).isEqualTo("FAILED");
     }
     @Test void firstVersionParentFollowsItsDerivedState() {
-        for (State state : State.values()) assertThat(parent(state,"UPLOADED",null)).isEqualTo(state.name());
+        UUID version=UUID.fromString("11111111-1111-1111-1111-111111111111");
+        for (State state : State.values()) assertThat(parent(state,"UPLOADED",version,version,null)).isEqualTo(state.name());
     }
     @Test void processingCandidateAndDeletion() {
-        for (String active : new String[]{"READY","PARTIALLY_READY"}) {
-            assertThat(parent(State.PROCESSING,"READY",active)).isEqualTo("PROCESSING");
-            for (State state : State.values()) assertThat(parent(state,"DELETED",active)).isEqualTo("DELETED");
+        UUID active=UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID candidate=UUID.fromString("22222222-2222-2222-2222-222222222222");
+        for (String status : new String[]{"READY","PARTIALLY_READY"}) {
+            assertThat(parent(State.PROCESSING,"READY",active,candidate,status)).isEqualTo("PROCESSING");
+            for (State state : State.values()) assertThat(parent(state,"DELETED",active,candidate,status)).isEqualTo("DELETED");
         }
     }
 }

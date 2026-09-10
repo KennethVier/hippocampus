@@ -43,6 +43,18 @@ class MaterialReadinessIntegrationTests extends PostgresIntegrationTestSupport {
         assertThat(jdbc.sql("SELECT active_version_id FROM materials WHERE id=?").param(f.material()).query(UUID.class).single()).isEqualTo(f.active());
         assertThat(jdbc.sql("SELECT activated_at FROM material_versions WHERE id=?").param(f.version()).query((r,n)->r.getObject(1)).list().getFirst()).isNull();
     }
+    @Test void currentlyActiveVersionFailureIsFailClosed() {
+        Fixture f=activeFixture("READY"); ClaimedProcessingJob job=claim();
+        fail(job,ProcessingFailure.Kind.FATAL);
+        assertState(f,"FAILED","FAILED");
+        assertThat(jdbc.sql("SELECT active_version_id FROM materials WHERE id=?").param(f.material()).query(UUID.class).single()).isEqualTo(f.version());
+    }
+    @Test void exhaustedRecoveryForCurrentlyActiveVersionIsFailClosed() {
+        Fixture f=activeFixture("PARTIALLY_READY"); ClaimedProcessingJob job=claim();
+        exhaust(job); assertThat(context.getBean(ClaimNextProcessingJob.class).execute("worker")).isEmpty();
+        assertState(f,"FAILED","FAILED");
+        assertThat(jdbc.sql("SELECT active_version_id FROM materials WHERE id=?").param(f.material()).query(UUID.class).single()).isEqualTo(f.version());
+    }
     @Test void wrongWorkerStaleAttemptAndForgedVersionCannotMutateLifecycle() {
         Fixture f=fixture(null); ClaimedProcessingJob old=claim();
         ClaimedProcessingJob wrong=new ClaimedProcessingJob(old.jobId(),old.jobType(),old.materialVersionId(),"v1","wrong",1,3);
@@ -179,6 +191,14 @@ class MaterialReadinessIntegrationTests extends PostgresIntegrationTestSupport {
         jdbc.sql("INSERT INTO material_versions(id,material_id,version_number,processing_status,storage_key,file_size_bytes,page_count,created_at) VALUES (?,?,?,'UPLOADED','source',100,1,CURRENT_TIMESTAMP)").param(version).param(material).param(active==null?1:2).update();
         Fixture f=new Fixture(user,material,version,active,null);
         return new Fixture(user,material,version,active,job(f,"MATERIAL_VALIDATE","PENDING"));
+    }
+    private Fixture activeFixture(String activeStatus) {
+        UUID user=UUID.randomUUID(), material=UUID.randomUUID(), version=UUID.randomUUID();
+        jdbc.sql("INSERT INTO users(id,email,status,created_at,updated_at) VALUES (?,?,'ACTIVE',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)").param(user).param(user+"@example.test").update();
+        jdbc.sql("INSERT INTO materials(id,user_id,title,material_type,status,created_at,updated_at) VALUES (?,?,'Readiness','PDF',?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)").param(material).param(user).param(activeStatus).update();
+        jdbc.sql("INSERT INTO material_versions(id,material_id,version_number,processing_status,storage_key,file_size_bytes,page_count,created_at) VALUES (?,?,1,?, 'source',100,1,CURRENT_TIMESTAMP)").param(version).param(material).param(activeStatus).update();
+        jdbc.sql("UPDATE materials SET active_version_id=? WHERE id=?").param(version).param(material).update();
+        return new Fixture(user, material, version, version, job(new Fixture(user, material, version, version, null), "MATERIAL_VALIDATE", "PENDING"));
     }
     private UUID job(Fixture f,String type,String status) {
         UUID id=UUID.randomUUID();

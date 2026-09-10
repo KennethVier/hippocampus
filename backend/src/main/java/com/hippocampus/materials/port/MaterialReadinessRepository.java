@@ -9,6 +9,6 @@ public interface MaterialReadinessRepository {
     Optional<Snapshot> lockAndRead(UUID jobId);
     void update(Snapshot snapshot, MaterialReadiness.State versionStatus, String parentStatus);
 
-    record Snapshot(UUID materialId, UUID versionId, String parentStatus, String activeVersionStatus,
-            boolean latestVersion, MaterialReadiness.Facts facts) {}
+    record Snapshot(UUID materialId, UUID versionId, String parentStatus, UUID activeVersionId,
+            String activeVersionStatus, boolean latestVersion, MaterialReadiness.Facts facts) {}
 }

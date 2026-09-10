@@ -15,7 +15,8 @@ public class DeriveMaterialReadiness {
         materials.lockAndRead(transitionedJobId).ifPresent(snapshot -> {
             var state = MaterialReadiness.derive(snapshot.facts());
             String parent = snapshot.latestVersion()
-                    ? MaterialReadiness.parent(state, snapshot.parentStatus(), snapshot.activeVersionStatus())
+                    ? MaterialReadiness.parent(state, snapshot.parentStatus(), snapshot.activeVersionId(),
+                            snapshot.versionId(), snapshot.activeVersionStatus())
                     : snapshot.parentStatus();
             materials.update(snapshot, state, parent);
         });

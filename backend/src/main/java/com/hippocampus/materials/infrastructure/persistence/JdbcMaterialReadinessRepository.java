@@ -30,14 +30,15 @@ public final class JdbcMaterialReadinessRepository implements MaterialReadinessR
                 .param("id", c.materialId()).query(String.class).single();
         if ("DELETED".equals(parent)) return Optional.empty();
         var parentFacts = jdbc.sql("""
-                SELECT active.processing_status AS active_status,
+                SELECT m.active_version_id AS active_version_id,
+                       active.processing_status AS active_status,
                        NOT EXISTS (SELECT 1 FROM material_versions newer
                            WHERE newer.material_id=m.id AND newer.version_number>mv.version_number) AS latest
                 FROM materials m JOIN material_versions mv ON mv.id=:version
                 LEFT JOIN material_versions active ON active.id=m.active_version_id AND active.material_id=m.id
                 WHERE m.id=:material
                 """).param("version", c.versionId()).param("material", c.materialId())
-                .query((r,n) -> new Parent(r.getString("active_status"), r.getBoolean("latest"))).single();
+                .query((r,n) -> new Parent(r.getObject("active_version_id", UUID.class), r.getString("active_status"), r.getBoolean("latest"))).single();
         var stages = jdbc.sql("""
                 SELECT count(*) AS total, count(DISTINCT job_type) AS types,
                        count(*) FILTER (WHERE status='COMPLETED') AS completed,
@@ -67,8 +68,9 @@ public final class JdbcMaterialReadinessRepository implements MaterialReadinessR
                     .param("version", c.versionId()).query(String.class).list();
             limited |= visualStatuses.stream().anyMatch(MaterialReadiness::visualLimitation);
         }
-        return Optional.of(new Snapshot(c.materialId(), c.versionId(), parent, parentFacts.activeStatus(),
-                parentFacts.latest(), new MaterialReadiness.Facts(stages.total()>0, stages.failed()>0,
+        return Optional.of(new Snapshot(c.materialId(), c.versionId(), parent, parentFacts.activeVersionId(),
+                parentFacts.activeStatus(), parentFacts.latest(),
+                new MaterialReadiness.Facts(stages.total()>0, stages.failed()>0,
                     completed, valid, usable, limited, MaterialReadiness.IndexPrerequisite.ABSENT)));
     }
 
@@ -121,7 +123,7 @@ public final class JdbcMaterialReadinessRepository implements MaterialReadinessR
             throw new IllegalStateException("Readiness derivation requires the job transition transaction");
     }
     private record Context(UUID versionId, UUID materialId, String processingVersion) {}
-    private record Parent(String activeStatus, boolean latest) {}
+    private record Parent(UUID activeVersionId, String activeStatus, boolean latest) {}
     private record Stages(long total, long types, long completed, long failed) {}
     private record Quality(String method, String quality) {}
 }
