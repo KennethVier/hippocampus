@@ -26,6 +26,8 @@ public final class JdbcProcessingJobStageCompletionRepository
                   AND job_type = :executedStage
                   AND locked_by = :workerId
                   AND attempt_count = :attemptNumber
+                  AND material_version_id IS NOT DISTINCT FROM :versionId
+                  AND processing_version = :processingVersion
                 RETURNING user_id, material_version_id, priority, max_attempts, processing_version
             ), inserted AS (
                 INSERT INTO processing_jobs (
@@ -61,6 +63,8 @@ public final class JdbcProcessingJobStageCompletionRepository
                 .param("executedStage", job.jobType().name())
                 .param("workerId", job.workerId())
                 .param("attemptNumber", job.attemptNumber())
+                .param("versionId", job.materialVersionId(), Types.OTHER)
+                .param("processingVersion", job.processingVersion())
                 .param("nextJobId", UUID.randomUUID())
                 .param("nextStage", nextDurableStage == null ? null : nextDurableStage.name(), Types.VARCHAR)
                 .query(Boolean.class)

@@ -1,10 +1,8 @@
 package com.hippocampus.materials.port;
 
-import java.util.Optional;
-
-import com.hippocampus.materials.domain.ClaimedProcessingJob;
+import com.hippocampus.materials.domain.ProcessingClaimOutcome;
 
 public interface ProcessingJobClaimRepository {
 
-    Optional<ClaimedProcessingJob> claimNextEligible(String workerId, long staleTimeoutSeconds);
+    ProcessingClaimOutcome claimNextEligible(String workerId, long staleTimeoutSeconds);
 }

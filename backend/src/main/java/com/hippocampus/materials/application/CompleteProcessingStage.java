@@ -9,7 +9,10 @@ import com.hippocampus.materials.port.ProcessingJobStageCompletionRepository;
 public class CompleteProcessingStage {
     private final ProcessingJobStageCompletionRepository jobs;
 
-    public CompleteProcessingStage(ProcessingJobStageCompletionRepository jobs) {
+    private final DeriveMaterialReadiness readiness;
+
+    public CompleteProcessingStage(ProcessingJobStageCompletionRepository jobs, DeriveMaterialReadiness readiness) {
+        this.readiness = readiness;
         this.jobs = jobs;
     }
 
@@ -23,5 +26,6 @@ public class CompleteProcessingStage {
         if (!jobs.completeSuccessfulStage(job, nextDurableStage)) {
             throw new ProcessingStageCompletionException(job.jobId(), result.executedStage());
         }
+        readiness.execute(job.jobId());
     }
 }

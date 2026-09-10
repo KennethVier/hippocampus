@@ -10,7 +10,7 @@ import com.hippocampus.materials.port.ProcessingJobExecutionRepository;
 class FinalizeProcessingFailureTests {
     private final ProcessingJobExecutionRepository jobs = mock(ProcessingJobExecutionRepository.class);
     private final FinalizeProcessingFailure finalizer = new FinalizeProcessingFailure(jobs,
-            new ProcessingRetryPolicy(Duration.ofSeconds(5), Duration.ofMinutes(1)));
+            new ProcessingRetryPolicy(Duration.ofSeconds(5), Duration.ofMinutes(1)), mock(DeriveMaterialReadiness.class));
     @Test void schedulesBoundedRetryWhenAttemptsRemain() {
         ClaimedProcessingJob job = job(1, 3);
         when(jobs.retry(job, "STORAGE_UNAVAILABLE", Duration.ofSeconds(5))).thenReturn(true);

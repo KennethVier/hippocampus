@@ -362,7 +362,7 @@ class PdfExtractionPersistenceIntegrationTests extends PostgresIntegrationTestSu
                     jobId, ProcessingJobType.MATERIAL_EXTRACT, versionId, "processor-v1");
             ExecuteClaimedProcessingJob completionFails = new ExecuteClaimedProcessingJob(
                     new ProcessingDispatcher(List.of(handler)),
-                    new CompleteProcessingStage((ignoredJob, ignoredNext) -> false));
+                    new CompleteProcessingStage((ignoredJob, ignoredNext) -> false, org.mockito.Mockito.mock(com.hippocampus.materials.application.DeriveMaterialReadiness.class)));
 
             assertThatThrownBy(() -> completionFails.execute(job))
                     .isInstanceOf(ProcessingStageCompletionException.class);

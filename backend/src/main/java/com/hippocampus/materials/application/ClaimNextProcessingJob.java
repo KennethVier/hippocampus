@@ -16,19 +16,21 @@ public class ClaimNextProcessingJob {
     private final ProcessingJobClaimRepository jobs;
     private final Duration staleTimeout;
 
-    public ClaimNextProcessingJob(ProcessingJobClaimRepository jobs) {
-        this(jobs, Duration.ofMinutes(1));
-    }
-
-    public ClaimNextProcessingJob(ProcessingJobClaimRepository jobs, Duration staleTimeout) {
+    private final DeriveMaterialReadiness readiness;
+    public ClaimNextProcessingJob(ProcessingJobClaimRepository jobs, Duration staleTimeout,
+            DeriveMaterialReadiness readiness) {
         this.jobs = jobs;
         this.staleTimeout = staleTimeout;
+        this.readiness = readiness;
     }
 
     @Transactional
     public Optional<ClaimedProcessingJob> execute(String workerId) {
         validateWorkerId(workerId);
-        return jobs.claimNextEligible(workerId, staleTimeout.toSeconds());
+        var outcome = jobs.claimNextEligible(workerId, staleTimeout.toSeconds());
+        outcome.exhaustedJobId().ifPresent(readiness::execute);
+        outcome.claimed().ifPresent(job -> readiness.execute(job.jobId()));
+        return outcome.claimed();
     }
 
     private static void validateWorkerId(String workerId) {

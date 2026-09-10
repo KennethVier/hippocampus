@@ -39,15 +39,15 @@ class ProcessingJobRecoveryIntegrationTests extends PostgresIntegrationTestSuppo
             UUID due = insert("RETRY", 1, NOW, null, null);
             execute("UPDATE processing_jobs SET next_attempt_at=CURRENT_TIMESTAMP + interval '1 hour' WHERE id='" + early + "'");
             execute("UPDATE processing_jobs SET next_attempt_at=CURRENT_TIMESTAMP - interval '1 second' WHERE id='" + due + "'");
-            assertThat(claims.claimNextEligible("worker-a", 60)).get()
+            assertThat(claims.claimNextEligible("worker-a", 60).claimed()).get()
                     .extracting(ClaimedProcessingJob::jobId).isEqualTo(due);
-            assertThat(claims.claimNextEligible("worker-a", 60)).isEmpty();
+            assertThat(claims.claimNextEligible("worker-a", 60).claimed()).isEmpty();
             execute("UPDATE processing_jobs SET status='COMPLETED' WHERE id='" + early + "'");
             UUID healthy = insert("RUNNING", 1, null, NOW.minusSeconds(59), "old-worker");
             UUID stale = insert("RUNNING", 1, null, NOW.minusSeconds(61), "old-worker");
             execute("UPDATE processing_jobs SET last_heartbeat_at=CURRENT_TIMESTAMP - interval '59 seconds' WHERE id='" + healthy + "'");
             execute("UPDATE processing_jobs SET last_heartbeat_at=CURRENT_TIMESTAMP - interval '61 seconds' WHERE id='" + stale + "'");
-            ClaimedProcessingJob reclaimed = claims.claimNextEligible("worker-b", 60).orElseThrow();
+            ClaimedProcessingJob reclaimed = claims.claimNextEligible("worker-b", 60).claimed().orElseThrow();
             assertThat(reclaimed.jobId()).isEqualTo(stale);
             assertThat(reclaimed.attemptNumber()).isEqualTo(2);
             assertThat(reclaimed.workerId()).isEqualTo("worker-b");
@@ -62,14 +62,14 @@ class ProcessingJobRecoveryIntegrationTests extends PostgresIntegrationTestSuppo
             JdbcProcessingJobExecutionRepository execution = new JdbcProcessingJobExecutionRepository(jdbc);
             JdbcProcessingJobStageCompletionRepository completion = new JdbcProcessingJobStageCompletionRepository(jdbc);
             UUID id = insert("PENDING", 0, null, null, null);
-            ClaimedProcessingJob first = claims.claimNextEligible("worker-a", 60).orElseThrow();
+            ClaimedProcessingJob first = claims.claimNextEligible("worker-a", 60).claimed().orElseThrow();
             assertThat(execution.progress(first, 4, 10L)).isTrue();
             assertThat(execution.progress(first, 3, 10L)).isTrue();
             assertThat(rowLong(id, "progress_current")).isEqualTo(4);
             assertThat(execution.retry(first, "STORAGE_UNAVAILABLE", Duration.ofSeconds(5))).isTrue();
-            assertThat(claims.claimNextEligible("worker-b", 60)).isEmpty();
+            assertThat(claims.claimNextEligible("worker-b", 60).claimed()).isEmpty();
             execute("UPDATE processing_jobs SET next_attempt_at=CURRENT_TIMESTAMP WHERE id='" + id + "'");
-            ClaimedProcessingJob second = claims.claimNextEligible("worker-b", 60).orElseThrow();
+            ClaimedProcessingJob second = claims.claimNextEligible("worker-b", 60).claimed().orElseThrow();
             assertThat(second.jobId()).isEqualTo(id);
             assertThat(execution.heartbeat(first)).isFalse();
             assertThat(execution.progress(first, 8, 10L)).isFalse();
@@ -88,13 +88,13 @@ class ProcessingJobRecoveryIntegrationTests extends PostgresIntegrationTestSuppo
             JdbcProcessingJobClaimRepository claims = new JdbcProcessingJobClaimRepository(context.getBean(JdbcClient.class));
             UUID exhausted = insert("RUNNING", 3, null, null, "exhausted-worker");
             execute("UPDATE processing_jobs SET locked_at=CURRENT_TIMESTAMP - interval '2 minutes', last_heartbeat_at=NULL WHERE id='" + exhausted + "'");
-            assertThat(claims.claimNextEligible("recovery-worker", 60)).isEmpty();
+            assertThat(claims.claimNextEligible("recovery-worker", 60).claimed()).isEmpty();
             assertThat(rowString(exhausted, "status")).isEqualTo("FAILED");
             assertThat(rowString(exhausted, "error_code")).isEqualTo("PROCESSING_RETRY_EXHAUSTED");
 
             UUID legacy = insert("RUNNING", 2, null, null, "legacy-worker");
             execute("UPDATE processing_jobs SET locked_at=CURRENT_TIMESTAMP - interval '2 minutes', last_heartbeat_at=NULL WHERE id='" + legacy + "'");
-            ClaimedProcessingJob reclaimed = claims.claimNextEligible("recovery-worker", 60).orElseThrow();
+            ClaimedProcessingJob reclaimed = claims.claimNextEligible("recovery-worker", 60).claimed().orElseThrow();
             assertThat(reclaimed.jobId()).isEqualTo(legacy);
             assertThat(reclaimed.attemptNumber()).isEqualTo(3);
         }
@@ -118,7 +118,7 @@ class ProcessingJobRecoveryIntegrationTests extends PostgresIntegrationTestSuppo
                 lock.executeQuery();
 
                 ClaimedProcessingJob claimed = executor.submit(
-                        () -> claims.claimNextEligible("other-worker", 60).orElseThrow())
+                        () -> claims.claimNextEligible("other-worker", 60).claimed().orElseThrow())
                         .get(5, TimeUnit.SECONDS);
 
                 assertThat(claimed.jobId()).isEqualTo(eligible);
@@ -134,14 +134,14 @@ class ProcessingJobRecoveryIntegrationTests extends PostgresIntegrationTestSuppo
             JdbcProcessingJobClaimRepository claims = new JdbcProcessingJobClaimRepository(jdbc);
             JdbcProcessingJobExecutionRepository execution = new JdbcProcessingJobExecutionRepository(jdbc);
             id = insert("PENDING", 0, null, null, null);
-            ClaimedProcessingJob first = claims.claimNextEligible("before-restart", 60).orElseThrow();
+            ClaimedProcessingJob first = claims.claimNextEligible("before-restart", 60).claimed().orElseThrow();
             assertThat(execution.progress(first, 2, 5L)).isTrue();
             assertThat(execution.retry(first, "STORAGE_UNAVAILABLE", Duration.ofSeconds(5))).isTrue();
             execute("UPDATE processing_jobs SET next_attempt_at=CURRENT_TIMESTAMP WHERE id='" + id + "'");
         }
         try (var secondContext = startApplicationWithFlyway()) {
             JdbcProcessingJobClaimRepository claims = new JdbcProcessingJobClaimRepository(secondContext.getBean(JdbcClient.class));
-            ClaimedProcessingJob resumed = claims.claimNextEligible("after-restart", 60).orElseThrow();
+            ClaimedProcessingJob resumed = claims.claimNextEligible("after-restart", 60).claimed().orElseThrow();
             assertThat(resumed.jobId()).isEqualTo(id);
             assertThat(resumed.attemptNumber()).isEqualTo(2);
             assertThat(rowLong(id, "progress_current")).isEqualTo(2);
@@ -171,16 +171,16 @@ class ProcessingJobRecoveryIntegrationTests extends PostgresIntegrationTestSuppo
                     context.getBean(CompleteProcessingStage.class),
                     new ProcessingFailureClassifier(),
                     new FinalizeProcessingFailure(execution,
-                            new ProcessingRetryPolicy(Duration.ofSeconds(5), Duration.ofMinutes(1))),
+                            new ProcessingRetryPolicy(Duration.ofSeconds(5), Duration.ofMinutes(1)), org.mockito.Mockito.mock(com.hippocampus.materials.application.DeriveMaterialReadiness.class)),
                     healthyHeartbeat());
 
-            ClaimedProcessingJob first = claims.claimNextEligible("worker-a", 60).orElseThrow();
+            ClaimedProcessingJob first = claims.claimNextEligible("worker-a", 60).claimed().orElseThrow();
             assertThatThrownBy(() -> executor.execute(first))
                     .isInstanceOf(BinaryObjectStoreException.class);
             assertThat(rowString(fixture.jobId(), "status")).isEqualTo("RETRY");
             execute("UPDATE processing_jobs SET next_attempt_at=CURRENT_TIMESTAMP WHERE id='" + fixture.jobId() + "'");
 
-            ClaimedProcessingJob second = claims.claimNextEligible("worker-b", 60).orElseThrow();
+            ClaimedProcessingJob second = claims.claimNextEligible("worker-b", 60).claimed().orElseThrow();
             executor.execute(second);
 
             assertThat(second.jobId()).isEqualTo(first.jobId());
