@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import com.hippocampus.materials.domain.ClaimedProcessingJob;
 import com.hippocampus.materials.domain.ProcessingJobType;
 import com.hippocampus.materials.port.MaterialSourceValidator;
+import com.hippocampus.materials.port.MaterialSourceValidationException;
+import com.hippocampus.materials.port.BinaryObjectStoreException;
 
 class MaterialValidateStageHandlerTests {
 
@@ -45,11 +47,12 @@ class MaterialValidateStageHandlerTests {
                 UUID.randomUUID(), ProcessingJobType.MATERIAL_VALIDATE, versionId, "v1",
                 "worker-1", 1, 3);
 
-        doThrow(new IllegalArgumentException("Material is deleted")).when(sourceValidator).validate(versionId);
+        doThrow(new MaterialSourceValidationException(
+                MaterialSourceValidationException.Kind.SOURCE_NOT_PROCESSABLE))
+                .when(sourceValidator).validate(versionId);
 
         assertThatThrownBy(() -> handler.handle(job))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Material is deleted");
+                .isInstanceOf(MaterialSourceValidationException.class);
     }
 
     @Test
@@ -60,10 +63,10 @@ class MaterialValidateStageHandlerTests {
                 UUID.randomUUID(), ProcessingJobType.MATERIAL_VALIDATE, versionId, "v1",
                 "worker-1", 1, 3);
 
-        doThrow(new RuntimeException("Store error")).when(sourceValidator).validate(versionId);
+        doThrow(new BinaryObjectStoreException("Store error")).when(sourceValidator).validate(versionId);
 
         assertThatThrownBy(() -> handler.handle(job))
-                .isInstanceOf(RuntimeException.class)
+                .isInstanceOf(BinaryObjectStoreException.class)
                 .hasMessageContaining("Store error");
     }
 }

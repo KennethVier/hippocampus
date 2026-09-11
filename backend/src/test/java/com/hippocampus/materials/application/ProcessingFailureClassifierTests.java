@@ -9,6 +9,8 @@ import java.sql.SQLException;
 import com.hippocampus.materials.domain.ProcessingFailure;
 import com.hippocampus.materials.port.OcrException;
 import com.hippocampus.materials.port.PdfExtractionException;
+import com.hippocampus.materials.port.BinaryObjectStoreException;
+import com.hippocampus.materials.port.MaterialSourceValidationException;
 
 class ProcessingFailureClassifierTests {
     private final ProcessingFailureClassifier classifier = new ProcessingFailureClassifier();
@@ -29,6 +31,20 @@ class ProcessingFailureClassifierTests {
         ProcessingFailure unknown = classifier.classify(new RuntimeException("synthetic-secret-source"));
         assertThat(unknown.kind()).isEqualTo(ProcessingFailure.Kind.FATAL);
         assertThat(unknown.errorCode()).isEqualTo("PROCESSING_INTERNAL_ERROR").doesNotContain("secret", "source");
+    }
+
+    @Test void classifiesMaterialSourceValidationAsExplicitFatalFailure() {
+        assertThat(classifier.classify(new MaterialSourceValidationException(
+                MaterialSourceValidationException.Kind.SOURCE_NOT_AVAILABLE)))
+                .isEqualTo(new ProcessingFailure(ProcessingFailure.Kind.FATAL, "SOURCE_VALIDATION_FAILED"));
+        assertThat(classifier.classify(new MaterialSourceValidationException(
+                MaterialSourceValidationException.Kind.SOURCE_NOT_PROCESSABLE)))
+                .isEqualTo(new ProcessingFailure(ProcessingFailure.Kind.FATAL, "SOURCE_VALIDATION_FAILED"));
+    }
+
+    @Test void preservesStorageFailureAsTransient() {
+        assertThat(classifier.classify(new BinaryObjectStoreException("synthetic-secret")))
+                .isEqualTo(new ProcessingFailure(ProcessingFailure.Kind.TRANSIENT, "STORAGE_UNAVAILABLE"));
     }
 
     @Test void retriesOcrTimeoutWrappedByProductionPdfExtractionBoundary() {

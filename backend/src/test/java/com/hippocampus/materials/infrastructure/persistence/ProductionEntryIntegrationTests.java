@@ -111,7 +111,7 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
 
         var failedJob = jobs.findById(initialJob.getId()).orElseThrow();
         assertThat(failedJob.getStatus()).isEqualTo(ProcessingJobStatus.FAILED);
-        assertThat(failedJob.getErrorCode()).isEqualTo("PROCESSING_INTERNAL_ERROR");
+        assertThat(failedJob.getErrorCode()).isEqualTo("SOURCE_VALIDATION_FAILED");
         assertThat(materials.findById(result.materialId()).orElseThrow().getStatus()).isEqualTo("DELETED");
         var extractJob = jobs.findAll().stream()
                 .filter(j -> j.getMaterialVersionId() != null && j.getMaterialVersionId().equals(versionId))

@@ -9,6 +9,7 @@ import com.hippocampus.materials.port.BinaryObjectKey;
 import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.BinaryObjectStoreException;
 import com.hippocampus.materials.port.MaterialSourceValidator;
+import com.hippocampus.materials.port.MaterialSourceValidationException;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -32,18 +33,22 @@ public final class PersistentMaterialSourceValidator implements MaterialSourceVa
         Objects.requireNonNull(materialVersionId, "Material version ID must not be null");
 
         MaterialVersionEntity version = versions.findById(materialVersionId)
-                .orElseThrow(() -> new IllegalArgumentException("Material version not found: " + materialVersionId));
+                .orElseThrow(() -> new MaterialSourceValidationException(
+                        MaterialSourceValidationException.Kind.SOURCE_NOT_AVAILABLE));
 
         MaterialEntity material = materials.findById(version.getMaterialId())
-                .orElseThrow(() -> new IllegalArgumentException("Material not found for version: " + materialVersionId));
+                .orElseThrow(() -> new MaterialSourceValidationException(
+                        MaterialSourceValidationException.Kind.SOURCE_NOT_AVAILABLE));
 
         if ("DELETED".equals(material.getStatus())) {
-            throw new IllegalArgumentException("Material is deleted: " + material.getId());
+            throw new MaterialSourceValidationException(
+                    MaterialSourceValidationException.Kind.SOURCE_NOT_PROCESSABLE);
         }
 
         String storageKey = version.getStorageKey();
         if (storageKey == null || storageKey.isBlank()) {
-            throw new IllegalArgumentException("Material version has no storage key: " + materialVersionId);
+            throw new MaterialSourceValidationException(
+                    MaterialSourceValidationException.Kind.SOURCE_NOT_PROCESSABLE);
         }
 
         verifyStorageReadable(storageKey);
