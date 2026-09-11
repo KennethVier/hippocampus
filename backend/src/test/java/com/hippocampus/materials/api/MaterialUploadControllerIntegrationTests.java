@@ -39,12 +39,10 @@ import com.hippocampus.materials.MaterialUploadFixtures;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialRepository;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialVersionRepository;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataProcessingJobRepository;
-import com.hippocampus.materials.infrastructure.persistence.JpaMaterialUploadPersistence;
-import com.hippocampus.materials.infrastructure.persistence.MaterialVersionEntity;
 import com.hippocampus.materials.infrastructure.storage.filesystem.FileSystemBinaryObjectStore;
 import com.hippocampus.materials.port.BinaryObjectKey;
 import com.hippocampus.materials.port.BinaryObjectStore;
-import com.hippocampus.materials.port.MaterialUploadPersistence;
+import com.hippocampus.materials.domain.ProcessingJobType;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 import com.hippocampus.testing.security.OwnershipTestUsers;
 
@@ -106,6 +104,9 @@ class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSu
                 context.getBean(BinaryObjectStore.class).get(new BinaryObjectKey(version.getStorageKey()), retrieved);
                 assertThat(Base64.getEncoder().encodeToString(retrieved.toByteArray())).isIn(expectedObjects);
             });
+            assertThat(context.getBean(SpringDataProcessingJobRepository.class).findAll())
+                    .singleElement()
+                    .satisfies(job -> assertThat(job.getJobType()).isEqualTo(ProcessingJobType.MATERIAL_VALIDATE));
             MeterRegistry meterRegistry = context.getBean(MeterRegistry.class);
             assertThat(counterValue(meterRegistry, UPLOAD_ACCEPTED_METRIC)).isEqualTo(4);
             assertThat(counterValue(
@@ -218,6 +219,7 @@ class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSu
             SpringDataMaterialVersionRepository actualVersions = context.getBean(
                     "springDataMaterialVersionRepository", SpringDataMaterialVersionRepository.class);
             assertThat(actualVersions.count()).isZero();
+            assertThat(context.getBean(SpringDataProcessingJobRepository.class).count()).isZero();
             assertNoStoredObjects(context.getBean("uploadTestStorageRoot", Path.class));
             MeterRegistry meterRegistry = context.getBean(MeterRegistry.class);
             assertThat(counterValue(meterRegistry, UPLOAD_ACCEPTED_METRIC)).isZero();
@@ -258,17 +260,15 @@ class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSu
 
     @Configuration(proxyBeanMethods = false)
     static class RollbackTestConfiguration {
-        @Bean("rollbackMaterialUploadPersistence")
+        @Bean("rollbackProcessingJobRepository")
         @Primary
-        MaterialUploadPersistence rollbackMaterialUploadPersistence(
-                SpringDataMaterialRepository materials,
-                @Qualifier("springDataMaterialVersionRepository") SpringDataMaterialVersionRepository versions,
-                SpringDataProcessingJobRepository jobs) {
-            SpringDataMaterialVersionRepository failingVersions = mock(
-                    SpringDataMaterialVersionRepository.class, delegatesTo(versions));
-            doThrow(new DataIntegrityViolationException("forced version failure"))
-                    .when(failingVersions).saveAndFlush(any(MaterialVersionEntity.class));
-            return new JpaMaterialUploadPersistence(materials, failingVersions, jobs);
+        SpringDataProcessingJobRepository rollbackProcessingJobRepository(
+                @Qualifier("springDataProcessingJobRepository") SpringDataProcessingJobRepository delegate) {
+            SpringDataProcessingJobRepository failing = mock(
+                    SpringDataProcessingJobRepository.class, delegatesTo(delegate));
+            doThrow(new DataIntegrityViolationException("forced initial job persistence failure"))
+                    .when(failing).saveAndFlush(any());
+            return failing;
         }
     }
 

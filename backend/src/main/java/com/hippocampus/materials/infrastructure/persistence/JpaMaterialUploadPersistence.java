@@ -34,10 +34,12 @@ public class JpaMaterialUploadPersistence implements MaterialUploadPersistence {
         version.setFileSizeBytes(upload.fileSizeBytes());
         MaterialVersionEntity persistedVersion = versions.saveAndFlush(version);
 
-        ProcessingJobEntity initialJob = new ProcessingJobEntity(
-                upload.ownerId(), persistedVersion.getId(), ProcessingJobType.MATERIAL_VALIDATE,
-                ProcessingJobStatus.PENDING, 1, null, 0, 3, "processor-v1");
-        jobs.saveAndFlush(initialJob);
+        if ("PDF".equals(upload.materialType())) {
+            ProcessingJobEntity initialJob = new ProcessingJobEntity(
+                    upload.ownerId(), persistedVersion.getId(), ProcessingJobType.MATERIAL_VALIDATE,
+                    ProcessingJobStatus.PENDING, 1, null, 0, 3, "processor-v1");
+            jobs.saveAndFlush(initialJob);
+        }
 
         return new CreatedMaterial(persistedMaterial.getId(), persistedVersion.getId(), persistedMaterial.getCreatedAt());
     }

@@ -2,23 +2,28 @@ package com.hippocampus.materials.infrastructure.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import com.hippocampus.identity.infrastructure.persistence.UserRepository;
-import com.hippocampus.materials.port.MaterialUploadPersistence;
-import com.hippocampus.materials.port.MaterialUploadPersistence.InitialMaterial;
 import com.hippocampus.materials.domain.ProcessingJobType;
 import com.hippocampus.materials.domain.ProcessingJobStatus;
+import com.hippocampus.materials.port.MaterialUploadPersistence;
+import com.hippocampus.materials.port.MaterialUploadPersistence.InitialMaterial;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 import com.hippocampus.testing.security.OwnershipTestUsers;
 
@@ -73,24 +78,33 @@ class MaterialUploadAtomicPersistenceIntegrationTests extends PostgresIntegratio
 
     @Test
     void rollsBackMaterialAndVersionWhenJobPersistenceFails() {
-        // We need to force the job repository to fail. Since it's a Spring bean, we can use @MockBean,
-        // but that would affect all tests in the context. We can use a spy or a mock if we provide a custom configuration.
-        // For this specific test, let's use a mock for the job repository.
-        // Wait, JpaMaterialUploadPersistence is a bean. I can't easily replace its dependencies for one test.
-        // I'll use a different approach: cause a constraint violation in the DB.
+        try (var context = startApplicationWithFlyway(FailingJobPersistenceConfiguration.class)) {
+            UserRepository usersRepository = context.getBean(UserRepository.class);
+            OwnershipTestUsers users = OwnershipTestUsers.persistWith(usersRepository, "atomic-failure");
+            UUID ownerId = users.userA().userId();
+            InitialMaterial upload = new InitialMaterial(
+                    ownerId, "Atomic Failure", "PDF", "fail.pdf", "application/pdf", "key-fail", 1024L);
 
-        OwnershipTestUsers users = OwnershipTestUsers.persistWith(userRepository, "atomic-failure");
-        UUID ownerId = users.userA().userId();
-        InitialMaterial upload = new InitialMaterial(
-                ownerId, "Atomic Failure", "PDF", "fail.pdf", "application/pdf", "key-fail", 1024L);
+            assertThatThrownBy(() -> context.getBean(MaterialUploadPersistence.class).createInitialMaterial(upload))
+                    .isInstanceOf(DataIntegrityViolationException.class);
 
-        // To force a failure in ProcessingJob persistence, we can insert a job that violates a unique constraint.
-        // The unique constraint is uq_processing_jobs_active_material_version_stage on (material_version_id, job_type, processing_version).
-        // But we don't have the material_version_id yet.
+            assertThat(context.getBean(SpringDataMaterialRepository.class).count()).isZero();
+            assertThat(context.getBean(SpringDataMaterialVersionRepository.class).count()).isZero();
+            assertThat(context.getBean(SpringDataProcessingJobRepository.class).count()).isZero();
+        }
+    }
 
-        // Instead, let's use a MockBean for SpringDataProcessingJobRepository for this test.
-        // Actually, let's just mock the repository and use a separate context or a spy.
-        // Since I can't easily do that with @Autowired beans in a single test class,
-        // I'll use a dedicated test configuration or just mock it.
+    @Configuration(proxyBeanMethods = false)
+    static class FailingJobPersistenceConfiguration {
+        @Bean
+        @Primary
+        SpringDataProcessingJobRepository failingProcessingJobRepository(
+                @Qualifier("springDataProcessingJobRepository") SpringDataProcessingJobRepository delegate) {
+            SpringDataProcessingJobRepository failing = mock(
+                    SpringDataProcessingJobRepository.class, delegatesTo(delegate));
+            doThrow(new DataIntegrityViolationException("forced job persistence failure"))
+                    .when(failing).saveAndFlush(any(ProcessingJobEntity.class));
+            return failing;
+        }
     }
 }
