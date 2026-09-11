@@ -20,7 +20,7 @@ public final class JdbcProcessingJobStageCompletionRepository
                 WHERE pj.id = :jobId
                   AND m.user_id = pj.user_id
                   AND m.status <> 'DELETED'
-                FOR SHARE OF m
+                FOR UPDATE OF m
             ), completed AS (
                 UPDATE processing_jobs
                 SET status = 'COMPLETED',
