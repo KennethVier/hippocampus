@@ -3,10 +3,16 @@ package com.hippocampus.materials.infrastructure.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -20,6 +26,8 @@ import com.hippocampus.materials.application.UploadMaterial;
 import com.hippocampus.materials.domain.ClaimedProcessingJob;
 import com.hippocampus.materials.domain.ProcessingJobStatus;
 import com.hippocampus.materials.domain.ProcessingJobType;
+import com.hippocampus.materials.infrastructure.storage.filesystem.FileSystemBinaryObjectStore;
+import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 import com.hippocampus.testing.security.OwnershipTestUsers;
 
@@ -32,7 +40,7 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
 
     @Test
     void fullProductionEntryLifecycle() {
-        try (var context = startApplicationWithFlyway()) {
+        try (var context = startApplicationWithFlyway(StorageTestConfiguration.class)) {
             UploadMaterial uploadMaterial = context.getBean(UploadMaterial.class);
             ClaimNextProcessingJob claimNextProcessingJob = context.getBean(ClaimNextProcessingJob.class);
             ExecuteClaimedProcessingJob executeClaimedProcessingJob = context.getBean(ExecuteClaimedProcessingJob.class);
@@ -76,7 +84,7 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
 
     @Test
     void validationFailsWhenMaterialIsDeletedAfterClaim() {
-        try (var context = startApplicationWithFlyway()) {
+        try (var context = startApplicationWithFlyway(StorageTestConfiguration.class)) {
             UploadMaterial uploadMaterial = context.getBean(UploadMaterial.class);
             ClaimNextProcessingJob claimNextProcessingJob = context.getBean(ClaimNextProcessingJob.class);
             ExecuteClaimedProcessingJob executeClaimedProcessingJob = context.getBean(ExecuteClaimedProcessingJob.class);
@@ -115,7 +123,7 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
 
     @Test
     void deletedMaterialIsNotClaimable() {
-        try (var context = startApplicationWithFlyway()) {
+        try (var context = startApplicationWithFlyway(StorageTestConfiguration.class)) {
             UploadMaterial uploadMaterial = context.getBean(UploadMaterial.class);
             ClaimNextProcessingJob claimNextProcessingJob = context.getBean(ClaimNextProcessingJob.class);
             SpringDataMaterialRepository materials = context.getBean(SpringDataMaterialRepository.class);
@@ -136,7 +144,7 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
 
     @Test
     void preventDuplicateMaterialExtractJobs() {
-        try (var context = startApplicationWithFlyway()) {
+        try (var context = startApplicationWithFlyway(StorageTestConfiguration.class)) {
             UploadMaterial uploadMaterial = context.getBean(UploadMaterial.class);
             ClaimNextProcessingJob claimNextProcessingJob = context.getBean(ClaimNextProcessingJob.class);
             ExecuteClaimedProcessingJob executeClaimedProcessingJob = context.getBean(ExecuteClaimedProcessingJob.class);
@@ -180,6 +188,19 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
             return uploadMaterial.execute(command);
         } finally {
             SecurityContextHolder.clearContext();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class StorageTestConfiguration {
+        @Bean("uploadTestStorageRoot")
+        Path uploadTestStorageRoot() throws IOException {
+            return Files.createTempDirectory("hippocampus-production-entry-");
+        }
+
+        @Bean
+        BinaryObjectStore binaryObjectStore(@Qualifier("uploadTestStorageRoot") Path root) {
+            return new FileSystemBinaryObjectStore(root);
         }
     }
 }
