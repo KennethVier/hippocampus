@@ -12,7 +12,16 @@ import com.hippocampus.materials.port.ProcessingJobStageCompletionRepository;
 public final class JdbcProcessingJobStageCompletionRepository
         implements ProcessingJobStageCompletionRepository {
     private static final String COMPLETE_SUCCESSFUL_STAGE = """
-            WITH completed AS (
+            WITH eligible_material AS (
+                SELECT m.id
+                FROM processing_jobs pj
+                JOIN material_versions mv ON mv.id = pj.material_version_id
+                JOIN materials m ON m.id = mv.material_id
+                WHERE pj.id = :jobId
+                  AND m.user_id = pj.user_id
+                  AND m.status <> 'DELETED'
+                FOR SHARE OF m
+            ), completed AS (
                 UPDATE processing_jobs
                 SET status = 'COMPLETED',
                     completed_at = CURRENT_TIMESTAMP,
@@ -28,6 +37,10 @@ public final class JdbcProcessingJobStageCompletionRepository
                   AND attempt_count = :attemptNumber
                   AND material_version_id IS NOT DISTINCT FROM :versionId
                   AND processing_version = :processingVersion
+                  AND (
+                      material_version_id IS NULL
+                      OR EXISTS (SELECT 1 FROM eligible_material)
+                  )
                 RETURNING user_id, material_version_id, priority, max_attempts, processing_version
             ), inserted AS (
                 INSERT INTO processing_jobs (

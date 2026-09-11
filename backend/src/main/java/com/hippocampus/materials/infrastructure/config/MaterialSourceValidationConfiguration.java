@@ -2,6 +2,7 @@ package com.hippocampus.materials.infrastructure.config;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 
 import com.hippocampus.materials.application.MaterialValidateStageHandler;
@@ -13,8 +14,9 @@ import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.MaterialSourceValidator;
 import com.hippocampus.materials.port.PdfSourceInspector;
 
-@AutoConfiguration(afterName = {
-        "org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration"
+@AutoConfiguration(after = {
+        DataJpaRepositoriesAutoConfiguration.class,
+        PdfExtractionConfiguration.class
 })
 @ConditionalOnBean({
         SpringDataMaterialRepository.class,

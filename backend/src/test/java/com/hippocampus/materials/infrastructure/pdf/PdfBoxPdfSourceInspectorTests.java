@@ -8,8 +8,15 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.pdfbox.io.RandomAccessStreamCache;
+import org.apache.pdfbox.io.ScratchFile;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.tika.Tika;
@@ -61,6 +68,29 @@ class PdfBoxPdfSourceInspectorTests {
         assertThatThrownBy(() -> new PdfBoxPdfSourceInspector(
                 new FailingStore(outage), new TikaMaterialContentInspector(new Tika()), 10).inspect(source))
                 .isSameAs(outage);
+    }
+
+    @Test
+    void usesDiskBackedPdfBoxCacheAndCleansUpTheStagedFile() throws Exception {
+        try (RandomAccessStreamCache cache = PdfBoxPdfSourceInspector.diskBackedStreamCache().create()) {
+            assertThat(cache).isInstanceOf(ScratchFile.class);
+        }
+
+        RecordingTemporaryFiles temporaryFiles = new RecordingTemporaryFiles();
+        AtomicBoolean usedConfiguredCache = new AtomicBoolean();
+        PdfBoxPdfSourceInspector inspector = new PdfBoxPdfSourceInspector(
+                new ByteArrayStore(MaterialUploadFixtures.validPdf()),
+                new TikaMaterialContentInspector(new Tika()), temporaryFiles, 10,
+                () -> {
+                    usedConfiguredCache.set(true);
+                    return PdfBoxPdfSourceInspector.diskBackedStreamCache().create();
+                });
+
+        inspector.inspect(source(MaterialUploadFixtures.validPdf()));
+
+        assertThat(usedConfiguredCache).isTrue();
+        assertThat(temporaryFiles.deleted).containsExactly(temporaryFiles.created);
+        assertThat(Files.exists(temporaryFiles.created)).isFalse();
     }
 
     private static void assertNotProcessable(byte[] bytes) {
@@ -129,6 +159,23 @@ class PdfBoxPdfSourceInspectorTests {
         @Override
         public void delete(BinaryObjectKey key) {
             throw new UnsupportedOperationException();
+        }
+    }
+
+    private static final class RecordingTemporaryFiles implements PdfTemporaryFiles {
+        private Path created;
+        private final List<Path> deleted = new ArrayList<>();
+
+        @Override
+        public Path create() throws IOException {
+            created = Files.createTempFile("pdf-source-inspector-test-", ".pdf");
+            return created;
+        }
+
+        @Override
+        public void delete(Path path) throws IOException {
+            deleted.add(path);
+            Files.deleteIfExists(path);
         }
     }
 }

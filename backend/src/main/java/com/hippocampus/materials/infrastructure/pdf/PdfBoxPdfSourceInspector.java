@@ -9,6 +9,8 @@ import java.nio.file.StandardOpenOption;
 import java.util.Objects;
 
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.io.MemoryUsageSetting;
+import org.apache.pdfbox.io.RandomAccessStreamCache;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
@@ -28,11 +30,14 @@ import com.hippocampus.materials.port.PdfSourceInspector;
  */
 public final class PdfBoxPdfSourceInspector implements PdfSourceInspector {
     private static final String PDF_MIME_TYPE = "application/pdf";
+    private static final RandomAccessStreamCache.StreamCacheCreateFunction DISK_BACKED_STREAM_CACHE =
+            MemoryUsageSetting.setupTempFileOnly().streamCache;
 
     private final BinaryObjectStore objectStore;
     private final MaterialContentInspector contentInspector;
     private final PdfTemporaryFiles temporaryFiles;
     private final int maxPages;
+    private final RandomAccessStreamCache.StreamCacheCreateFunction streamCache;
 
     public PdfBoxPdfSourceInspector(
             BinaryObjectStore objectStore,
@@ -46,6 +51,15 @@ public final class PdfBoxPdfSourceInspector implements PdfSourceInspector {
             MaterialContentInspector contentInspector,
             PdfTemporaryFiles temporaryFiles,
             int maxPages) {
+        this(objectStore, contentInspector, temporaryFiles, maxPages, DISK_BACKED_STREAM_CACHE);
+    }
+
+    PdfBoxPdfSourceInspector(
+            BinaryObjectStore objectStore,
+            MaterialContentInspector contentInspector,
+            PdfTemporaryFiles temporaryFiles,
+            int maxPages,
+            RandomAccessStreamCache.StreamCacheCreateFunction streamCache) {
         this.objectStore = Objects.requireNonNull(objectStore);
         this.contentInspector = Objects.requireNonNull(contentInspector);
         this.temporaryFiles = Objects.requireNonNull(temporaryFiles);
@@ -53,6 +67,7 @@ public final class PdfBoxPdfSourceInspector implements PdfSourceInspector {
             throw new IllegalArgumentException("PDF max-pages must be positive");
         }
         this.maxPages = maxPages;
+        this.streamCache = Objects.requireNonNull(streamCache);
     }
 
     @Override
@@ -112,7 +127,7 @@ public final class PdfBoxPdfSourceInspector implements PdfSourceInspector {
     }
 
     private void inspectPdf(Path staged) {
-        try (PDDocument document = Loader.loadPDF(staged.toFile())) {
+        try (PDDocument document = Loader.loadPDF(staged.toFile(), streamCache)) {
             if (document.isEncrypted()) {
                 throw notProcessable();
             }
@@ -133,6 +148,10 @@ public final class PdfBoxPdfSourceInspector implements PdfSourceInspector {
         } catch (IOException | RuntimeException exception) {
             throw notProcessable();
         }
+    }
+
+    static RandomAccessStreamCache.StreamCacheCreateFunction diskBackedStreamCache() {
+        return DISK_BACKED_STREAM_CACHE;
     }
 
     private void cleanup(Path staged, RuntimeException primary) {

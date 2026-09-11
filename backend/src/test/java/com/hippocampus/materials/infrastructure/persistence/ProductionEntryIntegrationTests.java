@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -23,6 +25,7 @@ import com.hippocampus.materials.MaterialUploadFixtures;
 import com.hippocampus.materials.application.ClaimNextProcessingJob;
 import com.hippocampus.materials.application.ExecuteClaimedProcessingJob;
 import com.hippocampus.materials.application.MaterialUploadResult;
+import com.hippocampus.materials.application.ProcessingStageCompletionException;
 import com.hippocampus.materials.application.UploadMaterial;
 import com.hippocampus.materials.domain.ClaimedProcessingJob;
 import com.hippocampus.materials.domain.ProcessingJobStatus;
@@ -31,6 +34,8 @@ import com.hippocampus.materials.infrastructure.storage.filesystem.FileSystemBin
 import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.BinaryObjectStoreException;
 import com.hippocampus.materials.port.MaterialSourceValidationException;
+import com.hippocampus.materials.port.PdfExtractionSource;
+import com.hippocampus.materials.port.PdfSourceInspector;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 import com.hippocampus.testing.security.OwnershipTestUsers;
 
@@ -123,6 +128,40 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
                     .filter(j -> j.getMaterialVersionId() != null && j.getMaterialVersionId().equals(versionId))
                     .filter(j -> j.getJobType() == ProcessingJobType.MATERIAL_EXTRACT)
                     .findFirst()).isEmpty();
+        }
+    }
+
+    @Test
+    void deletionAfterSourceInspectionStartsCannotCompleteValidationOrCreateExtractJob() {
+        try (var context = startApplicationWithFlyway(
+                StorageTestConfiguration.class, DeleteDuringSourceInspectionConfiguration.class)) {
+            UploadMaterial uploadMaterial = context.getBean(UploadMaterial.class);
+            ClaimNextProcessingJob claimNextProcessingJob = context.getBean(ClaimNextProcessingJob.class);
+            ExecuteClaimedProcessingJob executeClaimedProcessingJob = context.getBean(ExecuteClaimedProcessingJob.class);
+            SpringDataMaterialRepository materials = context.getBean(SpringDataMaterialRepository.class);
+            SpringDataProcessingJobRepository jobs = context.getBean(SpringDataProcessingJobRepository.class);
+            DeleteDuringSourceInspection inspector = context.getBean(DeleteDuringSourceInspection.class);
+            UserRepository userRepository = context.getBean(UserRepository.class);
+            OwnershipTestUsers users = OwnershipTestUsers.persistWith(userRepository, "entry-delete-during-validation");
+
+            MaterialUploadResult result = upload(uploadMaterial, users, "delete-during-validation.pdf",
+                    MaterialUploadFixtures.validPdf());
+            inspector.deleteMaterialWhenInspectionStarts(result.materialId());
+            ClaimedProcessingJob claimed = claimNextProcessingJob.execute("worker-1").orElseThrow();
+
+            assertThatThrownBy(() -> executeClaimedProcessingJob.execute(claimed))
+                    .isInstanceOf(ProcessingStageCompletionException.class);
+
+            assertThat(inspector.completedInspection()).isTrue();
+            assertThat(materials.findById(result.materialId())).get()
+                    .extracting(MaterialEntity::getStatus).isEqualTo("DELETED");
+            var failedValidation = jobs.findById(claimed.jobId()).orElseThrow();
+            assertThat(failedValidation.getStatus()).isEqualTo(ProcessingJobStatus.FAILED);
+            assertThat(failedValidation.getErrorCode()).isEqualTo("PROCESSING_INTERNAL_ERROR");
+            assertThat(jobs.findAll().stream()
+                    .filter(job -> result.versionId().equals(job.getMaterialVersionId()))
+                    .filter(job -> job.getJobType() == ProcessingJobType.MATERIAL_EXTRACT))
+                    .isEmpty();
         }
     }
 
@@ -344,6 +383,41 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
                 @Override
                 public void delete(com.hippocampus.materials.port.BinaryObjectKey key) {}
             };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class DeleteDuringSourceInspectionConfiguration {
+        @Bean
+        @Primary
+        DeleteDuringSourceInspection deleteDuringSourceInspection(SpringDataMaterialRepository materials) {
+            return new DeleteDuringSourceInspection(materials);
+        }
+    }
+
+    static final class DeleteDuringSourceInspection implements PdfSourceInspector {
+        private final SpringDataMaterialRepository materials;
+        private UUID materialIdToDelete;
+        private boolean completedInspection;
+
+        DeleteDuringSourceInspection(SpringDataMaterialRepository materials) {
+            this.materials = materials;
+        }
+
+        void deleteMaterialWhenInspectionStarts(UUID materialId) {
+            this.materialIdToDelete = materialId;
+        }
+
+        boolean completedInspection() {
+            return completedInspection;
+        }
+
+        @Override
+        public void inspect(PdfExtractionSource source) {
+            MaterialEntity material = materials.findById(materialIdToDelete).orElseThrow();
+            material.setStatus("DELETED");
+            materials.saveAndFlush(material);
+            completedInspection = true;
         }
     }
 }
