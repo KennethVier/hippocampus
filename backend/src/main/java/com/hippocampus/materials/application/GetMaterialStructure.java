@@ -13,6 +13,7 @@ import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.materials.domain.DocumentNode;
 import com.hippocampus.materials.port.DocumentStructureRepository;
 import com.hippocampus.materials.port.MaterialMetadata;
+import com.hippocampus.materials.port.MaterialProcessingStateRepository;
 import com.hippocampus.materials.port.MaterialRepository;
 import com.hippocampus.materials.port.MaterialVersionReadRepository;
 
@@ -21,16 +22,19 @@ public class GetMaterialStructure {
     private final MaterialRepository materials;
     private final DocumentStructureRepository structures;
     private final MaterialVersionReadRepository versions;
+    private final MaterialProcessingStateRepository processingStates;
 
     public GetMaterialStructure(
             CurrentUser currentUser,
             MaterialRepository materials,
             DocumentStructureRepository structures,
-            MaterialVersionReadRepository versions) {
+            MaterialVersionReadRepository versions,
+            MaterialProcessingStateRepository processingStates) {
         this.currentUser = currentUser;
         this.materials = materials;
         this.structures = structures;
         this.versions = versions;
+        this.processingStates = processingStates;
     }
 
     @Transactional(readOnly = true)
@@ -42,7 +46,7 @@ public class GetMaterialStructure {
         UUID versionId = versions.findActiveOrLatestByMaterialId(materialId)
                 .map(MaterialVersionReadRepository.MaterialVersionSnapshot::versionId)
                 .orElse(null);
-        if (versionId == null) {
+        if (versionId == null || !processingStates.isStructureDetectionComplete(versionId)) {
             return new MaterialStructureResult(false, null);
         }
 

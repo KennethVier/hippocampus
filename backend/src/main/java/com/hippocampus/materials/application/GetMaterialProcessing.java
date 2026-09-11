@@ -5,7 +5,6 @@ import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.hippocampus.identity.port.CurrentUser;
-import com.hippocampus.materials.port.DocumentStructureRepository;
 import com.hippocampus.materials.port.MaterialMetadata;
 import com.hippocampus.materials.port.MaterialProcessingStateRepository;
 import com.hippocampus.materials.port.MaterialRepository;
@@ -16,19 +15,16 @@ public class GetMaterialProcessing {
     private final MaterialRepository materials;
     private final MaterialVersionReadRepository versions;
     private final MaterialProcessingStateRepository processingStates;
-    private final DocumentStructureRepository structures;
 
     public GetMaterialProcessing(
             CurrentUser currentUser,
             MaterialRepository materials,
             MaterialVersionReadRepository versions,
-            MaterialProcessingStateRepository processingStates,
-            DocumentStructureRepository structures) {
+            MaterialProcessingStateRepository processingStates) {
         this.currentUser = currentUser;
         this.materials = materials;
         this.versions = versions;
         this.processingStates = processingStates;
-        this.structures = structures;
     }
 
     @Transactional(readOnly = true)
@@ -46,7 +42,8 @@ public class GetMaterialProcessing {
                 : processingStates.findCurrentPhaseThreeState(version.versionId()).orElse(null);
         Double progress = meaningfulProgress(state);
         String limitation = limitation(readiness);
-        boolean structureAvailable = version != null && structures.hasDocumentRoot(version.versionId());
+        boolean structureAvailable = version != null
+                && processingStates.isStructureDetectionComplete(version.versionId());
 
         return new MaterialProcessingResult(
                 material.id(),

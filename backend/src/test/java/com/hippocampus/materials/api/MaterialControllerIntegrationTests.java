@@ -4,6 +4,7 @@ import static com.hippocampus.testing.security.OwnershipAssertions.collectionCon
 import static com.hippocampus.testing.security.OwnershipAssertions.notFoundWithoutForeignData;
 import static com.hippocampus.testing.security.OwnershipTestRequests.authenticatedAs;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -11,7 +12,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.hamcrest.Matchers.nullValue;
 
 import java.util.UUID;
 
@@ -22,23 +22,23 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 import com.hippocampus.identity.infrastructure.persistence.UserRepository;
+import com.hippocampus.materials.infrastructure.persistence.DocumentNodeEntity;
 import com.hippocampus.materials.infrastructure.persistence.MaterialEntity;
 import com.hippocampus.materials.infrastructure.persistence.MaterialVersionEntity;
-import com.hippocampus.materials.infrastructure.persistence.DocumentNodeEntity;
+import com.hippocampus.materials.infrastructure.persistence.SpringDataDocumentNodeRepository;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialRepository;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialVersionRepository;
-import com.hippocampus.materials.infrastructure.persistence.SpringDataDocumentNodeRepository;
+import com.hippocampus.shared.infrastructure.web.CorrelationIdFilter;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 import com.hippocampus.testing.security.OwnershipTestUser;
 import com.hippocampus.testing.security.OwnershipTestUsers;
-import com.hippocampus.shared.infrastructure.web.CorrelationIdFilter;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import io.micrometer.core.instrument.MeterRegistry;
 
@@ -141,6 +141,7 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
             SpringDataMaterialRepository materials = context.getBean(SpringDataMaterialRepository.class);
             SpringDataMaterialVersionRepository versions = context.getBean(SpringDataMaterialVersionRepository.class);
             SpringDataDocumentNodeRepository nodes = context.getBean(SpringDataDocumentNodeRepository.class);
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
 
             MaterialEntity own = createMaterial(materials, users.userA().userId(), "structural.pdf", "PARTIALLY_READY");
             MaterialVersionEntity active = versions.saveAndFlush(new MaterialVersionEntity(own.getId(), 1, "PARTIALLY_READY"));
@@ -159,6 +160,7 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
             DocumentNodeEntity section = insertNode(nodes, active.getId(), first.getId(),
                     com.hippocampus.materials.domain.DocumentNodeType.SECTION, "1.1 Cells", 1, 2, 4);
             assertThat(second.getId()).isNotNull();
+            insertProcessingJob(jdbc, users.userA().userId(), active.getId(), "STRUCTURE_DETECT", "COMPLETED");
 
             MaterialEntity foreign = createMaterial(materials, users.userB().userId(), "foreign.pdf", "UPLOADED");
 
@@ -258,13 +260,14 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
     }
 
     @Test
-    void structureUsesLatestVersionWhenNoActiveVersionAndReturnsNoStructureContract() throws Exception {
+    void structureUsesLatestVersionAndRequiresCompletedDetection() throws Exception {
         try (ConfigurableApplicationContext context = startApplicationWithFlyway()) {
             OwnershipTestUsers users = OwnershipTestUsers.persistWith(
                     context.getBean(UserRepository.class), "material-management-latest-structure");
             SpringDataMaterialRepository materials = context.getBean(SpringDataMaterialRepository.class);
             SpringDataMaterialVersionRepository versions = context.getBean(SpringDataMaterialVersionRepository.class);
             SpringDataDocumentNodeRepository nodes = context.getBean(SpringDataDocumentNodeRepository.class);
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
 
             MaterialEntity own = createMaterial(materials, users.userA().userId(), "latest.pdf", "PROCESSING");
             MaterialVersionEntity historical = versions.saveAndFlush(new MaterialVersionEntity(own.getId(), 1, "FAILED"));
@@ -278,12 +281,34 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
             versions.saveAndFlush(new MaterialVersionEntity(noStructure.getId(), 1, "PROCESSING"));
 
             MockMvc mvc = mvc(context);
+            mvc.perform(get("/api/materials/{id}/processing", own.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.structureAvailable").value(false));
+            mvc.perform(get("/api/materials/{id}/structure", own.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.available").value(false))
+                    .andExpect(jsonPath("$.root").value(nullValue()));
+
+            DocumentNodeEntity chapter = insertNode(nodes, latest.getId(), root.getId(),
+                    com.hippocampus.materials.domain.DocumentNodeType.CHAPTER, "1 First", 1, 1, 3);
+            DocumentNodeEntity section = insertNode(nodes, latest.getId(), chapter.getId(),
+                    com.hippocampus.materials.domain.DocumentNodeType.SECTION, "1.1 Cells", 1, 2, 3);
+            insertProcessingJob(jdbc, users.userA().userId(), latest.getId(), "STRUCTURE_DETECT", "COMPLETED");
+
+            mvc.perform(get("/api/materials/{id}/processing", own.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.structureAvailable").value(true));
             mvc.perform(get("/api/materials/{id}/structure", own.getId())
                             .with(authenticatedAs(users.userA())))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.available").value(true))
                     .andExpect(jsonPath("$.root.id").value(root.getId().toString()))
-                    .andExpect(jsonPath("$.root.title").value("Latest document"));
+                    .andExpect(jsonPath("$.root.title").value("Latest document"))
+                    .andExpect(jsonPath("$.root.children[0].id").value(chapter.getId().toString()))
+                    .andExpect(jsonPath("$.root.children[0].children[0].id").value(section.getId().toString()));
 
             mvc.perform(get("/api/materials/{id}/structure", noStructure.getId())
                             .with(authenticatedAs(users.userA())))
@@ -392,6 +417,26 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
         versions.saveAndFlush(version);
         material.setActiveVersionId(version.getId());
         return materials.saveAndFlush(material);
+    }
+
+    private static void insertProcessingJob(
+            JdbcClient jdbc,
+            UUID userId,
+            UUID versionId,
+            String jobType,
+            String status) {
+        jdbc.sql("""
+                INSERT INTO processing_jobs(
+                    id,user_id,material_version_id,job_type,status,priority,attempt_count,max_attempts,
+                    processing_version,created_at,updated_at)
+                VALUES (?,?,?,?,?,0,0,3,'v1',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                """)
+                .param(UUID.randomUUID())
+                .param(userId)
+                .param(versionId)
+                .param(jobType)
+                .param(status)
+                .update();
     }
 
     private static DocumentNodeEntity insertNode(

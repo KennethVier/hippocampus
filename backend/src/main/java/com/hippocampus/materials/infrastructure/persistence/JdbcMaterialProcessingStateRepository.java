@@ -64,4 +64,21 @@ public final class JdbcMaterialProcessingStateRepository implements MaterialProc
                 })
                 .optional();
     }
+
+    @Override
+    public boolean isStructureDetectionComplete(UUID materialVersionId) {
+        Boolean completed = jdbc.sql("""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM processing_jobs
+                    WHERE material_version_id = :version
+                      AND job_type = 'STRUCTURE_DETECT'
+                      AND status = 'COMPLETED'
+                )
+                """)
+                .param("version", materialVersionId)
+                .query(Boolean.class)
+                .single();
+        return Boolean.TRUE.equals(completed);
+    }
 }

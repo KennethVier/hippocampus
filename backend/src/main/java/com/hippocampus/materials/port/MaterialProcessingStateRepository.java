@@ -7,6 +7,8 @@ import java.util.UUID;
 public interface MaterialProcessingStateRepository {
     Optional<DurableProcessingState> findCurrentPhaseThreeState(UUID materialVersionId);
 
+    boolean isStructureDetectionComplete(UUID materialVersionId);
+
     record DurableProcessingState(
             String stage,
             BigDecimal progress,

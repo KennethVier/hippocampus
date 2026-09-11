@@ -39,9 +39,8 @@ public class MaterialManagementConfiguration {
             CurrentUser currentUser,
             MaterialRepository materials,
             MaterialVersionReadRepository versions,
-            MaterialProcessingStateRepository processingStates,
-            DocumentStructureRepository structures) {
-        return new GetMaterialProcessing(currentUser, materials, versions, processingStates, structures);
+            MaterialProcessingStateRepository processingStates) {
+        return new GetMaterialProcessing(currentUser, materials, versions, processingStates);
     }
 
     @Bean
@@ -49,8 +48,9 @@ public class MaterialManagementConfiguration {
             CurrentUser currentUser,
             MaterialRepository materials,
             DocumentStructureRepository structures,
-            MaterialVersionReadRepository versions) {
-        return new GetMaterialStructure(currentUser, materials, structures, versions);
+            MaterialVersionReadRepository versions,
+            MaterialProcessingStateRepository processingStates) {
+        return new GetMaterialStructure(currentUser, materials, structures, versions, processingStates);
     }
 
     @Bean
