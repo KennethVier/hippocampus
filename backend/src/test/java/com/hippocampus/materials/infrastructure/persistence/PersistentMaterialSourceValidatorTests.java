@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,17 +12,17 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
-import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.BinaryObjectStoreException;
 import com.hippocampus.materials.port.MaterialSourceValidationException;
+import com.hippocampus.materials.port.PdfSourceInspector;
 
 class PersistentMaterialSourceValidatorTests {
 
     private final SpringDataMaterialRepository materials = mock(SpringDataMaterialRepository.class);
     private final SpringDataMaterialVersionRepository versions = mock(SpringDataMaterialVersionRepository.class);
-    private final BinaryObjectStore objectStore = mock(BinaryObjectStore.class);
+    private final PdfSourceInspector pdfSourceInspector = mock(PdfSourceInspector.class);
     private final PersistentMaterialSourceValidator validator =
-            new PersistentMaterialSourceValidator(materials, versions, objectStore);
+            new PersistentMaterialSourceValidator(materials, versions, pdfSourceInspector);
 
     @Test
     void missingMaterialVersionIsTypedSourceValidationFailure() {
@@ -70,8 +69,8 @@ class PersistentMaterialSourceValidatorTests {
         when(material.getMimeType()).thenReturn("application/pdf");
         when(version.getFileSizeBytes()).thenReturn(1L);
         when(version.getStorageKey()).thenReturn("materials/source.pdf");
-        org.mockito.Mockito.doThrow(failure).when(objectStore)
-                .get(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        org.mockito.Mockito.doThrow(failure).when(pdfSourceInspector)
+                .inspect(org.mockito.ArgumentMatchers.any());
 
         assertThatThrownBy(() -> validator.validate(versionId))
                 .isSameAs(failure);
@@ -87,7 +86,7 @@ class PersistentMaterialSourceValidatorTests {
                 .isInstanceOf(MaterialSourceValidationException.class)
                 .satisfies(failure -> assertThat(((MaterialSourceValidationException) failure).kind())
                         .isEqualTo(MaterialSourceValidationException.Kind.SOURCE_NOT_PROCESSABLE));
-        verify(objectStore, never()).get(any(), any());
+        verify(pdfSourceInspector, org.mockito.Mockito.never()).inspect(any());
     }
 
     @Test
@@ -100,7 +99,7 @@ class PersistentMaterialSourceValidatorTests {
                 .isInstanceOf(MaterialSourceValidationException.class)
                 .satisfies(failure -> assertThat(((MaterialSourceValidationException) failure).kind())
                         .isEqualTo(MaterialSourceValidationException.Kind.SOURCE_NOT_PROCESSABLE));
-        verify(objectStore, never()).get(any(), any());
+        verify(pdfSourceInspector, org.mockito.Mockito.never()).inspect(any());
     }
 
     @Test
@@ -113,7 +112,7 @@ class PersistentMaterialSourceValidatorTests {
                 .isInstanceOf(MaterialSourceValidationException.class)
                 .satisfies(failure -> assertThat(((MaterialSourceValidationException) failure).kind())
                         .isEqualTo(MaterialSourceValidationException.Kind.SOURCE_NOT_PROCESSABLE));
-        verify(objectStore, never()).get(any(), any());
+        verify(pdfSourceInspector, org.mockito.Mockito.never()).inspect(any());
     }
 
     @Test
@@ -126,7 +125,7 @@ class PersistentMaterialSourceValidatorTests {
                 .isInstanceOf(MaterialSourceValidationException.class)
                 .satisfies(failure -> assertThat(((MaterialSourceValidationException) failure).kind())
                         .isEqualTo(MaterialSourceValidationException.Kind.SOURCE_NOT_PROCESSABLE));
-        verify(objectStore, never()).get(any(), any());
+        verify(pdfSourceInspector, org.mockito.Mockito.never()).inspect(any());
     }
 
     @Test
@@ -139,7 +138,7 @@ class PersistentMaterialSourceValidatorTests {
                 .isInstanceOf(MaterialSourceValidationException.class)
                 .satisfies(failure -> assertThat(((MaterialSourceValidationException) failure).kind())
                         .isEqualTo(MaterialSourceValidationException.Kind.SOURCE_NOT_PROCESSABLE));
-        verify(objectStore, never()).get(any(), any());
+        verify(pdfSourceInspector, org.mockito.Mockito.never()).inspect(any());
     }
 
     private MaterialVersionEntity validVersion(UUID versionId) {

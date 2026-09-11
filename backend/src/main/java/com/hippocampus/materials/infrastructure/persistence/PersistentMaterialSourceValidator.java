@@ -1,29 +1,27 @@
 package com.hippocampus.materials.infrastructure.persistence;
 
-import java.io.IOException;
-import java.io.OutputStream;
 import java.util.Objects;
 import java.util.UUID;
 
 import com.hippocampus.materials.port.BinaryObjectKey;
-import com.hippocampus.materials.port.BinaryObjectStore;
-import com.hippocampus.materials.port.BinaryObjectStoreException;
 import com.hippocampus.materials.port.MaterialSourceValidator;
 import com.hippocampus.materials.port.MaterialSourceValidationException;
+import com.hippocampus.materials.port.PdfExtractionSource;
+import com.hippocampus.materials.port.PdfSourceInspector;
 
 public final class PersistentMaterialSourceValidator implements MaterialSourceValidator {
 
     private final SpringDataMaterialRepository materials;
     private final SpringDataMaterialVersionRepository versions;
-    private final BinaryObjectStore objectStore;
+    private final PdfSourceInspector pdfSourceInspector;
 
     public PersistentMaterialSourceValidator(
             SpringDataMaterialRepository materials,
             SpringDataMaterialVersionRepository versions,
-            BinaryObjectStore objectStore) {
+            PdfSourceInspector pdfSourceInspector) {
         this.materials = Objects.requireNonNull(materials);
         this.versions = Objects.requireNonNull(versions);
-        this.objectStore = Objects.requireNonNull(objectStore);
+        this.pdfSourceInspector = Objects.requireNonNull(pdfSourceInspector);
     }
 
     @Override
@@ -65,24 +63,6 @@ public final class PersistentMaterialSourceValidator implements MaterialSourceVa
                     MaterialSourceValidationException.Kind.SOURCE_NOT_PROCESSABLE);
         }
 
-        verifyStorageReadable(objectKey);
-    }
-
-    private void verifyStorageReadable(BinaryObjectKey key) {
-        try {
-            objectStore.get(key, new NullOutputStream());
-        } catch (BinaryObjectStoreException exception) {
-            throw exception;
-        } catch (RuntimeException exception) {
-            throw new BinaryObjectStoreException("Stored source is unreadable: " + key.value(), exception);
-        }
-    }
-
-    private static final class NullOutputStream extends OutputStream {
-        @Override
-        public void write(int b) {}
-
-        @Override
-        public void write(byte[] b, int off, int len) {}
+        pdfSourceInspector.inspect(new PdfExtractionSource(materialVersionId, objectKey, version.getFileSizeBytes()));
     }
 }

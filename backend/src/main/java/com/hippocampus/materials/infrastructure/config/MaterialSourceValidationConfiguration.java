@@ -11,6 +11,7 @@ import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialRe
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialVersionRepository;
 import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.MaterialSourceValidator;
+import com.hippocampus.materials.port.PdfSourceInspector;
 
 @AutoConfiguration(afterName = {
         "org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration"
@@ -18,7 +19,8 @@ import com.hippocampus.materials.port.MaterialSourceValidator;
 @ConditionalOnBean({
         SpringDataMaterialRepository.class,
         SpringDataMaterialVersionRepository.class,
-        BinaryObjectStore.class
+        BinaryObjectStore.class,
+        PdfSourceInspector.class
 })
 public class MaterialSourceValidationConfiguration {
 
@@ -26,8 +28,8 @@ public class MaterialSourceValidationConfiguration {
     MaterialSourceValidator materialSourceValidator(
             SpringDataMaterialRepository materials,
             SpringDataMaterialVersionRepository versions,
-            BinaryObjectStore objectStore) {
-        return new PersistentMaterialSourceValidator(materials, versions, objectStore);
+            PdfSourceInspector pdfSourceInspector) {
+        return new PersistentMaterialSourceValidator(materials, versions, pdfSourceInspector);
     }
 
     @Bean

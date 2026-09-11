@@ -10,6 +10,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -28,6 +29,8 @@ import com.hippocampus.materials.domain.ProcessingJobStatus;
 import com.hippocampus.materials.domain.ProcessingJobType;
 import com.hippocampus.materials.infrastructure.storage.filesystem.FileSystemBinaryObjectStore;
 import com.hippocampus.materials.port.BinaryObjectStore;
+import com.hippocampus.materials.port.BinaryObjectStoreException;
+import com.hippocampus.materials.port.MaterialSourceValidationException;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 import com.hippocampus.testing.security.OwnershipTestUsers;
 
@@ -51,8 +54,8 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
             OwnershipTestUsers users = OwnershipTestUsers.persistWith(userRepository, "entry-lifecycle");
 
             UploadMaterial.Command command = new UploadMaterial.Command(
-                    "production.pdf", "application/pdf", (long) MaterialUploadFixtures.pdf().length,
-                    () -> new java.io.ByteArrayInputStream(MaterialUploadFixtures.pdf()));
+                    "production.pdf", "application/pdf", (long) MaterialUploadFixtures.validPdf().length,
+                    () -> new java.io.ByteArrayInputStream(MaterialUploadFixtures.validPdf()));
             var result = executeAs(uploadMaterial, users, command);
 
             assertThat(materials.findById(result.materialId())).isPresent();
@@ -94,8 +97,8 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
             OwnershipTestUsers users = OwnershipTestUsers.persistWith(userRepository, "entry-deleted-race");
 
             UploadMaterial.Command command = new UploadMaterial.Command(
-                    "deleted.pdf", "application/pdf", (long) MaterialUploadFixtures.pdf().length,
-                    () -> new java.io.ByteArrayInputStream(MaterialUploadFixtures.pdf()));
+                    "deleted.pdf", "application/pdf", (long) MaterialUploadFixtures.validPdf().length,
+                    () -> new java.io.ByteArrayInputStream(MaterialUploadFixtures.validPdf()));
             var result = executeAs(uploadMaterial, users, command);
             var versionId = result.versionId();
             var initialJob = jobs.findAll().stream()
@@ -109,7 +112,9 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
             materials.saveAndFlush(material);
 
             assertThatThrownBy(() -> executeClaimedProcessingJob.execute(claimed))
-                    .isInstanceOf(RuntimeException.class);
+                    .isInstanceOf(MaterialSourceValidationException.class)
+                    .satisfies(failure -> assertThat(((MaterialSourceValidationException) failure).kind())
+                            .isEqualTo(MaterialSourceValidationException.Kind.SOURCE_NOT_PROCESSABLE));
             var failedJob = jobs.findById(initialJob.getId()).orElseThrow();
             assertThat(failedJob.getStatus()).isEqualTo(ProcessingJobStatus.FAILED);
             assertThat(failedJob.getErrorCode()).isEqualTo("SOURCE_VALIDATION_FAILED");
@@ -131,14 +136,82 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
             OwnershipTestUsers users = OwnershipTestUsers.persistWith(userRepository, "entry-deleted-before-claim");
 
             UploadMaterial.Command command = new UploadMaterial.Command(
-                    "deleted-before-claim.pdf", "application/pdf", (long) MaterialUploadFixtures.pdf().length,
-                    () -> new java.io.ByteArrayInputStream(MaterialUploadFixtures.pdf()));
+                    "deleted-before-claim.pdf", "application/pdf", (long) MaterialUploadFixtures.validPdf().length,
+                    () -> new java.io.ByteArrayInputStream(MaterialUploadFixtures.validPdf()));
             var result = executeAs(uploadMaterial, users, command);
             var material = materials.findById(result.materialId()).orElseThrow();
             material.setStatus("DELETED");
             materials.saveAndFlush(material);
 
             assertThat(claimNextProcessingJob.execute("worker-1")).isEmpty();
+        }
+    }
+
+    @Test
+    void corruptPdfFailsValidationWithoutCreatingExtractJob() throws IOException {
+        assertStoredSourceFailsValidation(
+                "corrupt.pdf", MaterialUploadFixtures.validPdf(), MaterialUploadFixtures.corruptPdf(),
+                MaterialSourceValidationException.Kind.SOURCE_NOT_PROCESSABLE);
+    }
+
+    @Test
+    void encryptedPdfFailsValidationWithoutCreatingExtractJob() throws IOException {
+        assertStoredSourceFailsValidation(
+                "encrypted.pdf", MaterialUploadFixtures.encryptedPdf(), MaterialUploadFixtures.encryptedPdf(),
+                MaterialSourceValidationException.Kind.SOURCE_NOT_PROCESSABLE);
+    }
+
+    @Test
+    void missingStoredSourceFailsValidationWithoutCreatingExtractJob() throws IOException {
+        try (var context = startApplicationWithFlyway(StorageTestConfiguration.class)) {
+            UploadMaterial uploadMaterial = context.getBean(UploadMaterial.class);
+            ClaimNextProcessingJob claimNextProcessingJob = context.getBean(ClaimNextProcessingJob.class);
+            ExecuteClaimedProcessingJob executeClaimedProcessingJob = context.getBean(ExecuteClaimedProcessingJob.class);
+            SpringDataMaterialVersionRepository versions = context.getBean(SpringDataMaterialVersionRepository.class);
+            SpringDataProcessingJobRepository jobs = context.getBean(SpringDataProcessingJobRepository.class);
+            UserRepository userRepository = context.getBean(UserRepository.class);
+            OwnershipTestUsers users = OwnershipTestUsers.persistWith(userRepository, "entry-missing-source");
+
+            MaterialUploadResult result = upload(uploadMaterial, users, "missing.pdf", MaterialUploadFixtures.validPdf());
+            Path root = context.getBean("uploadTestStorageRoot", Path.class);
+            String storageKey = versions.findById(result.versionId()).orElseThrow().getStorageKey();
+            Files.delete(root.resolve(storageKey));
+
+            ClaimedProcessingJob claimed = claimNextProcessingJob.execute("worker-1").orElseThrow();
+            assertThatThrownBy(() -> executeClaimedProcessingJob.execute(claimed))
+                    .isInstanceOf(MaterialSourceValidationException.class)
+                    .satisfies(failure -> assertThat(((MaterialSourceValidationException) failure).kind())
+                            .isEqualTo(MaterialSourceValidationException.Kind.SOURCE_NOT_AVAILABLE));
+            assertThat(jobs.findAll().stream()
+                    .filter(job -> result.versionId().equals(job.getMaterialVersionId()))
+                    .filter(job -> job.getJobType() == ProcessingJobType.MATERIAL_EXTRACT)
+                    .findFirst()).isEmpty();
+        }
+    }
+
+    @Test
+    void transientStorageOutageRetriesValidationWithoutCreatingExtractJob() {
+        try (var context = startApplicationWithFlyway(OutageStorageTestConfiguration.class)) {
+            UploadMaterial uploadMaterial = context.getBean(UploadMaterial.class);
+            ClaimNextProcessingJob claimNextProcessingJob = context.getBean(ClaimNextProcessingJob.class);
+            ExecuteClaimedProcessingJob executeClaimedProcessingJob = context.getBean(ExecuteClaimedProcessingJob.class);
+            SpringDataProcessingJobRepository jobs = context.getBean(SpringDataProcessingJobRepository.class);
+            UserRepository userRepository = context.getBean(UserRepository.class);
+            OwnershipTestUsers users = OwnershipTestUsers.persistWith(userRepository, "entry-storage-outage");
+
+            MaterialUploadResult result = upload(uploadMaterial, users, "outage.pdf", MaterialUploadFixtures.validPdf());
+            ClaimedProcessingJob claimed = claimNextProcessingJob.execute("worker-1").orElseThrow();
+
+            assertThatThrownBy(() -> executeClaimedProcessingJob.execute(claimed))
+                    .isInstanceOf(BinaryObjectStoreException.class);
+            var retried = jobs.findById(claimed.jobId()).orElseThrow();
+            assertThat(retried.getStatus()).isEqualTo(ProcessingJobStatus.RETRY);
+            assertThat(retried.getNextAttemptAt()).isNotNull();
+            assertThat(retried.getErrorCode()).isEqualTo("STORAGE_UNAVAILABLE");
+            assertThat(jobs.findAll().stream()
+                    .filter(job -> result.versionId().equals(job.getMaterialVersionId()))
+                    .filter(job -> job.getJobType() == ProcessingJobType.MATERIAL_EXTRACT)
+                    .findFirst()).isEmpty();
         }
     }
 
@@ -153,8 +226,8 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
             OwnershipTestUsers users = OwnershipTestUsers.persistWith(userRepository, "entry-duplicate");
 
             UploadMaterial.Command command = new UploadMaterial.Command(
-                    "duplicate.pdf", "application/pdf", (long) MaterialUploadFixtures.pdf().length,
-                    () -> new java.io.ByteArrayInputStream(MaterialUploadFixtures.pdf()));
+                    "duplicate.pdf", "application/pdf", (long) MaterialUploadFixtures.validPdf().length,
+                    () -> new java.io.ByteArrayInputStream(MaterialUploadFixtures.validPdf()));
             var result = executeAs(uploadMaterial, users, command);
             var versionId = result.versionId();
 
@@ -163,7 +236,7 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
 
             var duplicateJob = new ProcessingJobEntity(
                     users.userA().userId(), versionId, ProcessingJobType.MATERIAL_VALIDATE,
-                    ProcessingJobStatus.RUNNING, 1, null, 0, 3, "processor-v1");
+                    ProcessingJobStatus.RUNNING, 1, null, 1, 3, "processor-v1");
             duplicateJob.setLockedBy("worker-2");
             jobs.saveAndFlush(duplicateJob);
             ClaimedProcessingJob claimed2 = new ClaimedProcessingJob(
@@ -171,7 +244,15 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
                     "worker-2", 1, 3);
 
             assertThatThrownBy(() -> executeClaimedProcessingJob.execute(claimed2))
-                    .isInstanceOf(RuntimeException.class);
+                    .isInstanceOf(DataIntegrityViolationException.class);
+            var failedDuplicate = jobs.findById(duplicateJob.getId()).orElseThrow();
+            assertThat(failedDuplicate.getStatus()).isEqualTo(ProcessingJobStatus.FAILED);
+            assertThat(failedDuplicate.getAttemptCount()).isEqualTo(1);
+            assertThat(failedDuplicate.getLockedBy()).isNull();
+            assertThat(failedDuplicate.getErrorCode()).isEqualTo("PROCESSING_INTERNAL_ERROR");
+            assertThat(failedDuplicate.getJobType()).isEqualTo(ProcessingJobType.MATERIAL_VALIDATE);
+            assertThat(failedDuplicate.getMaterialVersionId()).isEqualTo(versionId);
+            assertThat(failedDuplicate.getProcessingVersion()).isEqualTo("processor-v1");
             long extractCount = jobs.findAll().stream()
                     .filter(j -> j.getMaterialVersionId() != null && j.getMaterialVersionId().equals(versionId))
                     .filter(j -> j.getJobType() == ProcessingJobType.MATERIAL_EXTRACT)
@@ -191,6 +272,46 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
         }
     }
 
+    private MaterialUploadResult upload(UploadMaterial uploadMaterial, OwnershipTestUsers users,
+            String filename, byte[] bytes) {
+        return executeAs(uploadMaterial, users, new UploadMaterial.Command(
+                filename, "application/pdf", (long) bytes.length,
+                () -> new java.io.ByteArrayInputStream(bytes)));
+    }
+
+    private void assertStoredSourceFailsValidation(
+            String filename, byte[] acceptedBytes, byte[] storedBytes,
+            MaterialSourceValidationException.Kind expectedKind)
+            throws IOException {
+        try (var context = startApplicationWithFlyway(StorageTestConfiguration.class)) {
+            UploadMaterial uploadMaterial = context.getBean(UploadMaterial.class);
+            ClaimNextProcessingJob claimNextProcessingJob = context.getBean(ClaimNextProcessingJob.class);
+            ExecuteClaimedProcessingJob executeClaimedProcessingJob = context.getBean(ExecuteClaimedProcessingJob.class);
+            SpringDataMaterialVersionRepository versions = context.getBean(SpringDataMaterialVersionRepository.class);
+            SpringDataProcessingJobRepository jobs = context.getBean(SpringDataProcessingJobRepository.class);
+            UserRepository userRepository = context.getBean(UserRepository.class);
+            OwnershipTestUsers users = OwnershipTestUsers.persistWith(userRepository, "entry-" + filename);
+
+            MaterialUploadResult result = upload(uploadMaterial, users, filename, acceptedBytes);
+            Path root = context.getBean("uploadTestStorageRoot", Path.class);
+            String storageKey = versions.findById(result.versionId()).orElseThrow().getStorageKey();
+            Files.write(root.resolve(storageKey), storedBytes);
+
+            ClaimedProcessingJob claimed = claimNextProcessingJob.execute("worker-1").orElseThrow();
+            assertThatThrownBy(() -> executeClaimedProcessingJob.execute(claimed))
+                    .isInstanceOf(MaterialSourceValidationException.class)
+                    .satisfies(failure -> assertThat(((MaterialSourceValidationException) failure).kind())
+                            .isEqualTo(expectedKind));
+            var failed = jobs.findById(claimed.jobId()).orElseThrow();
+            assertThat(failed.getStatus()).isEqualTo(ProcessingJobStatus.FAILED);
+            assertThat(failed.getErrorCode()).isEqualTo("SOURCE_VALIDATION_FAILED");
+            assertThat(jobs.findAll().stream()
+                    .filter(job -> result.versionId().equals(job.getMaterialVersionId()))
+                    .filter(job -> job.getJobType() == ProcessingJobType.MATERIAL_EXTRACT)
+                    .findFirst()).isEmpty();
+        }
+    }
+
     @Configuration(proxyBeanMethods = false)
     static class StorageTestConfiguration {
         @Bean("uploadTestStorageRoot")
@@ -201,6 +322,28 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
         @Bean
         BinaryObjectStore binaryObjectStore(@Qualifier("uploadTestStorageRoot") Path root) {
             return new FileSystemBinaryObjectStore(root);
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class OutageStorageTestConfiguration {
+        @Bean
+        BinaryObjectStore binaryObjectStore() {
+            return new BinaryObjectStore() {
+                @Override
+                public void put(com.hippocampus.materials.port.BinaryObjectKey key,
+                        java.io.InputStream source, long contentLength) {
+                    // Accepted upload storage is intentionally successful; only reads are unavailable.
+                }
+
+                @Override
+                public void get(com.hippocampus.materials.port.BinaryObjectKey key, java.io.OutputStream destination) {
+                    throw new BinaryObjectStoreException("synthetic storage outage");
+                }
+
+                @Override
+                public void delete(com.hippocampus.materials.port.BinaryObjectKey key) {}
+            };
         }
     }
 }

@@ -23,6 +23,7 @@ import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialRe
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialVersionRepository;
 import com.hippocampus.materials.port.BinaryObjectStore;
 import com.hippocampus.materials.port.MaterialSourceValidator;
+import com.hippocampus.materials.port.PdfSourceInspector;
 
 class MaterialSourceValidationConfigurationTests {
 
@@ -78,6 +79,11 @@ class MaterialSourceValidationConfigurationTests {
         @Bean
         BinaryObjectStore objectStore() {
             return mock(BinaryObjectStore.class);
+        }
+
+        @Bean
+        PdfSourceInspector pdfSourceInspector() {
+            return mock(PdfSourceInspector.class);
         }
     }
 }
