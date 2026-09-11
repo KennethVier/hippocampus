@@ -8,9 +8,14 @@ import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.materials.api.MaterialController;
 import com.hippocampus.materials.application.DeleteMaterial;
 import com.hippocampus.materials.application.GetMaterial;
+import com.hippocampus.materials.application.GetMaterialProcessing;
+import com.hippocampus.materials.application.GetMaterialStructure;
 import com.hippocampus.materials.application.ListMaterials;
+import com.hippocampus.materials.port.DocumentStructureRepository;
 import com.hippocampus.materials.port.MaterialLifecycleTelemetry;
+import com.hippocampus.materials.port.MaterialProcessingStateRepository;
 import com.hippocampus.materials.port.MaterialRepository;
+import com.hippocampus.materials.port.MaterialVersionReadRepository;
 
 @AutoConfiguration(after = {
         MaterialLifecycleTelemetryConfiguration.class,
@@ -30,6 +35,25 @@ public class MaterialManagementConfiguration {
     }
 
     @Bean
+    GetMaterialProcessing getMaterialProcessing(
+            CurrentUser currentUser,
+            MaterialRepository materials,
+            MaterialVersionReadRepository versions,
+            MaterialProcessingStateRepository processingStates) {
+        return new GetMaterialProcessing(currentUser, materials, versions, processingStates);
+    }
+
+    @Bean
+    GetMaterialStructure getMaterialStructure(
+            CurrentUser currentUser,
+            MaterialRepository materials,
+            DocumentStructureRepository structures,
+            MaterialVersionReadRepository versions,
+            MaterialProcessingStateRepository processingStates) {
+        return new GetMaterialStructure(currentUser, materials, structures, versions, processingStates);
+    }
+
+    @Bean
     DeleteMaterial deleteMaterial(
             CurrentUser currentUser,
             MaterialRepository materials,
@@ -41,7 +65,14 @@ public class MaterialManagementConfiguration {
     MaterialController materialController(
             ListMaterials listMaterials,
             GetMaterial getMaterial,
-            DeleteMaterial deleteMaterial) {
-        return new MaterialController(listMaterials, getMaterial, deleteMaterial);
+            DeleteMaterial deleteMaterial,
+            GetMaterialProcessing getMaterialProcessing,
+            GetMaterialStructure getMaterialStructure) {
+        return new MaterialController(
+                listMaterials,
+                getMaterial,
+                deleteMaterial,
+                getMaterialProcessing,
+                getMaterialStructure);
     }
 }

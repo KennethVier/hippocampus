@@ -8,6 +8,8 @@ import com.hippocampus.materials.domain.DocumentNode;
 import com.hippocampus.materials.domain.TextBlock;
 
 public interface DocumentStructureRepository {
+    boolean hasDocumentRoot(UUID materialVersionId);
+
     Optional<DocumentNode> findDocumentRoot(UUID materialVersionId);
 
     List<DocumentNode> findNodesByMaterialVersion(UUID materialVersionId);

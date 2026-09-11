@@ -166,6 +166,7 @@ class ExtractPdfTablesTests {
                 node(ROOT, null, DocumentNodeType.DOCUMENT, 1, 2, null),
                 node(SECTION, ROOT, DocumentNodeType.SECTION, 1, 1, 1));
         return new DocumentStructureRepository() {
+            @Override public boolean hasDocumentRoot(UUID id) { return true; }
             @Override public Optional<DocumentNode> findDocumentRoot(UUID id) { return Optional.of(nodes.getFirst()); }
             @Override public List<DocumentNode> findNodesByMaterialVersion(UUID id) { return nodes; }
             @Override public List<DocumentNode> findChildren(UUID id, UUID parentId) { return List.of(); }

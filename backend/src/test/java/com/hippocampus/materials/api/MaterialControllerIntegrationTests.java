@@ -4,6 +4,7 @@ import static com.hippocampus.testing.security.OwnershipAssertions.collectionCon
 import static com.hippocampus.testing.security.OwnershipAssertions.notFoundWithoutForeignData;
 import static com.hippocampus.testing.security.OwnershipTestRequests.authenticatedAs;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -20,20 +21,24 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 import com.hippocampus.identity.infrastructure.persistence.UserRepository;
+import com.hippocampus.materials.infrastructure.persistence.DocumentNodeEntity;
 import com.hippocampus.materials.infrastructure.persistence.MaterialEntity;
 import com.hippocampus.materials.infrastructure.persistence.MaterialVersionEntity;
+import com.hippocampus.materials.infrastructure.persistence.SpringDataDocumentNodeRepository;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialRepository;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialVersionRepository;
+import com.hippocampus.shared.infrastructure.web.CorrelationIdFilter;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 import com.hippocampus.testing.security.OwnershipTestUser;
 import com.hippocampus.testing.security.OwnershipTestUsers;
-import com.hippocampus.shared.infrastructure.web.CorrelationIdFilter;
 
 import io.micrometer.core.instrument.MeterRegistry;
 
@@ -125,6 +130,191 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
 
             mvc.perform(get("/api/materials/{id}", own.getId()))
                     .andExpect(status().isUnauthorized());
+        }
+    }
+
+    @Test
+    void processingAndStructureAreOwnerScopedAndExposeAllowedProjection() throws Exception {
+        try (ConfigurableApplicationContext context = startApplicationWithFlyway()) {
+            OwnershipTestUsers users = OwnershipTestUsers.persistWith(
+                    context.getBean(UserRepository.class), "material-management-processing");
+            SpringDataMaterialRepository materials = context.getBean(SpringDataMaterialRepository.class);
+            SpringDataMaterialVersionRepository versions = context.getBean(SpringDataMaterialVersionRepository.class);
+            SpringDataDocumentNodeRepository nodes = context.getBean(SpringDataDocumentNodeRepository.class);
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+
+            MaterialEntity own = createMaterial(materials, users.userA().userId(), "structural.pdf", "PARTIALLY_READY");
+            MaterialVersionEntity active = versions.saveAndFlush(new MaterialVersionEntity(own.getId(), 1, "PARTIALLY_READY"));
+            active.setExtractionMethod("OCR");
+            active.setExtractionQuality("LIMITED");
+            versions.saveAndFlush(active);
+            own.setActiveVersionId(active.getId());
+            materials.saveAndFlush(own);
+
+            DocumentNodeEntity root = insertNode(nodes, active.getId(), null,
+                    com.hippocampus.materials.domain.DocumentNodeType.DOCUMENT, "Document", 1, 1, 8);
+            DocumentNodeEntity second = insertNode(nodes, active.getId(), root.getId(),
+                    com.hippocampus.materials.domain.DocumentNodeType.CHAPTER, "2 Second", 2, 5, 8);
+            DocumentNodeEntity first = insertNode(nodes, active.getId(), root.getId(),
+                    com.hippocampus.materials.domain.DocumentNodeType.CHAPTER, "1 First", 1, 1, 4);
+            DocumentNodeEntity section = insertNode(nodes, active.getId(), first.getId(),
+                    com.hippocampus.materials.domain.DocumentNodeType.SECTION, "1.1 Cells", 1, 2, 4);
+            assertThat(second.getId()).isNotNull();
+            insertProcessingJob(jdbc, users.userA().userId(), active.getId(), "STRUCTURE_DETECT", "COMPLETED");
+
+            MaterialEntity foreign = createMaterial(materials, users.userB().userId(), "foreign.pdf", "UPLOADED");
+
+            MockMvc mvc = mvc(context);
+
+            MvcResult processing = mvc.perform(get("/api/materials/{id}/processing", own.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.readiness").value("PARTIALLY_READY"))
+                    .andExpect(jsonPath("$.stage").value(nullValue()))
+                    .andExpect(jsonPath("$.progress").value(nullValue()))
+                    .andExpect(jsonPath("$.limitation").value("Some parts of this material could not be fully processed."))
+                    .andExpect(jsonPath("$.structureAvailable").value(true))
+                    .andExpect(jsonPath("$.updatedAt").doesNotExist())
+                    .andReturn();
+            assertThat(processing.getResponse().getContentAsString())
+                    .doesNotContain("OCR", "NATIVE", "updatedAt");
+
+            mvc.perform(get("/api/materials/{id}/processing", foreign.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(notFoundWithoutForeignData("foreign.pdf"))
+                    .andExpect(jsonPath("$.code").value("MATERIAL_NOT_FOUND"));
+
+            mvc.perform(get("/api/materials/{id}/structure", own.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.available").value(true))
+                    .andExpect(jsonPath("$.root.id").value(root.getId().toString()))
+                    .andExpect(jsonPath("$.root.title").value("Document"))
+                    .andExpect(jsonPath("$.root.nodeType").value("DOCUMENT"))
+                    .andExpect(jsonPath("$.root.children.length()").value(2))
+                    .andExpect(jsonPath("$.root.children[0].id").value(first.getId().toString()))
+                    .andExpect(jsonPath("$.root.children[0].nodeType").value("CHAPTER"))
+                    .andExpect(jsonPath("$.root.children[0].children.length()").value(1))
+                    .andExpect(jsonPath("$.root.children[0].children[0].id").value(section.getId().toString()))
+                    .andExpect(jsonPath("$.root.children[0].children[0].nodeType").value("SECTION"))
+                    .andExpect(jsonPath("$.root.children[1].id").value(second.getId().toString()));
+
+            mvc.perform(get("/api/materials/{id}/structure", foreign.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(notFoundWithoutForeignData("foreign.pdf"))
+                    .andExpect(jsonPath("$.code").value("MATERIAL_NOT_FOUND"));
+        }
+    }
+
+    @Test
+    void processingReadsDurableJobProgressAndExposesOnlySafeStage() throws Exception {
+        try (ConfigurableApplicationContext context = startApplicationWithFlyway()) {
+            OwnershipTestUsers users = OwnershipTestUsers.persistWith(
+                    context.getBean(UserRepository.class), "material-management-durable-progress");
+            SpringDataMaterialRepository materials = context.getBean(SpringDataMaterialRepository.class);
+            SpringDataMaterialVersionRepository versions = context.getBean(SpringDataMaterialVersionRepository.class);
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+
+            MaterialEntity own = createMaterial(materials, users.userA().userId(), "durable-progress.pdf", "PROCESSING");
+            MaterialVersionEntity active = versions.saveAndFlush(new MaterialVersionEntity(own.getId(), 1, "PROCESSING"));
+            own.setActiveVersionId(active.getId());
+            materials.saveAndFlush(own);
+
+            assertThat(active.getProcessingProgress()).isNull();
+            jdbc.sql("""
+                    INSERT INTO processing_jobs(
+                        id,user_id,material_version_id,job_type,status,priority,progress,progress_current,progress_total,
+                        attempt_count,max_attempts,locked_by,locked_at,processing_version,error_code,error_message,
+                        created_at,updated_at)
+                    VALUES (?,?,?,?,?,0,72.50,72,100,1,3,'worker-secret',CURRENT_TIMESTAMP,'v1',
+                        'PRIVATE_ERROR','private retry detail',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                    """)
+                    .param(UUID.randomUUID())
+                    .param(users.userA().userId())
+                    .param(active.getId())
+                    .param("STRUCTURE_DETECT")
+                    .param("RUNNING")
+                    .update();
+
+            MockMvc mvc = mvc(context);
+            MvcResult processing = mvc.perform(get("/api/materials/{id}/processing", own.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.readiness").value("PROCESSING"))
+                    .andExpect(jsonPath("$.stage").value("STRUCTURE_DETECTION"))
+                    .andExpect(jsonPath("$.progress").value(72.5))
+                    .andExpect(jsonPath("$.structureAvailable").value(false))
+                    .andExpect(jsonPath("$.updatedAt").doesNotExist())
+                    .andExpect(jsonPath("$.jobType").doesNotExist())
+                    .andExpect(jsonPath("$.workerId").doesNotExist())
+                    .andExpect(jsonPath("$.attemptCount").doesNotExist())
+                    .andExpect(jsonPath("$.maxAttempts").doesNotExist())
+                    .andExpect(jsonPath("$.errorCode").doesNotExist())
+                    .andExpect(jsonPath("$.errorMessage").doesNotExist())
+                    .andReturn();
+
+            assertThat(processing.getResponse().getContentAsString())
+                    .doesNotContain("\"STRUCTURE_DETECT\"", "worker-secret", "PRIVATE_ERROR", "private retry detail");
+            assertThat(versions.findById(active.getId()).orElseThrow().getProcessingProgress()).isNull();
+        }
+    }
+
+    @Test
+    void structureUsesLatestVersionAndRequiresCompletedDetection() throws Exception {
+        try (ConfigurableApplicationContext context = startApplicationWithFlyway()) {
+            OwnershipTestUsers users = OwnershipTestUsers.persistWith(
+                    context.getBean(UserRepository.class), "material-management-latest-structure");
+            SpringDataMaterialRepository materials = context.getBean(SpringDataMaterialRepository.class);
+            SpringDataMaterialVersionRepository versions = context.getBean(SpringDataMaterialVersionRepository.class);
+            SpringDataDocumentNodeRepository nodes = context.getBean(SpringDataDocumentNodeRepository.class);
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+
+            MaterialEntity own = createMaterial(materials, users.userA().userId(), "latest.pdf", "PROCESSING");
+            MaterialVersionEntity historical = versions.saveAndFlush(new MaterialVersionEntity(own.getId(), 1, "FAILED"));
+            MaterialVersionEntity latest = versions.saveAndFlush(new MaterialVersionEntity(own.getId(), 2, "PROCESSING"));
+            DocumentNodeEntity root = insertNode(nodes, latest.getId(), null,
+                    com.hippocampus.materials.domain.DocumentNodeType.DOCUMENT, "Latest document", 1, 1, 3);
+            insertNode(nodes, historical.getId(), null,
+                    com.hippocampus.materials.domain.DocumentNodeType.DOCUMENT, "Historical document", 1, 1, 1);
+
+            MaterialEntity noStructure = createMaterial(materials, users.userA().userId(), "no-structure.pdf", "PROCESSING");
+            versions.saveAndFlush(new MaterialVersionEntity(noStructure.getId(), 1, "PROCESSING"));
+
+            MockMvc mvc = mvc(context);
+            mvc.perform(get("/api/materials/{id}/processing", own.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.structureAvailable").value(false));
+            mvc.perform(get("/api/materials/{id}/structure", own.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.available").value(false))
+                    .andExpect(jsonPath("$.root").value(nullValue()));
+
+            DocumentNodeEntity chapter = insertNode(nodes, latest.getId(), root.getId(),
+                    com.hippocampus.materials.domain.DocumentNodeType.CHAPTER, "1 First", 1, 1, 3);
+            DocumentNodeEntity section = insertNode(nodes, latest.getId(), chapter.getId(),
+                    com.hippocampus.materials.domain.DocumentNodeType.SECTION, "1.1 Cells", 1, 2, 3);
+            insertProcessingJob(jdbc, users.userA().userId(), latest.getId(), "STRUCTURE_DETECT", "COMPLETED");
+
+            mvc.perform(get("/api/materials/{id}/processing", own.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.structureAvailable").value(true));
+            mvc.perform(get("/api/materials/{id}/structure", own.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.available").value(true))
+                    .andExpect(jsonPath("$.root.id").value(root.getId().toString()))
+                    .andExpect(jsonPath("$.root.title").value("Latest document"))
+                    .andExpect(jsonPath("$.root.children[0].id").value(chapter.getId().toString()))
+                    .andExpect(jsonPath("$.root.children[0].children[0].id").value(section.getId().toString()));
+
+            mvc.perform(get("/api/materials/{id}/structure", noStructure.getId())
+                            .with(authenticatedAs(users.userA())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.available").value(false))
+                    .andExpect(jsonPath("$.root").value(nullValue()));
         }
     }
 
@@ -227,6 +417,55 @@ class MaterialControllerIntegrationTests extends PostgresIntegrationTestSupport 
         versions.saveAndFlush(version);
         material.setActiveVersionId(version.getId());
         return materials.saveAndFlush(material);
+    }
+
+    private static void insertProcessingJob(
+            JdbcClient jdbc,
+            UUID userId,
+            UUID versionId,
+            String jobType,
+            String status) {
+        jdbc.sql("""
+                INSERT INTO processing_jobs(
+                    id,user_id,material_version_id,job_type,status,priority,attempt_count,max_attempts,
+                    processing_version,created_at,updated_at)
+                VALUES (?,?,?,?,?,0,0,3,'v1',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                """)
+                .param(UUID.randomUUID())
+                .param(userId)
+                .param(versionId)
+                .param(jobType)
+                .param(status)
+                .update();
+    }
+
+    private static DocumentNodeEntity insertNode(
+            SpringDataDocumentNodeRepository nodes,
+            UUID versionId,
+            UUID parentId,
+            com.hippocampus.materials.domain.DocumentNodeType nodeType,
+            String title,
+            int ordinal,
+            int startPage,
+            int endPage) throws Exception {
+        var ctor = DocumentNodeEntity.class.getDeclaredConstructor();
+        ctor.setAccessible(true);
+        DocumentNodeEntity node = (DocumentNodeEntity) ctor.newInstance();
+        ReflectionTestUtils.setField(node, "id", UUID.randomUUID());
+        ReflectionTestUtils.setField(node, "materialVersionId", versionId);
+        ReflectionTestUtils.setField(node, "parentId", parentId);
+        ReflectionTestUtils.setField(node, "nodeType", nodeType);
+        ReflectionTestUtils.setField(node, "title", title);
+        ReflectionTestUtils.setField(node, "ordinal", ordinal);
+        ReflectionTestUtils.setField(node, "startPage", startPage);
+        ReflectionTestUtils.setField(node, "endPage", endPage);
+        ReflectionTestUtils.setField(node, "startOffset", 0L);
+        ReflectionTestUtils.setField(node, "endOffset", 100L);
+        ReflectionTestUtils.setField(node, "detectionOrigin",
+                com.hippocampus.materials.domain.DocumentNodeDetectionOrigin.NATIVE);
+        ReflectionTestUtils.setField(node, "detectionConfidence", "HIGH");
+        ReflectionTestUtils.setField(node, "createdAt", java.time.Instant.now());
+        return nodes.saveAndFlush(node);
     }
 
     private static MockMvc mvc(ConfigurableApplicationContext context) {

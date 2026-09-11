@@ -4,4 +4,6 @@ export const materialKeys = {
   list: (page: number, size: number) => ['materials', 'list', { page, size }] as const,
   details: () => ['materials', 'detail'] as const,
   detail: (id: string) => ['materials', 'detail', id] as const,
+  processing: (id: string) => ['materials', 'processing', id] as const,
+  structure: (id: string) => ['materials', 'structure', id] as const,
 }

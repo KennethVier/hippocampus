@@ -1,5 +1,6 @@
 package com.hippocampus.materials.infrastructure.config;
 
+import java.nio.file.Path;
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -26,7 +27,7 @@ class PdfExtractionPropertiesTests {
     }
 
     private static PdfExtractionProperties valid(int batchSize, int maxPages, int maxText) {
-        return new PdfExtractionProperties(batchSize, maxPages, maxText, "/usr/bin/tesseract", 300,
+        return new PdfExtractionProperties(batchSize, maxPages, maxText, absoluteExecutable(), 300,
                 10_000, 10_000, 40_000_000, 8_000, 40_000_000, 40_000_000,
                 25_000_000, 8_000_000, 65_536,
                 200_000, 100_000, 1_000_000, Duration.ofSeconds(30), Duration.ofSeconds(2));
@@ -34,9 +35,16 @@ class PdfExtractionPropertiesTests {
 
     private static PdfExtractionProperties withSourceImageLimits(
             int maxSourceDimension, long maxSourcePixels, long maxPageSourcePixels) {
-        return new PdfExtractionProperties(20, 2_000, 1_000_000, "/usr/bin/tesseract", 300,
+        return new PdfExtractionProperties(20, 2_000, 1_000_000, absoluteExecutable(), 300,
                 10_000, 10_000, 40_000_000, maxSourceDimension, maxSourcePixels, maxPageSourcePixels,
                 25_000_000, 8_000_000, 65_536,
                 200_000, 100_000, 1_000_000, Duration.ofSeconds(30), Duration.ofSeconds(2));
+    }
+
+    private static String absoluteExecutable() {
+        return Path.of(
+                System.getProperty("java.home"), "bin",
+                System.getProperty("os.name", "").startsWith("Windows") ? "java.exe" : "java")
+                .toAbsolutePath().normalize().toString();
     }
 }

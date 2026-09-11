@@ -93,6 +93,7 @@ class AssociateVisualContextTests {
                 UUID.randomUUID(), VERSION, ROOT, 1, TextBlockType.PAGE_TEXT, 1, pageContent,
                 TextBlockExtractionMethod.NATIVE, TextBlockQuality.STRONG, Instant.EPOCH);
         return new DocumentStructureRepository() {
+            @Override public boolean hasDocumentRoot(UUID id) { return true; }
             @Override public Optional<DocumentNode> findDocumentRoot(UUID id) { return Optional.of(root); }
             @Override public List<DocumentNode> findNodesByMaterialVersion(UUID id) { return List.of(root); }
             @Override public List<DocumentNode> findChildren(UUID id, UUID parentId) { return List.of(); }
@@ -147,6 +148,8 @@ class AssociateVisualContextTests {
         private RecordingStructures(List<String> events) {
             this.events = events;
         }
+
+        @Override public boolean hasDocumentRoot(UUID id) { return false; }
 
         @Override public Optional<DocumentNode> findDocumentRoot(UUID id) { return Optional.empty(); }
 

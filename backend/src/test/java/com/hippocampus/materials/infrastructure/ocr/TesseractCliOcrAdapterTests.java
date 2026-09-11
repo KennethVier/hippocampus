@@ -10,6 +10,8 @@ import java.time.Duration;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.hippocampus.materials.domain.TextBlockQuality;
@@ -17,6 +19,7 @@ import com.hippocampus.materials.port.OcrException;
 import com.hippocampus.materials.port.OcrInput;
 import com.hippocampus.materials.port.OcrResult;
 
+@DisabledOnOs(value = OS.WINDOWS, disabledReason = "Fake OCR engines are POSIX shell scripts.")
 class TesseractCliOcrAdapterTests {
     private static final String HEADER = "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext";
 

@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.hippocampus.materials.application.DeleteMaterial;
 import com.hippocampus.materials.application.GetMaterial;
+import com.hippocampus.materials.application.GetMaterialProcessing;
+import com.hippocampus.materials.application.GetMaterialStructure;
 import com.hippocampus.materials.application.ListMaterials;
 
 import jakarta.validation.constraints.Max;
@@ -25,11 +27,20 @@ public class MaterialController {
     private final ListMaterials listMaterials;
     private final GetMaterial getMaterial;
     private final DeleteMaterial deleteMaterial;
+    private final GetMaterialProcessing getMaterialProcessing;
+    private final GetMaterialStructure getMaterialStructure;
 
-    public MaterialController(ListMaterials listMaterials, GetMaterial getMaterial, DeleteMaterial deleteMaterial) {
+    public MaterialController(
+            ListMaterials listMaterials,
+            GetMaterial getMaterial,
+            DeleteMaterial deleteMaterial,
+            GetMaterialProcessing getMaterialProcessing,
+            GetMaterialStructure getMaterialStructure) {
         this.listMaterials = listMaterials;
         this.getMaterial = getMaterial;
         this.deleteMaterial = deleteMaterial;
+        this.getMaterialProcessing = getMaterialProcessing;
+        this.getMaterialStructure = getMaterialStructure;
     }
 
     @GetMapping
@@ -42,6 +53,38 @@ public class MaterialController {
     @GetMapping("/{materialId}")
     MaterialResponse get(@PathVariable UUID materialId) {
         return MaterialResponse.from(getMaterial.execute(materialId));
+    }
+
+    @GetMapping("/{materialId}/processing")
+    MaterialProcessingResponse processing(@PathVariable UUID materialId) {
+        GetMaterialProcessing.MaterialProcessingResult result = getMaterialProcessing.execute(materialId);
+        return new MaterialProcessingResponse(
+                result.materialId(),
+                result.versionId(),
+                result.readiness(),
+                result.stage(),
+                result.progress(),
+                result.limitation(),
+                result.structureAvailable());
+    }
+
+    @GetMapping("/{materialId}/structure")
+    MaterialStructureResponse structure(@PathVariable UUID materialId) {
+        GetMaterialStructure.MaterialStructureResult result = getMaterialStructure.execute(materialId);
+        return new MaterialStructureResponse(
+                result.available(),
+                toNode(result.root()));
+    }
+
+    private MaterialStructureResponse.MaterialNode toNode(GetMaterialStructure.MaterialNode node) {
+        if (node == null) return null;
+        return new MaterialStructureResponse.MaterialNode(
+                node.id(),
+                node.nodeType(),
+                node.title(),
+                node.startPage(),
+                node.endPage(),
+                node.children() == null ? java.util.List.of() : node.children().stream().map(this::toNode).toList());
     }
 
     @DeleteMapping("/{materialId}")

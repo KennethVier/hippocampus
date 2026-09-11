@@ -69,4 +69,5 @@ public record PdfExtractionProperties(
             throw new IllegalArgumentException("OCR durations must be positive");
         }
     }
+
 }

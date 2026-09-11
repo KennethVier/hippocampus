@@ -11,6 +11,8 @@ spring:
 hippocampus:
   materials:
     processing:
+      pdf:
+        ocr-executable: ${hippocampus.test.ocr-executable:${HIPPOCAMPUS_TESSERACT_EXECUTABLE:/usr/bin/tesseract}}
       recovery:
         enabled: false
   security:

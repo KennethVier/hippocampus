@@ -3,6 +3,15 @@ import { z } from 'zod'
 const instant = z.iso.datetime({ offset: true })
 const nonEmpty = z.string().trim().min(1)
 
+export interface MaterialStructureNode {
+  id: string
+  nodeType: string
+  title: string | null
+  startPage: number | null
+  endPage: number | null
+  children: MaterialStructureNode[]
+}
+
 export const materialSchema = z.strictObject({
   id: z.uuid(), title: nonEmpty, materialType: nonEmpty,
   originalFilename: z.string().nullable(), mimeType: z.string().nullable(),
@@ -15,6 +24,20 @@ export const materialPageSchema = z.strictObject({
   totalPages: z.number().int().nonnegative(),
 })
 
+export const materialProcessingSchema = z.strictObject({
+  materialId: z.uuid(), versionId: z.uuid().nullable(), readiness: nonEmpty, stage: z.string().nullable(),
+  progress: z.number().finite().nullable(), limitation: z.string().nullable(), structureAvailable: z.boolean(),
+})
+
+export const materialStructureNodeSchema: z.ZodType<MaterialStructureNode> = z.strictObject({
+  id: z.uuid(), nodeType: nonEmpty, title: z.string().nullable(), startPage: z.number().int().nullable(),
+  endPage: z.number().int().nullable(), children: z.array(z.lazy(() => materialStructureNodeSchema)),
+})
+
+export const materialStructureResponseSchema = z.strictObject({
+  available: z.boolean(), root: materialStructureNodeSchema.nullable(),
+})
+
 export const materialUploadSchema = z.strictObject({
   materialId: z.uuid(), versionId: z.uuid(), title: nonEmpty, materialType: nonEmpty,
   originalFilename: z.string().nullable(), mimeType: nonEmpty,
@@ -25,3 +48,8 @@ export const materialUploadSchema = z.strictObject({
 export type Material = z.infer<typeof materialSchema>
 export type MaterialPage = z.infer<typeof materialPageSchema>
 export type MaterialUpload = z.infer<typeof materialUploadSchema>
+export type MaterialProcessing = z.infer<typeof materialProcessingSchema>
+export type MaterialStructureResponse = {
+  available: boolean
+  root: MaterialStructureNode | null
+}

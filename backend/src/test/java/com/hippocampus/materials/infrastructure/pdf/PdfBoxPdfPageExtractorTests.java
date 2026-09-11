@@ -64,7 +64,7 @@ class PdfBoxPdfPageExtractorTests {
             assertThat(batches).extracting(PdfPageBatch::firstPage).containsExactly(1, 3, 5);
             assertThat(batches).extracting(PdfPageBatch::lastPage).containsExactly(2, 4, 5);
             assertThat(batches.getFirst().pages()).hasSize(2);
-            assertThat(batches.getFirst().pages().getFirst().content()).isEqualTo("First native page\n");
+            assertThat(batches.getFirst().pages().getFirst().content()).isEqualTo(extractedLine("First native page"));
             assertThat(batches.getFirst().pages().get(1).content()).isEmpty();
             assertThat(batches.stream().flatMap(batch -> batch.pages().stream())
                     .map(PdfExtractedPage::extractionMethod))
@@ -74,7 +74,7 @@ class PdfBoxPdfPageExtractorTests {
                             TextBlockExtractionMethod.NATIVE,
                             TextBlockExtractionMethod.NATIVE,
                             TextBlockExtractionMethod.NATIVE);
-            assertThat(batches.getLast().pages().getFirst().content()).isEqualTo("Last\n");
+            assertThat(batches.getLast().pages().getFirst().content()).isEqualTo(extractedLine("Last"));
             assertThat(batches.getFirst().pages().getFirst().pageNumber()).isEqualTo(1);
             assertThat(batches.getLast().pages().getFirst().pageNumber()).isEqualTo(5);
             assertThatThrownBy(() -> batches.getFirst().pages().clear())
@@ -98,7 +98,7 @@ class PdfBoxPdfPageExtractorTests {
                     TextBlockExtractionMethod.OCR,
                     TextBlockExtractionMethod.OCR,
                     TextBlockExtractionMethod.OCR);
-            assertThat(pages.get(1).content()).isEqualTo("native12\n");
+            assertThat(pages.get(1).content()).isEqualTo(extractedLine("native12"));
             assertThat(pages.get(2).content()).isEmpty();
         }
     }
@@ -121,7 +121,7 @@ class PdfBoxPdfPageExtractorTests {
 
             assertThat(calls).hasValue(5);
             assertThat(pages).extracting(PdfExtractedPage::content).containsExactly(
-                    "recognized", "native12\n", "recognized", "ECG\n",
+                    "recognized", extractedLine("native12"), "recognized", extractedLine("ECG"),
                     "recognized", "recognized", "recognized");
         }
     }
@@ -513,6 +513,10 @@ class PdfBoxPdfPageExtractorTests {
     private static void assertFailure(PdfExtractionException.Kind kind, org.assertj.core.api.ThrowableAssert.ThrowingCallable action) {
         assertThatThrownBy(action).isInstanceOfSatisfying(
                 PdfExtractionException.class, failure -> assertThat(failure.kind()).isEqualTo(kind));
+    }
+
+    private static String extractedLine(String value) {
+        return value + System.lineSeparator();
     }
 
     private static final class CountingSink {
