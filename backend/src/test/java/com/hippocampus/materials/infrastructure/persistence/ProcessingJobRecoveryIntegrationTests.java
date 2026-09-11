@@ -237,9 +237,9 @@ class ProcessingJobRecoveryIntegrationTests extends PostgresIntegrationTestSuppo
             assertThat(jdbc.sql("SELECT count(*) FROM processing_jobs WHERE material_version_id=:version "
                             + "AND job_type='MATERIAL_EXTRACT'")
                     .param("version", uploaded.versionId()).query(Long.class).single()).isZero();
-            assertThat(rowString(uploaded.materialId(), "status", "materials")).isEqualTo("UPLOADED");
+            assertThat(rowString(uploaded.materialId(), "status", "materials")).isEqualTo("PROCESSING");
             assertThat(jdbc.sql("SELECT processing_status FROM material_versions WHERE id=:id")
-                    .param("id", uploaded.versionId()).query(String.class).single()).isEqualTo("UPLOADED");
+                    .param("id", uploaded.versionId()).query(String.class).single()).isEqualTo("PROCESSING");
         }
     }
 

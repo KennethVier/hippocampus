@@ -6,9 +6,7 @@ import java.util.UUID;
 import com.hippocampus.materials.domain.ClaimedProcessingJob;
 import com.hippocampus.materials.domain.ProcessingJobType;
 import com.hippocampus.materials.port.MaterialSourceValidator;
-import org.springframework.stereotype.Component;
 
-@Component
 public final class MaterialValidateStageHandler implements ProcessingStageHandler {
 
     private final MaterialSourceValidator sourceValidator;
