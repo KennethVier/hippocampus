@@ -7,9 +7,15 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 101MB
 
 hippocampus:
   materials:
+    upload:
+      max-file-size: 100MB
     processing:
       pdf:
         ocr-executable: ${hippocampus.test.ocr-executable:${HIPPOCAMPUS_TESSERACT_EXECUTABLE:/usr/bin/tesseract}}

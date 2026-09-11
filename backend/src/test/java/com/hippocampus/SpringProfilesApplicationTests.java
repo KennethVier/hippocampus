@@ -17,6 +17,8 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.ConfigurableEnvironment;
 
 import com.hippocampus.identity.infrastructure.security.CorsProperties;
+import com.hippocampus.materials.application.MaterialValidateStageHandler;
+import com.hippocampus.materials.port.MaterialSourceValidator;
 
 class SpringProfilesApplicationTests {
 
@@ -48,6 +50,8 @@ class SpringProfilesApplicationTests {
                     "server.servlet.session.cookie.path"))
                     .isEqualTo("/api");
             assertThat(corsProperties.allowedOrigins()).containsExactlyElementsOf(scenario.expectedCorsOrigins());
+            assertThat(context.getBeansOfType(MaterialSourceValidator.class)).isEmpty();
+            assertThat(context.getBeansOfType(MaterialValidateStageHandler.class)).isEmpty();
             if (scenario.expectedSecure() == null) {
                 assertThat(environment.getProperty(
                         "server.servlet.session.cookie.secure", Boolean.class)).isNull();

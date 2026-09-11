@@ -8,6 +8,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 
 import com.hippocampus.materials.application.ExtractPdfPages;
 import com.hippocampus.materials.infrastructure.pdf.PdfBoxPdfPageExtractor;
+import com.hippocampus.materials.infrastructure.pdf.PdfBoxPdfSourceInspector;
 import com.hippocampus.materials.infrastructure.ocr.TesseractCliOcrAdapter;
 import com.hippocampus.materials.infrastructure.persistence.JdbcPdfExtractionSourceRepository;
 import com.hippocampus.materials.port.BinaryObjectStore;
@@ -15,6 +16,7 @@ import com.hippocampus.materials.port.MaterialContentInspector;
 import com.hippocampus.materials.port.OcrPort;
 import com.hippocampus.materials.port.PdfExtractionSourceRepository;
 import com.hippocampus.materials.port.PdfPageExtractor;
+import com.hippocampus.materials.port.PdfSourceInspector;
 
 @AutoConfiguration(
         after = MaterialContentInspectionConfiguration.class,
@@ -25,6 +27,15 @@ public class PdfExtractionConfiguration {
     @Bean
     PdfExtractionSourceRepository pdfExtractionSourceRepository(JdbcClient jdbcClient) {
         return new JdbcPdfExtractionSourceRepository(jdbcClient);
+    }
+
+    @Bean
+    @ConditionalOnBean({BinaryObjectStore.class, MaterialContentInspector.class})
+    PdfSourceInspector pdfSourceInspector(
+            BinaryObjectStore objectStore,
+            MaterialContentInspector contentInspector,
+            PdfExtractionProperties properties) {
+        return new PdfBoxPdfSourceInspector(objectStore, contentInspector, properties.maxPages());
     }
 
     @Bean

@@ -9,14 +9,22 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import com.hippocampus.materials.domain.ClaimedProcessingJob;
 import com.hippocampus.materials.domain.ProcessingJobType;
+import com.hippocampus.materials.MaterialUploadFixtures;
+import com.hippocampus.materials.application.ClaimNextProcessingJob;
 import com.hippocampus.materials.application.CompleteProcessingStage;
 import com.hippocampus.materials.application.ExecuteClaimedProcessingJob;
 import com.hippocampus.materials.application.FinalizeProcessingFailure;
@@ -25,8 +33,17 @@ import com.hippocampus.materials.application.ProcessingFailureClassifier;
 import com.hippocampus.materials.application.ProcessingRetryPolicy;
 import com.hippocampus.materials.application.ProcessingStageHandler;
 import com.hippocampus.materials.port.BinaryObjectStoreException;
+import com.hippocampus.materials.port.BinaryObjectStore;
+import com.hippocampus.materials.port.MaterialSourceValidator;
+import com.hippocampus.materials.application.UploadMaterial;
+import com.hippocampus.materials.application.MaterialUploadResult;
+import com.hippocampus.identity.infrastructure.persistence.UserRepository;
+import com.hippocampus.identity.infrastructure.security.HippocampusPrincipal;
 import com.hippocampus.materials.port.ProcessingHeartbeatMonitor;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
+import com.hippocampus.testing.security.OwnershipTestUsers;
+import com.hippocampus.materials.infrastructure.storage.filesystem.FileSystemBinaryObjectStore;
+import java.nio.file.Files;
 
 class ProcessingJobRecoveryIntegrationTests extends PostgresIntegrationTestSupport {
     private static final Instant NOW = Instant.parse("2026-01-01T00:00:00Z");
@@ -194,6 +211,64 @@ class ProcessingJobRecoveryIntegrationTests extends PostgresIntegrationTestSuppo
         }
     }
 
+    @Test void materialValidateStorageFailureUsesTransientRecoveryLifecycle() throws Exception {
+        try (var context = startApplicationWithFlyway(TransientValidationFailureConfiguration.class)) {
+            OwnershipTestUsers users = OwnershipTestUsers.persistWith(
+                    context.getBean(UserRepository.class), "validate-recovery");
+            byte[] pdf = MaterialUploadFixtures.pdf();
+            UploadMaterial.Command command = new UploadMaterial.Command(
+                    "validate-recovery.pdf", "application/pdf", pdf.length,
+                    () -> new java.io.ByteArrayInputStream(pdf));
+            MaterialUploadResult uploaded = executeAs(context.getBean(UploadMaterial.class), users, command);
+
+            ClaimNextProcessingJob claims = context.getBean(ClaimNextProcessingJob.class);
+            ExecuteClaimedProcessingJob execution = context.getBean(ExecuteClaimedProcessingJob.class);
+            ClaimedProcessingJob claimed = claims.execute("validate-recovery-worker").orElseThrow();
+
+            assertThatThrownBy(() -> execution.execute(claimed))
+                    .isInstanceOf(BinaryObjectStoreException.class);
+
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            assertThat(rowString(claimed.jobId(), "status")).isEqualTo("RETRY");
+            assertThat(rowString(claimed.jobId(), "error_code")).isEqualTo("STORAGE_UNAVAILABLE");
+            assertThat(jdbc.sql("SELECT next_attempt_at FROM processing_jobs WHERE id=:id")
+                    .param("id", claimed.jobId()).query((rs, ignored) -> rs.getObject(1)).single()).isNotNull();
+            assertThat(rowLong(claimed.jobId(), "attempt_count")).isEqualTo(1L);
+            assertThat(jdbc.sql("SELECT count(*) FROM processing_jobs WHERE material_version_id=:version "
+                            + "AND job_type='MATERIAL_EXTRACT'")
+                    .param("version", uploaded.versionId()).query(Long.class).single()).isZero();
+            assertThat(rowString(uploaded.materialId(), "status", "materials")).isEqualTo("PROCESSING");
+            assertThat(jdbc.sql("SELECT processing_status FROM material_versions WHERE id=:id")
+                    .param("id", uploaded.versionId()).query(String.class).single()).isEqualTo("PROCESSING");
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class TransientValidationFailureConfiguration {
+        @Bean
+        @Primary
+        BinaryObjectStore validationStorage() throws Exception {
+            return new FileSystemBinaryObjectStore(Files.createTempDirectory("hippocampus-validation-recovery-"));
+        }
+
+        @Bean
+        @Primary
+        MaterialSourceValidator failingMaterialSourceValidator() {
+            return ignored -> { throw new BinaryObjectStoreException("synthetic storage outage"); };
+        }
+    }
+
+    private static MaterialUploadResult executeAs(UploadMaterial uploadMaterial, OwnershipTestUsers users,
+            UploadMaterial.Command command) {
+        SecurityContextHolder.getContext().setAuthentication(UsernamePasswordAuthenticationToken.authenticated(
+                new HippocampusPrincipal(users.userA().userId(), users.userA().email()), null, List.of()));
+        try {
+            return uploadMaterial.execute(command);
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
     private static ProcessingHeartbeatMonitor healthyHeartbeat() {
         return ignored -> new ProcessingHeartbeatMonitor.Heartbeat() {
             @Override public void verifyOwnership() { }
@@ -257,5 +332,6 @@ class ProcessingJobRecoveryIntegrationTests extends PostgresIntegrationTestSuppo
     }
     private static void execute(String sql) throws Exception { try (Connection c=openPostgresConnection(); var s=c.createStatement()){s.execute(sql);} }
     private static String rowString(UUID id,String column) throws Exception { try(Connection c=openPostgresConnection();var s=c.prepareStatement("SELECT "+column+" FROM processing_jobs WHERE id=?")){s.setObject(1,id);try(var r=s.executeQuery()){r.next();return r.getString(1);}} }
+    private static String rowString(UUID id, String column, String table) throws Exception { try(Connection c=openPostgresConnection();var s=c.prepareStatement("SELECT "+column+" FROM "+table+" WHERE id=?")){s.setObject(1,id);try(var r=s.executeQuery()){r.next();return r.getString(1);}} }
     private static long rowLong(UUID id,String column) throws Exception { try(Connection c=openPostgresConnection();var s=c.prepareStatement("SELECT "+column+" FROM processing_jobs WHERE id=?")){s.setObject(1,id);try(var r=s.executeQuery()){r.next();return r.getLong(1);}} }
 }

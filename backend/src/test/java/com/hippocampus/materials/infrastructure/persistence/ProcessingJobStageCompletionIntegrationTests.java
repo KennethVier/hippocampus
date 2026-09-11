@@ -84,6 +84,22 @@ class ProcessingJobStageCompletionIntegrationTests extends PostgresIntegrationTe
     }
 
     @Test
+    void deletedMaterialCannotCompleteOrCreateTheNextStage() throws SQLException {
+        try (var context = startApplicationWithFlyway()) {
+            Fixture fixture = insertFixture(ProcessingJobType.MATERIAL_VALIDATE, ProcessingJobStatus.RUNNING);
+            markMaterialDeleted(fixture.materialId());
+
+            assertThatThrownBy(() -> complete(
+                            context.getBean(CompleteProcessingStage.class), fixture,
+                            ProcessingJobType.MATERIAL_EXTRACT))
+                    .isInstanceOf(ProcessingStageCompletionException.class);
+
+            assertThat(loadJob(fixture.jobId()).status()).isEqualTo(ProcessingJobStatus.RUNNING);
+            assertThat(countJobs(ProcessingJobType.MATERIAL_EXTRACT)).isZero();
+        }
+    }
+
+    @Test
     void concurrentDuplicateCompletionCreatesExactlyOneNextJob() throws Exception {
         try (var context = startApplicationWithFlyway()) {
             Fixture fixture = insertFixture(ProcessingJobType.MATERIAL_VALIDATE, ProcessingJobStatus.RUNNING);
@@ -201,7 +217,7 @@ class ProcessingJobStageCompletionIntegrationTests extends PostgresIntegrationTe
             }
         }
         UUID jobId = insertJob(userId, materialVersionId, jobType, status, "processor-v7");
-        return new Fixture(jobId, userId, materialVersionId, jobType);
+        return new Fixture(jobId, userId, materialId, materialVersionId, jobType);
     }
 
     private static UUID insertJob(
@@ -232,6 +248,16 @@ class ProcessingJobStageCompletionIntegrationTests extends PostgresIntegrationTe
             statement.executeUpdate();
         }
         return id;
+    }
+
+    private static void markMaterialDeleted(UUID materialId) throws SQLException {
+        try (Connection connection = openPostgresConnection();
+                PreparedStatement statement = connection.prepareStatement("""
+                        UPDATE materials SET status = 'DELETED', updated_at = CURRENT_TIMESTAMP WHERE id = ?
+                        """)) {
+            statement.setObject(1, materialId);
+            assertThat(statement.executeUpdate()).isEqualTo(1);
+        }
     }
 
     private static JobRow loadOnlyJob(ProcessingJobType type) throws SQLException {
@@ -288,6 +314,7 @@ class ProcessingJobStageCompletionIntegrationTests extends PostgresIntegrationTe
     private record Fixture(
             UUID jobId,
             UUID userId,
+            UUID materialId,
             UUID materialVersionId,
             ProcessingJobType jobType) {}
 
