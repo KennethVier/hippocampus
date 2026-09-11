@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import com.hippocampus.identity.infrastructure.persistence.UserRepository;
+import com.hippocampus.materials.MaterialUploadFixtures;
 import com.hippocampus.materials.application.ClaimNextProcessingJob;
 import com.hippocampus.materials.application.ExecuteClaimedProcessingJob;
 import com.hippocampus.materials.application.UploadMaterial;
@@ -51,8 +52,8 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
         UUID ownerId = users.userA().userId();
 
         UploadMaterial.Command command = new UploadMaterial.Command(
-                "production.pdf", "application/pdf", 1024L,
-                () -> new java.io.ByteArrayInputStream(new byte[1024]));
+                "production.pdf", "application/pdf", (long) MaterialUploadFixtures.pdf().length,
+                () -> new java.io.ByteArrayInputStream(MaterialUploadFixtures.pdf()));
 
         var result = uploadMaterial.execute(command);
 

@@ -12,13 +12,13 @@ import com.hippocampus.materials.port.MaterialSourceValidator;
 import org.springframework.stereotype.Component;
 
 @Component
-public final class JdbcMaterialSourceValidator implements MaterialSourceValidator {
+public final class PersistentMaterialSourceValidator implements MaterialSourceValidator {
 
     private final SpringDataMaterialRepository materials;
     private final SpringDataMaterialVersionRepository versions;
     private final BinaryObjectStore objectStore;
 
-    public JdbcMaterialSourceValidator(
+    public PersistentMaterialSourceValidator(
             SpringDataMaterialRepository materials,
             SpringDataMaterialVersionRepository versions,
             BinaryObjectStore objectStore) {
