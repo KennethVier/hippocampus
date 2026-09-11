@@ -189,14 +189,15 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
     @Test
     void corruptPdfFailsValidationWithoutCreatingExtractJob() throws IOException {
         assertStoredSourceFailsValidation(
-                "corrupt.pdf", MaterialUploadFixtures.validPdf(), MaterialUploadFixtures.corruptPdf(),
+                "corrupt-pdf", "corrupt.pdf", MaterialUploadFixtures.validPdf(), MaterialUploadFixtures.corruptPdf(),
                 MaterialSourceValidationException.Kind.SOURCE_NOT_PROCESSABLE);
     }
 
     @Test
     void encryptedPdfFailsValidationWithoutCreatingExtractJob() throws IOException {
         assertStoredSourceFailsValidation(
-                "encrypted.pdf", MaterialUploadFixtures.encryptedPdf(), MaterialUploadFixtures.encryptedPdf(),
+                "encrypted-pdf", "encrypted.pdf", MaterialUploadFixtures.encryptedPdf(),
+                MaterialUploadFixtures.encryptedPdf(),
                 MaterialSourceValidationException.Kind.SOURCE_NOT_PROCESSABLE);
     }
 
@@ -319,7 +320,7 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
     }
 
     private void assertStoredSourceFailsValidation(
-            String filename, byte[] acceptedBytes, byte[] storedBytes,
+            String scenarioKey, String filename, byte[] acceptedBytes, byte[] storedBytes,
             MaterialSourceValidationException.Kind expectedKind)
             throws IOException {
         try (var context = startApplicationWithFlyway(StorageTestConfiguration.class)) {
@@ -329,7 +330,7 @@ class ProductionEntryIntegrationTests extends PostgresIntegrationTestSupport {
             SpringDataMaterialVersionRepository versions = context.getBean(SpringDataMaterialVersionRepository.class);
             SpringDataProcessingJobRepository jobs = context.getBean(SpringDataProcessingJobRepository.class);
             UserRepository userRepository = context.getBean(UserRepository.class);
-            OwnershipTestUsers users = OwnershipTestUsers.persistWith(userRepository, "entry-" + filename);
+            OwnershipTestUsers users = OwnershipTestUsers.persistWith(userRepository, "entry-" + scenarioKey);
 
             MaterialUploadResult result = upload(uploadMaterial, users, filename, acceptedBytes);
             Path root = context.getBean("uploadTestStorageRoot", Path.class);

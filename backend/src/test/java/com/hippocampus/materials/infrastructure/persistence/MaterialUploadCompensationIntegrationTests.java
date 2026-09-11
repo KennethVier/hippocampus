@@ -11,8 +11,10 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.SQLException;
 import java.util.List;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -37,6 +39,11 @@ import com.hippocampus.testing.PostgresIntegrationTestSupport;
 import com.hippocampus.testing.security.OwnershipTestUsers;
 
 class MaterialUploadCompensationIntegrationTests extends PostgresIntegrationTestSupport {
+
+    @BeforeEach
+    void resetDatabase() throws SQLException {
+        resetPostgresSchema();
+    }
 
     @Test
     void removesStoredObjectWhenRelationalAcceptanceFailsAtJobPersistence() throws Exception {
