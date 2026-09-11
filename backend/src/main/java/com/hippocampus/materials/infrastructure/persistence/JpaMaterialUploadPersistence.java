@@ -36,7 +36,7 @@ public class JpaMaterialUploadPersistence implements MaterialUploadPersistence {
 
         ProcessingJobEntity initialJob = new ProcessingJobEntity(
                 upload.ownerId(), persistedVersion.getId(), ProcessingJobType.MATERIAL_VALIDATE,
-                ProcessingJobStatus.PENDING, 1, null, 0, 3, "v1");
+                ProcessingJobStatus.PENDING, 1, null, 0, 3, "processor-v1");
         jobs.saveAndFlush(initialJob);
 
         return new CreatedMaterial(persistedMaterial.getId(), persistedVersion.getId(), persistedMaterial.getCreatedAt());
