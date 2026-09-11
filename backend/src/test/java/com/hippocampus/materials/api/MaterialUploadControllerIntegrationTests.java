@@ -38,6 +38,7 @@ import com.hippocampus.identity.infrastructure.persistence.UserRepository;
 import com.hippocampus.materials.MaterialUploadFixtures;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialRepository;
 import com.hippocampus.materials.infrastructure.persistence.SpringDataMaterialVersionRepository;
+import com.hippocampus.materials.infrastructure.persistence.SpringDataProcessingJobRepository;
 import com.hippocampus.materials.infrastructure.persistence.JpaMaterialUploadPersistence;
 import com.hippocampus.materials.infrastructure.persistence.MaterialVersionEntity;
 import com.hippocampus.materials.infrastructure.storage.filesystem.FileSystemBinaryObjectStore;
@@ -261,12 +262,13 @@ class MaterialUploadControllerIntegrationTests extends PostgresIntegrationTestSu
         @Primary
         MaterialUploadPersistence rollbackMaterialUploadPersistence(
                 SpringDataMaterialRepository materials,
-                @Qualifier("springDataMaterialVersionRepository") SpringDataMaterialVersionRepository versions) {
+                @Qualifier("springDataMaterialVersionRepository") SpringDataMaterialVersionRepository versions,
+                SpringDataProcessingJobRepository jobs) {
             SpringDataMaterialVersionRepository failingVersions = mock(
                     SpringDataMaterialVersionRepository.class, delegatesTo(versions));
             doThrow(new DataIntegrityViolationException("forced version failure"))
                     .when(failingVersions).saveAndFlush(any(MaterialVersionEntity.class));
-            return new JpaMaterialUploadPersistence(materials, failingVersions);
+            return new JpaMaterialUploadPersistence(materials, failingVersions, jobs);
         }
     }
 
