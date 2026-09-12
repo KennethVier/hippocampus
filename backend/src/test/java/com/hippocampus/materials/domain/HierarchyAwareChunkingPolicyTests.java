@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.Test;
 
@@ -40,6 +41,7 @@ class HierarchyAwareChunkingPolicyTests {
         assertThat(chunks).hasSize(4);
         assertThat(chunks).extracting(ChunkDraft::contentType)
                 .containsExactly(ChunkContentType.TEXT, ChunkContentType.TEXT, ChunkContentType.TEXT, ChunkContentType.TABLE);
+        assertContiguousIdentity(chunks);
         assertThat(chunks.getLast().sourceLinks()).allMatch(link -> !link.overlap());
     }
 
@@ -63,6 +65,7 @@ class HierarchyAwareChunkingPolicyTests {
         text.accept(unit(SECTION, 1, huge, 1, TextBlockQuality.STRONG));
         List<ChunkDraft> chunks = text.finish();
         assertThat(chunks).hasSizeGreaterThan(100).allMatch(chunk -> chunk.tokenCount() <= 10);
+        assertContiguousIdentity(chunks);
         assertThat(chunks).allMatch(chunk -> !Character.isHighSurrogate(chunk.content().charAt(chunk.content().length() - 1)));
 
         var table = policy(8, 10, 0).session(VERSION, hierarchy());
@@ -84,6 +87,16 @@ class HierarchyAwareChunkingPolicyTests {
 
     private HierarchyAwareChunkingPolicy policy(int target, int hard, int overlap) {
         return new HierarchyAwareChunkingPolicy(counter, target, hard, overlap);
+    }
+
+    private static void assertContiguousIdentity(List<ChunkDraft> chunks) {
+        List<Integer> indexes = IntStream.rangeClosed(1, chunks.size()).boxed().toList();
+        assertThat(chunks).extracting(ChunkDraft::chunkIndex).containsExactlyElementsOf(indexes);
+        assertThat(chunks).extracting(ChunkDraft::id)
+                .containsExactlyElementsOf(indexes.stream()
+                        .map(index -> ChunkIdentity.forChunk(VERSION, index))
+                        .toList())
+                .doesNotHaveDuplicates();
     }
 
     private ChunkingHierarchy hierarchy() {
