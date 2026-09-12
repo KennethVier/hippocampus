@@ -152,7 +152,8 @@ public final class HierarchyAwareChunkingPolicy {
                 quality = worst(quality, item.unit().quality());
             }
 
-            int nextIndex = Math.incrementExact(chunkIndex);
+            chunkIndex = Math.incrementExact(chunkIndex);
+            int nextIndex = chunkIndex;
             ready.add(new ChunkDraft(
                     ChunkIdentity.forChunk(materialVersionId, nextIndex), materialVersionId, first.documentNodeId(),
                     nextIndex, content.toString(), tokenCounter.count(content.toString()), pageStart, pageEnd,

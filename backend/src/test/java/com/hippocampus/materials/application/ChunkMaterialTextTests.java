@@ -7,10 +7,12 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.Test;
 
 import com.hippocampus.materials.domain.ChunkDraft;
+import com.hippocampus.materials.domain.ChunkIdentity;
 import com.hippocampus.materials.domain.ChunkingExecutionSummary;
 import com.hippocampus.materials.domain.DeterministicChunkTokenCounter;
 import com.hippocampus.materials.domain.DocumentNode;
@@ -34,6 +36,16 @@ class ChunkMaterialTextTests {
         assertThat(sink.maxBatch).isLessThanOrEqualTo(7);
         assertThat(sink.summary.pageCount()).isEqualTo(601);
         assertThat(sink.summary.expectedChunkCount()).isEqualTo(sink.totalChunks);
+        assertThat(sink.chunks).hasSize(sink.summary.expectedChunkCount());
+        List<Integer> expectedIndexes = IntStream.rangeClosed(1, sink.chunks.size()).boxed().toList();
+        assertThat(sink.chunks).extracting(ChunkDraft::chunkIndex)
+                .containsExactlyElementsOf(expectedIndexes)
+                .doesNotHaveDuplicates();
+        assertThat(sink.chunks).extracting(ChunkDraft::id)
+                .containsExactlyElementsOf(expectedIndexes.stream()
+                        .map(index -> ChunkIdentity.forChunk(source.version, index))
+                        .toList())
+                .doesNotHaveDuplicates();
     }
 
     @Test
