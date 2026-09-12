@@ -335,3 +335,63 @@ jobs:
           test "$AUTH_E2E_RESULT" = success
           test "$SECURITY_RESULT" = success
           test "$PHASE1_GATE_RESULT" = success
+
+  phase3-gate:
+    name: phase3-gate
+    if: ${{ always() }}
+    needs:
+      - backend-quality
+      - frontend-quality
+      - auth-e2e
+      - security
+      - phase1-gate
+      - phase2-gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Require every Phase 3 acceptance input
+        env:
+          BACKEND_RESULT: ${{ needs.backend-quality.result }}
+          FRONTEND_RESULT: ${{ needs.frontend-quality.result }}
+          AUTH_E2E_RESULT: ${{ needs.auth-e2e.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+          PHASE1_GATE_RESULT: ${{ needs.phase1-gate.result }}
+          PHASE2_GATE_RESULT: ${{ needs.phase2-gate.result }}
+        run: |
+          set -euo pipefail
+          test "$BACKEND_RESULT" = success
+          test "$FRONTEND_RESULT" = success
+          test "$AUTH_E2E_RESULT" = success
+          test "$SECURITY_RESULT" = success
+          test "$PHASE1_GATE_RESULT" = success
+          test "$PHASE2_GATE_RESULT" = success
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Java
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '25.0.4'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Install validated OCR runtime
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            tesseract-ocr=5.3.4-1build5 \
+            libtesseract5=5.3.4-1build5 \
+            tesseract-ocr-eng=1:4.1.0-2
+          test "$(tesseract --version | head -n 1)" = "tesseract 5.3.4"
+          tesseract --list-langs | sed '1d' | grep -Fx eng
+
+      - name: Run isolated Phase 3 large-material gate
+        working-directory: backend
+        run: >-
+          ./mvnw -B -ntp
+          -Dtest=LargeMaterialProcessingGateIT
+          -DargLine=-Xmx768m
+          test
