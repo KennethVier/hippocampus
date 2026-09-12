@@ -1,6 +1,11 @@
 package com.hippocampus.materials.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -26,23 +31,20 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.hippocampus.identity.infrastructure.persistence.UserEntity;
 import com.hippocampus.identity.infrastructure.persistence.UserRepository;
 import com.hippocampus.identity.infrastructure.persistence.UserStatus;
 import com.hippocampus.identity.infrastructure.security.HippocampusPrincipal;
 import com.hippocampus.materials.application.ClaimNextProcessingJob;
-import com.hippocampus.materials.application.CompleteProcessingStage;
 import com.hippocampus.materials.application.ExecuteClaimedProcessingJob;
 import com.hippocampus.materials.application.MaterialUploadResult;
-import com.hippocampus.materials.application.ChunkMaterialText;
-import com.hippocampus.materials.application.FinalizeChunking;
-import com.hippocampus.materials.application.FinalizeTextNormalization;
-import com.hippocampus.materials.application.NormalizeMaterialText;
 import com.hippocampus.materials.application.PersistChunkBatch;
 import com.hippocampus.materials.application.PersistNormalizedText;
 import com.hippocampus.materials.application.PersistPdfPageBatch;
@@ -50,24 +52,18 @@ import com.hippocampus.materials.application.UploadMaterial;
 import com.hippocampus.materials.domain.ChunkDraft;
 import com.hippocampus.materials.domain.ChunkIdentity;
 import com.hippocampus.materials.domain.ClaimedProcessingJob;
-import com.hippocampus.materials.domain.DeterministicChunkTokenCounter;
-import com.hippocampus.materials.domain.DocumentNode;
-import com.hippocampus.materials.domain.ExtractionNormalizationPolicy;
-import com.hippocampus.materials.domain.HierarchyAwareChunkingPolicy;
 import com.hippocampus.materials.domain.PdfPageBatch;
 import com.hippocampus.materials.domain.ProcessingJobType;
+import com.hippocampus.materials.domain.MaterialReadiness;
 import com.hippocampus.materials.domain.TextBlock;
-import com.hippocampus.materials.infrastructure.config.ChunkingProperties;
-import com.hippocampus.materials.infrastructure.config.PdfExtractionProperties;
-import com.hippocampus.materials.infrastructure.config.PdfStructureInspectionProperties;
 import com.hippocampus.materials.infrastructure.persistence.JdbcChunkRepository;
 import com.hippocampus.materials.infrastructure.persistence.JdbcTextNormalizationRepository;
 import com.hippocampus.materials.infrastructure.storage.filesystem.FileSystemBinaryObjectStore;
 import com.hippocampus.materials.port.BinaryObjectKey;
 import com.hippocampus.materials.port.BinaryObjectStore;
-import com.hippocampus.materials.port.ChunkingSourceRepository;
 import com.hippocampus.materials.port.PdfExtractionPersistence;
-import com.hippocampus.materials.port.TextNormalizationSourceRepository;
+import com.hippocampus.materials.port.MaterialReadinessRepository;
+import com.hippocampus.materials.application.ProcessingStageHandler;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 
 @Tag("phase3-gate")
@@ -100,13 +96,14 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
         Path pdf = SyntheticLargeMedicalPdfFixture.create(fixtureDirectory);
         assertThat(Files.size(pdf)).isPositive();
 
-        MaterialUploadResult upload;
+        AuthenticatedUpload authenticatedUpload;
         UUID structureJobId;
         List<String> extractedIdentity;
         try (ConfigurableApplicationContext contextA = context(GateConfiguration.class)) {
-            upload = authenticatedUpload(contextA, pdf);
+            authenticatedUpload = authenticatedUpload(contextA, pdf);
+            MaterialUploadResult upload = authenticatedUpload.result();
             JdbcClient jdbc = contextA.getBean(JdbcClient.class);
-            assertOwnedUpload(jdbc, upload);
+            assertOwnedUpload(jdbc, authenticatedUpload);
             executeNext(contextA, WORKER_A, ProcessingJobType.MATERIAL_VALIDATE);
             executeNext(contextA, WORKER_A, ProcessingJobType.MATERIAL_EXTRACT);
             assertJob(jdbc, upload.versionId(), ProcessingJobType.MATERIAL_VALIDATE, "COMPLETED");
@@ -122,12 +119,14 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
 
         List<String> chunksBeforeRetry;
         List<String> linksBeforeRetry;
+        List<String> visualLinksBeforeRetry;
         UUID chunkJobId;
         Instant heartbeatAtClaim;
         int chunkAttempt;
         ConfigurableApplicationContext contextB = context(
                 GateConfiguration.class, CrashBeforeCompletionConfiguration.class);
         try {
+            MaterialUploadResult upload = authenticatedUpload.result();
             JdbcClient jdbc = contextB.getBean(JdbcClient.class);
             ClaimedProcessingJob resumed = claim(contextB, WORKER_B);
             assertThat(resumed.jobId()).isEqualTo(structureJobId);
@@ -158,6 +157,7 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
             assertRunningOwnership(jdbc, chunkJobId, WORKER_B, chunkAttempt);
             chunksBeforeRetry = chunkSnapshot(jdbc, upload.versionId());
             linksBeforeRetry = linkSnapshot(jdbc, upload.versionId());
+            visualLinksBeforeRetry = visualLinkSnapshot(jdbc, upload.versionId());
             assertThat(chunksBeforeRetry).isNotEmpty();
 
             contextB.close();
@@ -170,6 +170,7 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
 
         await(() -> staleHeartbeat(chunkJobId), Duration.ofSeconds(10));
         try (ConfigurableApplicationContext contextC = context(GateConfiguration.class)) {
+            MaterialUploadResult upload = authenticatedUpload.result();
             JdbcClient jdbc = contextC.getBean(JdbcClient.class);
             ClaimedProcessingJob reclaimed = claim(contextC, WORKER_C);
             assertThat(reclaimed.jobId()).isEqualTo(chunkJobId);
@@ -179,12 +180,13 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
 
             assertThat(chunkSnapshot(jdbc, upload.versionId())).isEqualTo(chunksBeforeRetry);
             assertThat(linkSnapshot(jdbc, upload.versionId())).isEqualTo(linksBeforeRetry);
+            assertThat(visualLinkSnapshot(jdbc, upload.versionId())).isEqualTo(visualLinksBeforeRetry);
             assertProgress(contextC, ProcessingJobType.CHUNK, 100, chunksBeforeRetry.size());
             BoundaryRecorder boundaries = contextC.getBean(BoundaryRecorder.class);
             assertThat(boundaries.chunkRangeMaximum()).isLessThanOrEqualTo(20);
             assertThat(boundaries.chunkPersistenceMaximum()).isLessThanOrEqualTo(100);
             assertProvenance(contextC, upload);
-            assertPreIndexBoundary(jdbc, upload);
+            assertPreIndexBoundary(contextC, jdbc, upload, chunkJobId);
         }
     }
 
@@ -199,30 +201,39 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
         return startApplicationWithFlywayAndArguments(sources, arguments);
     }
 
-    private static MaterialUploadResult authenticatedUpload(ConfigurableApplicationContext context, Path pdf)
+    private static AuthenticatedUpload authenticatedUpload(ConfigurableApplicationContext context, Path pdf)
             throws IOException {
         UserEntity owner = context.getBean(UserRepository.class).saveAndFlush(
                 new UserEntity("phase3-gate@example.test", "Synthetic Student", UserStatus.ACTIVE));
         SecurityContextHolder.getContext().setAuthentication(UsernamePasswordAuthenticationToken.authenticated(
                 new HippocampusPrincipal(owner.getId(), owner.getEmail()), null, List.of()));
         try {
-            return context.getBean(UploadMaterial.class).execute(new UploadMaterial.Command(
+            MaterialUploadResult result = context.getBean(UploadMaterial.class).execute(new UploadMaterial.Command(
                     "synthetic-large-medical.pdf", "application/pdf", Files.size(pdf),
                     () -> Files.newInputStream(pdf)));
+            return new AuthenticatedUpload(owner.getId(), result);
         } finally {
             SecurityContextHolder.clearContext();
         }
     }
 
-    private static void assertOwnedUpload(JdbcClient jdbc, MaterialUploadResult upload) {
-        List<String> rows = jdbc.sql("""
-                SELECT m.user_id || '|' || mv.material_id || '|' || pj.job_type || '|' || pj.status
+    private static void assertOwnedUpload(JdbcClient jdbc, AuthenticatedUpload authenticated) {
+        MaterialUploadResult upload = authenticated.result();
+        OwnedUpload row = jdbc.sql("""
+                SELECT m.user_id,mv.material_id,mv.id,pj.material_version_id,pj.job_type,pj.status
                 FROM materials m JOIN material_versions mv ON mv.material_id=m.id
                 JOIN processing_jobs pj ON pj.material_version_id=mv.id
                 WHERE m.id=:material AND mv.id=:version
                 """).param("material", upload.materialId()).param("version", upload.versionId())
-                .query(String.class).list();
-        assertThat(rows).singleElement().asString().contains("|" + upload.materialId() + "|MATERIAL_VALIDATE|PENDING");
+                .query((result, ignored) -> new OwnedUpload(result.getObject(1, UUID.class),
+                        result.getObject(2, UUID.class), result.getObject(3, UUID.class),
+                        result.getObject(4, UUID.class), result.getString(5), result.getString(6))).single();
+        assertThat(row.ownerId()).isEqualTo(authenticated.ownerId());
+        assertThat(row.materialId()).isEqualTo(upload.materialId());
+        assertThat(row.versionId()).isEqualTo(upload.versionId());
+        assertThat(row.jobVersionId()).isEqualTo(upload.versionId());
+        assertThat(row.jobType()).isEqualTo("MATERIAL_VALIDATE");
+        assertThat(row.jobStatus()).isEqualTo("PENDING");
     }
 
     private static void executeNext(ConfigurableApplicationContext context, String worker, ProcessingJobType expected) {
@@ -284,17 +295,28 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
 
     private static List<String> chunkSnapshot(JdbcClient jdbc, UUID version) {
         return jdbc.sql("""
-                SELECT id || '|' || chunk_index || '|' || document_node_id || '|' || md5(content) || '|'
-                    || page_start || '|' || page_end || '|' || content_type || '|' || extraction_method
+                SELECT id || '|' || material_version_id || '|' || document_node_id || '|' || chunk_index || '|'
+                    || md5(content) || '|' || token_count || '|' || page_start || '|' || page_end || '|'
+                    || COALESCE(heading_path::text,'') || '|' || content_type || '|' || extraction_method || '|'
+                    || COALESCE(quality,'') || '|' || source_order || '|' || is_active
                 FROM chunks WHERE material_version_id=:v ORDER BY chunk_index
                 """).param("v", version).query(String.class).list();
     }
 
     private static List<String> linkSnapshot(JdbcClient jdbc, UUID version) {
         return jdbc.sql("""
-                SELECT l.chunk_id || '|' || l.text_block_id || '|' || l.source_position || '|' || l.is_overlap
+                SELECT l.chunk_id || '|' || l.text_block_id || '|' || l.material_version_id || '|'
+                    || l.source_position || '|' || l.is_overlap
                 FROM chunk_text_block_links l WHERE l.material_version_id=:v
                 ORDER BY l.chunk_id,l.source_position
+                """).param("v", version).query(String.class).list();
+    }
+
+    private static List<String> visualLinkSnapshot(JdbcClient jdbc, UUID version) {
+        return jdbc.sql("""
+                SELECT chunk_id || '|' || visual_asset_id || '|' || material_version_id || '|' || relationship_type
+                FROM chunk_visual_links WHERE material_version_id=:v
+                ORDER BY chunk_id,visual_asset_id
                 """).param("v", version).query(String.class).list();
     }
 
@@ -321,7 +343,7 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
         assertThat(last.total()).isEqualTo(finalTotal);
     }
 
-    private static void assertProvenance(ConfigurableApplicationContext context, MaterialUploadResult upload)
+    private void assertProvenance(ConfigurableApplicationContext context, MaterialUploadResult upload)
             throws IOException {
         JdbcClient jdbc = context.getBean(JdbcClient.class);
         UUID version = upload.versionId();
@@ -330,9 +352,26 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
                   AND parent_id IS NULL AND start_page=1 AND end_page=601
                 """).param("v", version).query(Integer.class).single()).isEqualTo(1);
         assertThat(jdbc.sql("""
-                SELECT count(*) FROM document_nodes WHERE material_version_id=:v
-                  AND node_type IN ('CHAPTER','SECTION') AND start_page BETWEEN 1 AND 601 AND end_page BETWEEN start_page AND 601
-                """).param("v", version).query(Integer.class).single()).isGreaterThan(1);
+                SELECT count(*) FROM document_nodes child JOIN document_nodes root ON root.id=child.parent_id
+                WHERE child.material_version_id=:v AND root.material_version_id=:v AND root.node_type='DOCUMENT'
+                  AND child.node_type='CHAPTER' AND child.title IN
+                    ('Chapter 1 Synthetic Systems','Chapter 4 Synthetic Systems','Chapter 7 Synthetic Systems')
+                  AND child.start_page IN (1,301,601) AND child.end_page BETWEEN child.start_page AND 601
+                """).param("v", version).query(Integer.class).single()).isEqualTo(3);
+
+        OcrEvidence ocr = jdbc.sql("""
+                SELECT id,extraction_method,quality,content FROM text_blocks
+                WHERE material_version_id=:v AND page_number=:page AND block_type='PAGE_TEXT'
+                """).param("v", version).param("page", SyntheticLargeMedicalPdfFixture.OCR_PAGE)
+                .query((row, ignored) -> new OcrEvidence(row.getObject(1, UUID.class), row.getString(2),
+                        row.getString(3), row.getString(4))).single();
+        assertThat(ocr.method()).isEqualTo("OCR");
+        assertThat(ocr.quality()).isIn("STRONG", "LIMITED", "POOR");
+        assertThat(ocr.content()).containsIgnoringCase("OCR landmark");
+        assertThat(jdbc.sql("""
+                SELECT count(*) FROM chunks c JOIN chunk_text_block_links l ON l.chunk_id=c.id
+                WHERE c.material_version_id=:v AND c.extraction_method='OCR' AND l.text_block_id=:block
+                """).param("v", version).param("block", ocr.id()).query(Integer.class).single()).isPositive();
 
         UUID tableBlock = jdbc.sql("""
                 SELECT id FROM text_blocks WHERE material_version_id=:v AND page_number=:p AND block_type='TABLE_TEXT'
@@ -346,28 +385,39 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
                 """).param("v", version).param("block", tableBlock).query(Integer.class).single()).isPositive();
 
         Visual visual = jdbc.sql("""
-                SELECT va.id,va.storage_key,va.content_hash,va.page_number
+                SELECT va.id,va.material_version_id,va.document_node_id,va.storage_key,va.content_hash,
+                       va.page_number,va.interpretation_status,dn.start_page,dn.end_page
                 FROM visual_assets va JOIN document_nodes dn ON dn.id=va.document_node_id
                 WHERE va.material_version_id=:v AND va.page_number=:p AND dn.material_version_id=:v
                 ORDER BY va.id LIMIT 1
                 """).param("v", version).param("p", SyntheticLargeMedicalPdfFixture.MIXED_VISUAL_PAGE)
-                .query((row, ignored) -> new Visual(row.getObject(1, UUID.class), row.getString(2), row.getString(3), row.getInt(4)))
+                .query((row, ignored) -> new Visual(row.getObject(1, UUID.class), row.getObject(2, UUID.class),
+                        row.getObject(3, UUID.class), row.getString(4), row.getString(5), row.getInt(6),
+                        row.getString(7), row.getInt(8), row.getInt(9)))
                 .single();
+        assertThat(visual.versionId()).isEqualTo(version);
+        assertThat(visual.nodeId()).isNotNull();
         assertThat(visual.hash()).isNotBlank();
         assertThat(visual.storageKey()).isNotBlank();
         assertThat(visual.page()).isEqualTo(SyntheticLargeMedicalPdfFixture.MIXED_VISUAL_PAGE);
-        Path resolved = Files.createTempFile("phase3-visual-", ".bin");
+        assertThat(visual.status()).isIn("UNASSESSED", "SUPPORTED", "LIMITED", "UNSUPPORTED", "FAILED");
+        assertThat(visual.page()).isBetween(visual.nodeStart(), visual.nodeEnd());
+        Path resolved = Files.createTempFile(fixtureDirectory, "resolved-visual-", ".bin");
         try (OutputStream destination = Files.newOutputStream(resolved)) {
             context.getBean(BinaryObjectStore.class).get(new BinaryObjectKey(visual.storageKey()), destination);
         }
         assertThat(Files.size(resolved)).isPositive();
+        assertThat(jdbc.sql("""
+                SELECT count(*) FROM chunk_visual_links
+                WHERE material_version_id=:v AND visual_asset_id=:visual AND relationship_type='NEARBY'
+                """).param("v", version).param("visual", visual.id()).query(Integer.class).single()).isPositive();
 
         List<ChunkRow> chunks = jdbc.sql("""
-                SELECT id,chunk_index,page_start,page_end,content,extraction_method,content_type
+                SELECT id,chunk_index,page_start,page_end,extraction_method,content_type
                 FROM chunks WHERE material_version_id=:v ORDER BY chunk_index
                 """).param("v", version).query((row, ignored) -> new ChunkRow(
                         row.getObject(1, UUID.class), row.getInt(2), row.getInt(3), row.getInt(4),
-                        row.getString(5), row.getString(6), row.getString(7))).list();
+                        row.getString(5), row.getString(6))).list();
         assertThat(chunks).isNotEmpty();
         for (int index = 0; index < chunks.size(); index++) {
             ChunkRow chunk = chunks.get(index);
@@ -377,29 +427,81 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
             assertThat(chunk.end()).isBetween(chunk.start(), 601);
         }
         assertThat(chunks).extracting(ChunkRow::id).doesNotHaveDuplicates();
-        String allContent = chunks.stream().map(ChunkRow::content).reduce("", (left, right) -> left + "\n" + right);
-        assertThat(allContent).contains("Na+", "K+", "Ca2+", "C5-T1", "CN VII", "IL-6", "pH");
+        for (String notation : List.of("Na+", "K+", "Ca2+", "C5-T1", "CN VII", "IL-6", "pH")) {
+            assertThat(jdbc.sql("SELECT EXISTS(SELECT 1 FROM chunks WHERE material_version_id=:v AND content LIKE :term)")
+                    .param("v", version).param("term", "%" + notation + "%").query(Boolean.class).single()).isTrue();
+        }
         assertThat(jdbc.sql("""
                 SELECT count(*) FROM chunks c JOIN chunk_text_block_links l ON l.chunk_id=c.id
                 JOIN text_blocks t ON t.id=l.text_block_id
                 WHERE c.material_version_id=:v AND c.extraction_method<>t.extraction_method
                 """).param("v", version).query(Integer.class).single()).isZero();
+        assertThat(jdbc.sql("""
+                SELECT count(*) FROM chunks c JOIN chunk_text_block_links l ON l.chunk_id=c.id
+                JOIN text_blocks t ON t.id=l.text_block_id
+                WHERE c.material_version_id=:v AND c.content_type='TABLE' AND t.block_type<>'TABLE_TEXT'
+                """).param("v", version).query(Integer.class).single()).isZero();
     }
 
-    private static void assertPreIndexBoundary(JdbcClient jdbc, MaterialUploadResult upload) {
+    private static void assertPreIndexBoundary(ConfigurableApplicationContext context, JdbcClient jdbc,
+            MaterialUploadResult upload, UUID completedChunkJobId) {
         assertThat(jdbc.sql("SELECT count(*) FROM processing_jobs WHERE material_version_id=:v AND status='COMPLETED'")
                 .param("v", upload.versionId()).query(Integer.class).single()).isEqualTo(6);
         assertThat(jdbc.sql("SELECT count(*) FROM processing_jobs WHERE material_version_id=:v AND job_type='EMBED'")
                 .param("v", upload.versionId()).query(Integer.class).single()).isZero();
+        MaterialReadiness.Facts facts = new TransactionTemplate(
+                context.getBean(org.springframework.transaction.PlatformTransactionManager.class)).execute(status ->
+                    context.getBean(MaterialReadinessRepository.class).lockAndRead(completedChunkJobId)
+                            .orElseThrow().facts());
+        String diagnostic = "facts=" + facts + ", jobs=" + jobDiagnostics(jdbc, upload.versionId())
+                + ", provenance=" + provenanceDiagnostics(jdbc, upload.versionId());
+        assertThat(facts.started()).as(diagnostic).isTrue();
+        assertThat(facts.requiredStageFailed()).as(diagnostic).isFalse();
+        assertThat(facts.requiredStagesCompleted()).as(diagnostic).isTrue();
+        assertThat(facts.provenanceValid()).as(diagnostic).isTrue();
+        assertThat(facts.usableEvidence()).as(diagnostic).isTrue();
+        assertThat(facts.index()).as(diagnostic).isEqualTo(MaterialReadiness.IndexPrerequisite.ABSENT);
+
         String state = jdbc.sql("""
                 SELECT m.status || '|' || mv.processing_status || '|' || (m.active_version_id IS NULL) || '|'
                     || (mv.activated_at IS NULL)
                 FROM materials m JOIN material_versions mv ON mv.material_id=m.id
                 WHERE m.id=:m AND mv.id=:v
                 """).param("m", upload.materialId()).param("v", upload.versionId()).query(String.class).single();
-        assertThat(state).isEqualTo("PROCESSING|PROCESSING|true|true");
+        assertThat(state).as(diagnostic).isEqualTo("PROCESSING|PROCESSING|true|true");
         assertThat(jdbc.sql("SELECT count(*) FROM processing_jobs WHERE material_version_id=:v")
                 .param("v", upload.versionId()).query(Integer.class).single()).isEqualTo(6);
+    }
+
+    private static List<String> jobDiagnostics(JdbcClient jdbc, UUID version) {
+        return jdbc.sql("""
+                SELECT job_type || '|' || status || '|' || attempt_count || '|' || processing_version || '|'
+                    || COALESCE(error_code,'')
+                FROM processing_jobs WHERE material_version_id=:v
+                  AND job_type IN ('MATERIAL_VALIDATE','MATERIAL_EXTRACT','STRUCTURE_DETECT','VISUAL_EXTRACT','NORMALIZE','CHUNK')
+                ORDER BY CASE job_type WHEN 'MATERIAL_VALIDATE' THEN 1 WHEN 'MATERIAL_EXTRACT' THEN 2
+                    WHEN 'STRUCTURE_DETECT' THEN 3 WHEN 'VISUAL_EXTRACT' THEN 4 WHEN 'NORMALIZE' THEN 5 ELSE 6 END
+                """).param("v", version).query(String.class).list();
+    }
+
+    private static String provenanceDiagnostics(JdbcClient jdbc, UUID version) {
+        return jdbc.sql("""
+                SELECT concat_ws(',',
+                  'roots=' || (SELECT count(*) FROM document_nodes WHERE material_version_id=:v AND node_type='DOCUMENT' AND parent_id IS NULL),
+                  'pages=' || (SELECT count(*) FROM text_blocks WHERE material_version_id=:v AND block_type='PAGE_TEXT'),
+                  'distinctPages=' || (SELECT count(DISTINCT page_number) FROM text_blocks WHERE material_version_id=:v AND block_type='PAGE_TEXT'),
+                  'nullNormalized=' || (SELECT count(*) FROM text_blocks WHERE material_version_id=:v AND normalized_content IS NULL),
+                  'blocksWithoutNode=' || (SELECT count(*) FROM text_blocks WHERE material_version_id=:v AND document_node_id IS NULL),
+                  'invalidBlockPages=' || (SELECT count(*) FROM text_blocks WHERE material_version_id=:v AND (page_number<1 OR page_number>601)),
+                  'ocrBlocksWithoutQuality=' || (SELECT count(*) FROM text_blocks WHERE material_version_id=:v AND extraction_method='OCR' AND quality IS NULL),
+                  'chunksWithoutLocation=' || (SELECT count(*) FROM chunks WHERE material_version_id=:v AND (document_node_id IS NULL OR page_start IS NULL OR page_end IS NULL)),
+                  'ocrChunksWithoutQuality=' || (SELECT count(*) FROM chunks WHERE material_version_id=:v AND extraction_method='OCR' AND quality IS NULL),
+                  'chunksWithoutLinks=' || (SELECT count(*) FROM chunks c WHERE c.material_version_id=:v AND NOT EXISTS (SELECT 1 FROM chunk_text_block_links l WHERE l.chunk_id=c.id)),
+                  'nonContiguousLinks=' || (SELECT count(*) FROM chunks c WHERE c.material_version_id=:v AND (SELECT max(source_position) FROM chunk_text_block_links l WHERE l.chunk_id=c.id)<>(SELECT count(*) FROM chunk_text_block_links l WHERE l.chunk_id=c.id)),
+                  'crossVersionLinks=' || (SELECT count(*) FROM chunk_text_block_links l JOIN text_blocks t ON t.id=l.text_block_id WHERE l.material_version_id=:v AND t.material_version_id<>:v),
+                  'blankLinkedSources=' || (SELECT count(*) FROM chunk_text_block_links l JOIN text_blocks t ON t.id=l.text_block_id WHERE l.material_version_id=:v AND (t.normalized_content IS NULL OR btrim(t.normalized_content)='')),
+                  'methodMismatch=' || (SELECT count(*) FROM chunk_text_block_links l JOIN chunks c ON c.id=l.chunk_id JOIN text_blocks t ON t.id=l.text_block_id WHERE l.material_version_id=:v AND c.extraction_method<>t.extraction_method))
+                """).param("v", version).query(String.class).single();
     }
 
     private static boolean await(BooleanSupplier condition, Duration timeout) {
@@ -420,9 +522,14 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
         }
     }
 
+    private record AuthenticatedUpload(UUID ownerId, MaterialUploadResult result) {}
+    private record OwnedUpload(UUID ownerId, UUID materialId, UUID versionId, UUID jobVersionId,
+            String jobType, String jobStatus) {}
     private record Progress(ProcessingJobType type, long current, Long total) {}
-    private record Visual(UUID id, String storageKey, String hash, int page) {}
-    private record ChunkRow(UUID id, int index, int start, int end, String content, String method, String type) {}
+    private record OcrEvidence(UUID id, String method, String quality, String content) {}
+    private record Visual(UUID id, UUID versionId, UUID nodeId, String storageKey, String hash, int page,
+            String status, int nodeStart, int nodeEnd) {}
+    private record ChunkRow(UUID id, int index, int start, int end, String method, String type) {}
 
     @Configuration(proxyBeanMethods = false)
     static class GateConfiguration {
@@ -479,22 +586,24 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
 
         @Bean
         @Primary
-        NormalizeMaterialText recordingNormalizeMaterialText(JdbcTextNormalizationRepository repository,
-                PersistNormalizedText persistence, FinalizeTextNormalization finalization,
-                PdfExtractionProperties properties, BoundaryRecorder recorder) {
-            TextNormalizationSourceRepository recordingSource = new TextNormalizationSourceRepository() {
-                @Override public int requirePageCount(UUID version) { return repository.requirePageCount(version); }
-                @Override public List<TextBlock> findPageText(UUID version, int first, int last) {
-                    recorder.normalizationRanges.add(last - first + 1);
-                    return repository.findPageText(version, first, last);
-                }
-                @Override public List<TextBlock> findTableText(UUID version, int first, int last) {
-                    recorder.normalizationRanges.add(last - first + 1);
-                    return repository.findTableText(version, first, last);
-                }
-            };
-            return new NormalizeMaterialText(recordingSource, new ExtractionNormalizationPolicy(), persistence,
-                    finalization, properties.pageBatchSize());
+        JdbcTextNormalizationRepository recordingNormalizationRepository(
+                @Qualifier("textNormalizationRepository") JdbcTextNormalizationRepository delegate,
+                BoundaryRecorder recorder) {
+            JdbcTextNormalizationRepository recording = mock(
+                    JdbcTextNormalizationRepository.class, delegatesTo(delegate));
+            doAnswer(invocation -> {
+                recorder.normalizationRanges.add(invocation.getArgument(2, Integer.class)
+                        - invocation.getArgument(1, Integer.class) + 1);
+                return delegate.findPageText(invocation.getArgument(0), invocation.getArgument(1),
+                        invocation.getArgument(2));
+            }).when(recording).findPageText(any(UUID.class), anyInt(), anyInt());
+            doAnswer(invocation -> {
+                recorder.normalizationRanges.add(invocation.getArgument(2, Integer.class)
+                        - invocation.getArgument(1, Integer.class) + 1);
+                return delegate.findTableText(invocation.getArgument(0), invocation.getArgument(1),
+                        invocation.getArgument(2));
+            }).when(recording).findTableText(any(UUID.class), anyInt(), anyInt());
+            return recording;
         }
 
         @Bean
@@ -512,25 +621,16 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
 
         @Bean
         @Primary
-        ChunkMaterialText recordingChunkMaterialText(JdbcChunkRepository repository, PersistChunkBatch persistence,
-                FinalizeChunking finalization, PdfExtractionProperties pdf,
-                PdfStructureInspectionProperties structure, ChunkingProperties chunking, BoundaryRecorder recorder) {
-            ChunkingSourceRepository recordingSource = new ChunkingSourceRepository() {
-                @Override public int requirePageCount(UUID version) { return repository.requirePageCount(version); }
-                @Override public List<DocumentNode> findHierarchy(UUID version) { return repository.findHierarchy(version); }
-                @Override public List<TextBlock> findByPhysicalPage(UUID version, int first, int last) {
-                    recorder.chunkRanges.add(last - first + 1);
-                    return repository.findByPhysicalPage(version, first, last);
-                }
-                @Override public List<VisualSource> findVisualsByPhysicalPage(UUID version, int first, int last) {
-                    return repository.findVisualsByPhysicalPage(version, first, last);
-                }
-            };
-            HierarchyAwareChunkingPolicy policy = new HierarchyAwareChunkingPolicy(
-                    new DeterministicChunkTokenCounter(), chunking.targetTokenCount(), chunking.hardTokenCount(),
-                    chunking.overlapTokenCount());
-            return new ChunkMaterialText(recordingSource, policy, persistence, finalization, pdf.pageBatchSize(),
-                    chunking.persistenceBatchSize(), structure.maxNodesPerDocument(), structure.maxOutlineDepth());
+        JdbcChunkRepository recordingChunkRepository(
+                @Qualifier("chunkRepository") JdbcChunkRepository delegate, BoundaryRecorder recorder) {
+            JdbcChunkRepository recording = mock(JdbcChunkRepository.class, delegatesTo(delegate));
+            doAnswer(invocation -> {
+                recorder.chunkRanges.add(invocation.getArgument(2, Integer.class)
+                        - invocation.getArgument(1, Integer.class) + 1);
+                return delegate.findByPhysicalPage(invocation.getArgument(0), invocation.getArgument(1),
+                        invocation.getArgument(2));
+            }).when(recording).findByPhysicalPage(any(UUID.class), anyInt(), anyInt());
+            return recording;
         }
     }
 
@@ -585,24 +685,27 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
         }
 
         @Bean
-        @Primary
-        CompleteProcessingStage crashWindowCompleteProcessingStage(
-                @Qualifier("processingJobStageCompletionRepository")
-                com.hippocampus.materials.port.ProcessingJobStageCompletionRepository jobs,
-                com.hippocampus.materials.application.DeriveMaterialReadiness readiness) {
-            return new CompleteProcessingStage(jobs, readiness) {
+        static BeanPostProcessor pauseAfterChunkStageReturns() {
+            return new BeanPostProcessor() {
                 @Override
-                public void execute(ClaimedProcessingJob job, com.hippocampus.materials.application.ProcessingStageResult result) {
-                    if (armed && job.jobType() == ProcessingJobType.CHUNK) {
-                        reached.countDown();
-                        try {
-                            NEVER.await();
-                        } catch (InterruptedException interrupted) {
-                            Thread.currentThread().interrupt();
-                            throw new SimulatedWorkerDeath();
-                        }
+                public Object postProcessAfterInitialization(Object bean, String beanName) {
+                    if (!"chunkMaterialStageHandler".equals(beanName) || !(bean instanceof ProcessingStageHandler handler)) {
+                        return bean;
                     }
-                    super.execute(job, result);
+                    return new ProcessingStageHandler() {
+                        @Override public ProcessingJobType jobType() { return handler.jobType(); }
+                        @Override public void handle(ClaimedProcessingJob job) {
+                            handler.handle(job);
+                            if (!armed) return;
+                            reached.countDown();
+                            try {
+                                NEVER.await();
+                            } catch (InterruptedException interrupted) {
+                                Thread.currentThread().interrupt();
+                                throw new SimulatedWorkerDeath();
+                            }
+                        }
+                    };
                 }
             };
         }
