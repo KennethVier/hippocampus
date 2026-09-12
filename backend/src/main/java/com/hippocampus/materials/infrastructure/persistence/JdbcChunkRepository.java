@@ -1,5 +1,8 @@
 package com.hippocampus.materials.infrastructure.persistence;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
@@ -335,7 +338,79 @@ public final class JdbcChunkRepository implements ChunkingSourceRepository, Chun
                 .param("method", draft.extractionMethod().name())
                 .param("quality", draft.quality() == null ? null : draft.quality().name())
                 .param("sourceOrder", draft.sourceOrder()).query(Integer.class).single();
-        if (matches != 1) throw new IllegalStateException("Durable chunk conflicts with deterministic output");
+        if (matches != 1) throw chunkConflict(draft, headingPath);
+    }
+
+    private IllegalStateException chunkConflict(ChunkDraft draft, String headingPath) {
+        List<ConflictRow> byId = findConflictRows("id=:value", draft.id(), draft.materialVersionId());
+        List<ConflictRow> byIndex = findConflictRows(
+                "material_version_id=:version AND chunk_index=:index", null, draft.materialVersionId(),
+                draft.chunkIndex());
+        String path;
+        if (!byId.isEmpty() && !byIndex.isEmpty() && byId.getFirst().id().equals(byIndex.getFirst().id())) {
+            path = "PRIMARY_ID_AND_VERSION_INDEX";
+        } else if (!byId.isEmpty()) {
+            path = "PRIMARY_ID";
+        } else if (!byIndex.isEmpty()) {
+            path = "VERSION_INDEX";
+        } else {
+            path = "UNKNOWN";
+        }
+        ConflictRow existing = !byIndex.isEmpty() ? byIndex.getFirst() : byId.isEmpty() ? null : byId.getFirst();
+        return new IllegalStateException("Durable chunk conflicts with deterministic output: path=" + path
+                + ", candidate=" + describe(draft, headingPath)
+                + ", existing=" + (existing == null ? "missing" : existing.describe()));
+    }
+
+    private List<ConflictRow> findConflictRows(String predicate, UUID id, UUID version) {
+        return findConflictRows(predicate, id, version, null);
+    }
+
+    private List<ConflictRow> findConflictRows(String predicate, UUID id, UUID version, Integer index) {
+        JdbcClient.StatementSpec statement = jdbc.sql("""
+                SELECT id, material_version_id, chunk_index, document_node_id, content, token_count,
+                       page_start, page_end, heading_path::text, content_type, extraction_method,
+                       quality, source_order, is_active
+                FROM chunks WHERE %s
+                """.formatted(predicate)).param("version", version);
+        if (id != null) statement = statement.param("value", id);
+        if (index != null) statement = statement.param("index", index);
+        return statement.query((row, number) -> new ConflictRow(
+                row.getObject("id", UUID.class), row.getObject("material_version_id", UUID.class),
+                row.getInt("chunk_index"), row.getObject("document_node_id", UUID.class),
+                digest(row.getString("content")), row.getInt("token_count"), row.getInt("page_start"),
+                row.getInt("page_end"), digest(row.getString("heading_path")), row.getString("content_type"),
+                row.getString("extraction_method"), row.getString("quality"), row.getLong("source_order"),
+                row.getBoolean("is_active"))).list();
+    }
+
+    private String describe(ChunkDraft draft, String headingPath) {
+        return "{id=" + draft.id() + ",version=" + draft.materialVersionId() + ",index=" + draft.chunkIndex()
+                + ",node=" + draft.documentNodeId() + ",contentSha256=" + digest(draft.content())
+                + ",tokens=" + draft.tokenCount() + ",pages=" + draft.pageStart() + "-" + draft.pageEnd()
+                + ",headingPathSha256=" + digest(headingPath) + ",type=" + draft.contentType()
+                + ",method=" + draft.extractionMethod() + ",quality=" + draft.quality()
+                + ",sourceOrder=" + draft.sourceOrder() + "}";
+    }
+
+    private static String digest(String value) {
+        try {
+            return java.util.HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(impossible);
+        }
+    }
+
+    private record ConflictRow(UUID id, UUID version, int index, UUID node, String contentSha256,
+            int tokens, int pageStart, int pageEnd, String headingPathSha256, String type, String method,
+            String quality, long sourceOrder, boolean active) {
+        String describe() {
+            return "{id=" + id + ",version=" + version + ",index=" + index + ",node=" + node
+                    + ",contentSha256=" + contentSha256 + ",tokens=" + tokens + ",pages=" + pageStart + "-"
+                    + pageEnd + ",headingPathSha256=" + headingPathSha256 + ",type=" + type + ",method=" + method
+                    + ",quality=" + quality + ",sourceOrder=" + sourceOrder + ",active=" + active + "}";
+        }
     }
 
     private void verifyNoUnexpectedLinks(ChunkDraft draft) {

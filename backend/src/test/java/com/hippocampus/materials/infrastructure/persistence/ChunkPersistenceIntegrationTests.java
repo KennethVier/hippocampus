@@ -163,7 +163,11 @@ class ChunkPersistenceIntegrationTests extends ChunkPersistenceTestFixture {
         persistence.execute(version, List.of(second));
         jdbc.sql("UPDATE chunks SET content='conflict' WHERE chunk_index=2").update();
         assertThatThrownBy(() -> persistence.execute(version, List.of(draft(), second)))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("path=PRIMARY_ID_AND_VERSION_INDEX")
+                .hasMessageContaining("candidate={id=" + second.id())
+                .hasMessageContaining("existing={id=" + second.id())
+                .hasMessageContaining("contentSha256=");
         assertThat(jdbc.sql("SELECT count(*) FROM chunks WHERE chunk_index=1").query(Integer.class).single()).isZero();
     }
 
