@@ -17,6 +17,36 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  phase3-gate:
+    name: phase3-gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Java
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '25.0.4'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Install validated OCR runtime
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            tesseract-ocr=5.3.4-1build5 \
+            libtesseract5=5.3.4-1build5 \
+            tesseract-ocr-eng=1:4.1.0-2
+          test "$(tesseract --version | head -n 1)" = "tesseract 5.3.4"
+
+      - name: Run Phase 3 large-material gate
+        working-directory: backend
+        run: ./mvnw -B -ntp -Dgroups=phase3-gate -Dtest=LargeMaterialProcessingGateIntegrationTests test
+
   backend-quality:
     name: backend-quality
     runs-on: ubuntu-24.04
