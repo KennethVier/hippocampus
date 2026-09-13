@@ -43,10 +43,11 @@ For normal tracker implementation:
 3. Confirm phase/dependency scope and do not pull later tracker work forward.
 4. If a detailed plan was already approved externally, implement it directly; do not re-plan unless a concrete blocker or contradiction appears.
 5. Make the smallest correct, reviewable change.
-6. Run focused validation first, then tracker-required validation.
-7. Report concise factual evidence and leave publication/merge decisions to external review unless explicitly requested.
+6. Run focused changed-behavior tests, then run `hippocampus-validate-implementation` as the required pre-review validation gate.
+7. Prove the changed real artifact when runtime behavior is part of the task; a production-composed integration/E2E test may satisfy this when duplicating a live run adds no material evidence.
+8. Report concise factual evidence and leave publication/merge decisions to external review unless explicitly requested.
 
-Use `hippocampus-implement-task` for ordinary implementation execution. Use other skills only when their detailed guidance is materially relevant. Do not chain all backend/frontend/security skills by default.
+Use `hippocampus-implement-task` for ordinary implementation execution. `hippocampus-validate-implementation` is the required post-implementation validation step before an implementation may be reported ready for external review. Use other detailed skills only when their guidance is materially relevant; do not chain all backend/frontend/security skills by default.
 
 ## Context / Token Efficiency
 

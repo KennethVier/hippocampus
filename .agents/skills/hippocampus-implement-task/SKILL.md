@@ -1,6 +1,6 @@
 ---
 name: hippocampus-implement-task
-description: Default execution workflow for an approved Hippocampus tracker task. Implement directly with minimal context, targeted repository reads, focused validation, and no unnecessary planning, Git/history inspection, skill chaining, or subagent discovery.
+description: Default execution workflow for an approved Hippocampus tracker task. Implement directly with minimal context, targeted repository reads, focused validation, required post-implementation validation, and no unnecessary planning or broad repository reconnaissance.
 ---
 
 # Implement a Hippocampus Tracker Task
@@ -18,31 +18,20 @@ If an external detailed plan/execution packet exists, treat it as the working pl
 3. Inspect only the affected implementation/tests needed to make the change safely.
 4. Implement the smallest complete change within current tracker scope.
 5. Add/update behavior-oriented tests where required.
-6. Run focused validation first; then run the broader validation explicitly required by the tracker/task.
-7. Run diff hygiene checks when available.
-8. Report concise factual evidence.
+6. Run focused changed-behavior validation first.
+7. Run `hippocampus-validate-implementation` as the required post-implementation gate.
+8. Inspect diff hygiene and the complete changed diff when available.
+9. Report concise factual evidence, including the validation verdict.
 
 ## Implementation Focus
 
-Do not, by default:
-
-- perform broad repository reconnaissance;
-- inspect Git HEAD, commit history, branches, remotes, PR metadata, or unrelated diffs;
-- search for or enumerate agents/subagents;
-- spawn subagents;
-- enumerate or load multiple skills “to be safe”;
-- inspect unrelated modules/docs;
-- install or download tools/dependencies/agents/CLIs;
-- reread files already established as relevant;
-- re-plan an already approved task.
-
-Do any of those only when a concrete blocker, dependency, failing test, ambiguity, or security/architecture concern makes it necessary. Cloud execution may perform revision/environment preflight only when that execution environment genuinely requires it; do not copy cloud-specific ceremony into normal local implementation.
+By default, avoid broad repository reconnaissance, unrelated history/PR inspection, unnecessary skill discovery, subagents, unrelated modules/docs, speculative dependencies, and re-planning an already approved task. Expand context only when a concrete blocker, dependency, failing test, ambiguity, or security/architecture concern makes it necessary.
 
 Single-agent execution is the default.
 
 ## Skill Routing
 
-Root `AGENTS.md` contains the persistent baseline. Load at most the detailed skill(s) materially needed by the current problem:
+Root `AGENTS.md` contains the persistent baseline. Load detailed engineering guidance only when materially needed:
 
 - Java language/domain design → `hippocampus-java-spring-engineering`
 - Spring framework behavior → `hippocampus-spring-boot-engineering`
@@ -50,7 +39,7 @@ Root `AGENTS.md` contains the persistent baseline. Load at most the detailed ski
 - non-trivial architecture/pattern choice → `hippocampus-architecture-patterns`
 - specialized test/security-test design → `hippocampus-testing-security`
 
-Do not automatically chain these skills. Cross-references inside a detailed skill are advisory routing hints, not instructions to load another skill unless the current implementation presents that concrete concern. The independent `hippocampus-security-vulnerability-review` is a later completion gate, not an implementation-time skill load.
+`hippocampus-validate-implementation` is the required post-implementation gate rather than an optional engineering skill. Use it after focused implementation tests. The independent `hippocampus-security-vulnerability-review` remains a later completion gate.
 
 ## Scope / Safety
 
@@ -59,17 +48,17 @@ Do not automatically chain these skills. Cross-references inside a detailed skil
 - Preserve module/dependency direction and authorization boundaries.
 - Security-sensitive uncertainty fails closed.
 - Do not weaken tests to obtain green output.
-- Do not commit, push, or create/update a PR unless the execution packet explicitly authorizes publication.
 - If a significant unresolved decision requires Document 27/ADR handling, stop instead of inventing the decision.
 
 ## Validation
 
-Prefer narrow-to-broad:
+Implementation validation is split deliberately:
 
-1. directly affected unit/integration tests;
-2. architecture/database/frontend validation when relevant;
-3. tracker-required full validation;
-4. `git diff --check` and targeted/full diff inspection when available.
+1. run directly affected unit/integration/regression tests while implementing;
+2. after the implementation candidate exists, use `hippocampus-validate-implementation` to run applicable broad deterministic checks and prove the changed real artifact when runtime behavior is part of the tracker Expected Result;
+3. only `VALIDATION PASS` is ready for external implementation review;
+4. `VALIDATION FAIL` requires correction and rerun;
+5. `VALIDATION INCONCLUSIVE` requires the missing evidence in an authoritative environment and is not a pass.
 
 When validation fails, investigate the first causal failure and expand context only as needed to resolve it.
 
@@ -78,9 +67,11 @@ When validation fails, investigate the first causal failure and expand context o
 Keep the final implementation report short:
 
 - changed: what was implemented;
-- tests: focused + required validation results;
+- tests: focused validation results;
+- validation: `VALIDATION PASS`, `VALIDATION FAIL`, or `VALIDATION INCONCLUSIVE`;
+- real-artifact: exact behavior proof, `not required`, or missing evidence;
 - scope: confirmation/no known drift;
 - blockers: none or exact blocker;
-- state: uncommitted/unpublished unless publication was explicitly requested.
+- state: publication state as explicitly authorized by the task packet.
 
 Do not generate a long architecture/security essay unless the task or a discovered risk requires one.
