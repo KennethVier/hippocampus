@@ -36,15 +36,32 @@ class ChunkVisualLinkPersistenceIntegrationTests extends ChunkPersistenceTestFix
     }
 
     @Test
-    void rejectsMissingWrongNodeAndNonPrimaryPageVisuals() {
+    void acceptsVisualInAContainedDescendantNode() {
+        UUID section = UUID.randomUUID();
+        jdbc.sql("INSERT INTO document_nodes(id,material_version_id,parent_id,node_type,ordinal,start_page,end_page,detection_origin,created_at) VALUES (?,?,?,'SECTION',2,1,1,'NATIVE',CURRENT_TIMESTAMP)")
+                .params(section, version, node).update();
+        UUID visual = insertVisual(1, section, version);
+
+        persistence.execute(version, List.of(withVisuals(draft(), List.of(visual))));
+
+        assertThat(jdbc.sql("SELECT count(*) FROM chunk_visual_links WHERE visual_asset_id=?")
+                .param(visual).query(Integer.class).single()).isEqualTo(1);
+    }
+
+    @Test
+    void rejectsMissingUnrelatedNodeAndNonPrimaryPageVisuals() {
         assertThatThrownBy(() -> persistence.execute(version,
                 List.of(withVisuals(draft(), List.of(UUID.randomUUID()))))).isInstanceOf(IllegalStateException.class);
+        UUID chunkNode = UUID.randomUUID();
         UUID otherNode = UUID.randomUUID();
         jdbc.sql("INSERT INTO document_nodes(id,material_version_id,parent_id,node_type,ordinal,start_page,end_page,detection_origin,created_at) VALUES (?,?,?,'SECTION',2,1,1,'NATIVE',CURRENT_TIMESTAMP)")
+                .params(chunkNode, version, node).update();
+        jdbc.sql("INSERT INTO document_nodes(id,material_version_id,parent_id,node_type,ordinal,start_page,end_page,detection_origin,created_at) VALUES (?,?,?,'SECTION',3,1,1,'NATIVE',CURRENT_TIMESTAMP)")
                 .params(otherNode, version, node).update();
         UUID wrongNode = insertVisual(1, otherNode, version);
         assertThatThrownBy(() -> persistence.execute(version,
-                List.of(withVisuals(draft(), List.of(wrongNode))))).isInstanceOf(IllegalStateException.class);
+                List.of(withVisuals(withNode(draft(), chunkNode), List.of(wrongNode)))))
+                .isInstanceOf(IllegalStateException.class);
         UUID nonPrimary = insertVisual(2, node, version);
         assertThatThrownBy(() -> persistence.execute(version,
                 List.of(withVisuals(draft(), List.of(nonPrimary))))).isInstanceOf(IllegalStateException.class);
@@ -72,5 +89,12 @@ class ChunkVisualLinkPersistenceIntegrationTests extends ChunkPersistenceTestFix
                 value.content(), value.tokenCount(), value.pageStart(), value.pageEnd(), value.primaryPages(),
                 value.headingPath(), value.contentType(), value.extractionMethod(), value.quality(), value.sourceOrder(),
                 value.sourceLinks(), visuals);
+    }
+
+    private ChunkDraft withNode(ChunkDraft value, UUID documentNodeId) {
+        return new ChunkDraft(value.id(), value.materialVersionId(), documentNodeId, value.chunkIndex(),
+                value.content(), value.tokenCount(), value.pageStart(), value.pageEnd(), value.primaryPages(),
+                value.headingPath(), value.contentType(), value.extractionMethod(), value.quality(), value.sourceOrder(),
+                value.sourceLinks(), value.visualAssetIds());
     }
 }

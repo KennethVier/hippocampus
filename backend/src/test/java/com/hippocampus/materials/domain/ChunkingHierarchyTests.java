@@ -19,6 +19,9 @@ class ChunkingHierarchyTests {
         ChunkingHierarchy hierarchy = new ChunkingHierarchy(VERSION, 3, List.of(root, section), 10, 5);
         assertThat(hierarchy.headingPath(section.id())).containsExactly("Book", "Heart");
         hierarchy.validate(section.id(), 2);
+        assertThat(hierarchy.containsDescendant(root.id(), section.id(), 2)).isTrue();
+        assertThat(hierarchy.containsDescendant(section.id(), root.id(), 2)).isFalse();
+        assertThat(hierarchy.containsDescendant(root.id(), section.id(), 1)).isFalse();
         assertThatThrownBy(() -> hierarchy.validate(section.id(), 1)).isInstanceOf(IllegalArgumentException.class);
     }
 

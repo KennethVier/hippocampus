@@ -309,10 +309,32 @@ public final class JdbcChunkRepository implements ChunkingSourceRepository, Chun
                         row.getObject("document_node_id", UUID.class), row.getInt("page_number")))
                 .optional().orElseThrow(() -> new IllegalStateException("Visual source is missing"));
         if (!visual.materialVersionId().equals(draft.materialVersionId())
-                || !Objects.equals(visual.documentNodeId(), draft.documentNodeId())
-                || !draft.primaryPages().contains(visual.pageNumber())) {
+                || !draft.primaryPages().contains(visual.pageNumber())
+                || !visualNodeWithinChunkHierarchy(draft, visual)) {
             throw new IllegalStateException("Visual provenance conflicts");
         }
+    }
+
+    private boolean visualNodeWithinChunkHierarchy(ChunkDraft draft, VisualSource visual) {
+        return Boolean.TRUE.equals(jdbc.sql("""
+                WITH RECURSIVE ancestry AS (
+                    SELECT id,parent_id,material_version_id,start_page,end_page
+                    FROM document_nodes WHERE id=:visualNode AND material_version_id=:version
+                      AND :page BETWEEN start_page AND end_page
+                    UNION ALL
+                    SELECT parent.id,parent.parent_id,parent.material_version_id,parent.start_page,parent.end_page
+                    FROM document_nodes parent JOIN ancestry child ON parent.id=child.parent_id
+                    WHERE parent.material_version_id=:version
+                )
+                SELECT EXISTS (
+                    SELECT 1 FROM ancestry
+                    WHERE id=:chunkNode AND :page BETWEEN start_page AND end_page
+                )
+                """).param("visualNode", visual.documentNodeId())
+                .param("version", draft.materialVersionId())
+                .param("chunkNode", draft.documentNodeId())
+                .param("page", visual.pageNumber())
+                .query(Boolean.class).single());
     }
 
     private int insertChunk(ChunkDraft draft, String headingPath) {

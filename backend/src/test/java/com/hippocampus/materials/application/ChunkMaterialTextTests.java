@@ -66,6 +66,22 @@ class ChunkMaterialTextTests {
     }
 
     @Test
+    void associatesPrimaryPageVisualFromAContainedDescendantNode() {
+        FakeSource source = new FakeSource(2);
+        UUID section = UUID.randomUUID();
+        source.nodes = List.of(source.rootNode(), new DocumentNode(section, source.version, source.root,
+                DocumentNodeType.SECTION, "Section", 1, 1, 2, null, null,
+                DocumentNodeDetectionOrigin.NATIVE, null, Instant.EPOCH));
+        UUID visual = UUID.randomUUID();
+        source.visuals = List.of(new VisualSource(visual, source.version, section, 1));
+        RecordingPersistence sink = new RecordingPersistence();
+
+        useCase(source, sink, 2, 10).execute(source.version);
+
+        assertThat(sink.chunks).anySatisfy(chunk -> assertThat(chunk.visualAssetIds()).contains(visual));
+    }
+
+    @Test
     void rejectsMissingDuplicateAndWrongOrdinalPageText() {
         FakeSource missing = new FakeSource(2); missing.omitPage = 2;
         assertThatThrownBy(() -> useCase(missing, new RecordingPersistence(), 2, 2).execute(missing.version))
@@ -96,10 +112,12 @@ class ChunkMaterialTextTests {
         final UUID version = UUID.randomUUID(); final UUID root = UUID.randomUUID(); final int pages;
         final List<String> contents; int maxRequestedPages; int omitPage; int duplicatePage; int wrongOrdinalPage;
         List<VisualSource> visuals = List.of();
-        FakeSource(int pages) { this.pages = pages; contents = new ArrayList<>(); for (int i=1;i<=pages;i++) contents.add("text "+i); }
+        List<DocumentNode> nodes;
+        FakeSource(int pages) { this.pages = pages; contents = new ArrayList<>(); for (int i=1;i<=pages;i++) contents.add("text "+i); nodes=List.of(rootNode()); }
         @Override public int requirePageCount(UUID ignored) { return pages; }
-        @Override public List<DocumentNode> findHierarchy(UUID ignored) { return List.of(new DocumentNode(root,version,null,
-                DocumentNodeType.DOCUMENT,"Document",1,1,pages,null,null,DocumentNodeDetectionOrigin.NATIVE,null,Instant.EPOCH)); }
+        DocumentNode rootNode() { return new DocumentNode(root,version,null,
+                DocumentNodeType.DOCUMENT,"Document",1,1,pages,null,null,DocumentNodeDetectionOrigin.NATIVE,null,Instant.EPOCH); }
+        @Override public List<DocumentNode> findHierarchy(UUID ignored) { return nodes; }
         @Override public List<TextBlock> findByPhysicalPage(UUID ignored,int first,int last) {
             maxRequestedPages=Math.max(maxRequestedPages,last-first+1); List<TextBlock> result=new ArrayList<>();
             for(int page=first;page<=last;page++){if(page==omitPage)continue;result.add(block(page,page==wrongOrdinalPage?page+1:page));if(page==duplicatePage)result.add(block(page,page));}return result;
