@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -148,22 +149,34 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
             heartbeatAtClaim = heartbeat(jdbc, chunkJobId);
             CrashBeforeCompletionConfiguration.arm();
 
-            var executor = Executors.newSingleThreadExecutor();
-            Future<?> abandoned = executor.submit(() -> contextB.getBean(ExecuteClaimedProcessingJob.class).execute(chunk));
-            assertThat(CrashBeforeCompletionConfiguration.awaitCompletionBoundary(WAIT)).isTrue();
-            await(() -> heartbeat(jdbc, chunkJobId).isAfter(heartbeatAtClaim), WAIT);
-            Instant refreshed = heartbeat(jdbc, chunkJobId);
-            assertThat(refreshed).isAfter(heartbeatAtClaim);
-            assertRunningOwnership(jdbc, chunkJobId, WORKER_B, chunkAttempt);
-            chunksBeforeRetry = chunkSnapshot(jdbc, upload.versionId());
-            linksBeforeRetry = linkSnapshot(jdbc, upload.versionId());
-            visualLinksBeforeRetry = visualLinkSnapshot(jdbc, upload.versionId());
-            assertThat(chunksBeforeRetry).isNotEmpty();
+            ExecutorService executor = Executors.newSingleThreadExecutor();
+            CountDownLatch workerTerminated = new CountDownLatch(1);
+            Future<?> abandoned = executor.submit(() -> {
+                try {
+                    contextB.getBean(ExecuteClaimedProcessingJob.class).execute(chunk);
+                } finally {
+                    workerTerminated.countDown();
+                }
+            });
+            try {
+                assertThat(CrashBeforeCompletionConfiguration.awaitCompletionBoundary(WAIT)).isTrue();
+                await(() -> heartbeat(jdbc, chunkJobId).isAfter(heartbeatAtClaim), WAIT);
+                Instant refreshed = heartbeat(jdbc, chunkJobId);
+                assertThat(refreshed).isAfter(heartbeatAtClaim);
+                assertRunningOwnership(jdbc, chunkJobId, WORKER_B, chunkAttempt);
+                chunksBeforeRetry = chunkSnapshot(jdbc, upload.versionId());
+                linksBeforeRetry = linkSnapshot(jdbc, upload.versionId());
+                visualLinksBeforeRetry = visualLinkSnapshot(jdbc, upload.versionId());
+                assertThat(chunksBeforeRetry).isNotEmpty();
 
-            contextB.close();
-            abandoned.cancel(true);
-            executor.shutdownNow();
-            assertThat(await(() -> abandoned.isDone(), WAIT)).isTrue();
+                contextB.close();
+                assertThat(abandoned.cancel(true)).isTrue();
+            } finally {
+                abandoned.cancel(true);
+                executor.shutdownNow();
+            }
+            assertThat(workerTerminated.await(WAIT.toMillis(), TimeUnit.MILLISECONDS)).isTrue();
+            assertThat(executor.awaitTermination(WAIT.toMillis(), TimeUnit.MILLISECONDS)).isTrue();
         } finally {
             if (contextB.isActive()) contextB.close();
         }
