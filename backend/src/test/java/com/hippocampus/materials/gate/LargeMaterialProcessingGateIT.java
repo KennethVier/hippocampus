@@ -17,9 +17,11 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.BooleanSupplier;
 
@@ -159,7 +161,7 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
                 }
             });
             try {
-                assertThat(CrashBeforeCompletionConfiguration.awaitCompletionBoundary(WAIT)).isTrue();
+                CrashBeforeCompletionConfiguration.awaitCompletionBoundaryOrWorkerFailure(abandoned, WAIT);
                 await(() -> heartbeat(jdbc, chunkJobId).isAfter(heartbeatAtClaim), WAIT);
                 Instant refreshed = heartbeat(jdbc, chunkJobId);
                 assertThat(refreshed).isAfter(heartbeatAtClaim);
@@ -755,8 +757,33 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
 
         static void reset() { reached = new CountDownLatch(1); armed = false; }
         static void arm() { armed = true; }
-        static boolean awaitCompletionBoundary(Duration timeout) throws InterruptedException {
-            return reached.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        static void awaitCompletionBoundaryOrWorkerFailure(Future<?> worker, Duration timeout)
+                throws InterruptedException {
+            long deadline = System.nanoTime() + timeout.toNanos();
+            while (reached.getCount() != 0) {
+                if (worker.isDone()) {
+                    surfaceWorkerFailure(worker);
+                }
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) {
+                    throw new AssertionError("CHUNK worker remained alive but did not reach the completion boundary");
+                }
+                reached.await(Math.min(remaining, TimeUnit.MILLISECONDS.toNanos(25)), TimeUnit.NANOSECONDS);
+            }
+        }
+
+        private static void surfaceWorkerFailure(Future<?> worker) throws InterruptedException {
+            try {
+                worker.get(0, TimeUnit.NANOSECONDS);
+                throw new AssertionError("CHUNK worker completed before reaching the completion boundary");
+            } catch (ExecutionException failure) {
+                throw new AssertionError("CHUNK worker failed before reaching the completion boundary",
+                        failure.getCause());
+            } catch (java.util.concurrent.CancellationException failure) {
+                throw new AssertionError("CHUNK worker was cancelled before reaching the completion boundary", failure);
+            } catch (TimeoutException impossible) {
+                throw new AssertionError("Completed CHUNK worker did not expose its result", impossible);
+            }
         }
 
         @Bean
