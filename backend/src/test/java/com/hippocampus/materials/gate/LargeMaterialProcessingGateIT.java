@@ -386,14 +386,14 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
 
         Visual visual = jdbc.sql("""
                 SELECT va.id,va.material_version_id,va.document_node_id,va.storage_key,va.content_hash,
-                       va.page_number,va.interpretation_status,dn.start_page,dn.end_page
+                       va.page_number,va.interpretation_status,dn.node_type,dn.title,dn.start_page,dn.end_page
                 FROM visual_assets va JOIN document_nodes dn ON dn.id=va.document_node_id
                 WHERE va.material_version_id=:v AND va.page_number=:p AND dn.material_version_id=:v
                 ORDER BY va.id LIMIT 1
                 """).param("v", version).param("p", SyntheticLargeMedicalPdfFixture.MIXED_VISUAL_PAGE)
                 .query((row, ignored) -> new Visual(row.getObject(1, UUID.class), row.getObject(2, UUID.class),
                         row.getObject(3, UUID.class), row.getString(4), row.getString(5), row.getInt(6),
-                        row.getString(7), row.getInt(8), row.getInt(9)))
+                        row.getString(7), row.getString(8), row.getString(9), row.getInt(10), row.getInt(11)))
                 .single();
         assertThat(visual.versionId()).isEqualTo(version);
         assertThat(visual.nodeId()).isNotNull();
@@ -407,10 +407,14 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
             context.getBean(BinaryObjectStore.class).get(new BinaryObjectKey(visual.storageKey()), destination);
         }
         assertThat(Files.size(resolved)).isPositive();
-        assertThat(jdbc.sql("""
+        int visualLinkCount = jdbc.sql("""
                 SELECT count(*) FROM chunk_visual_links
                 WHERE material_version_id=:v AND visual_asset_id=:visual AND relationship_type='NEARBY'
-                """).param("v", version).param("visual", visual.id()).query(Integer.class).single()).isPositive();
+                """).param("v", version).param("visual", visual.id()).query(Integer.class).single();
+        if (visualLinkCount == 0) {
+            VisualLinkDiagnostic diagnostic = visualLinkDiagnostic(jdbc, visual);
+            assertThat(visualLinkCount).as("page-240 visual provenance: %s", diagnostic).isPositive();
+        }
 
         List<ChunkRow> chunks = jdbc.sql("""
                 SELECT id,chunk_index,page_start,page_end,extraction_method,content_type
@@ -484,6 +488,53 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
                 """).param("v", version).query(String.class).list();
     }
 
+    private static VisualLinkDiagnostic visualLinkDiagnostic(JdbcClient jdbc, Visual visual) {
+        PageTextMetadata pageText = jdbc.sql("""
+                SELECT id,document_node_id,extraction_method,
+                       normalized_content IS NOT NULL AND btrim(normalized_content)<>'' AS normalized_nonblank,
+                       page_number
+                FROM text_blocks
+                WHERE material_version_id=:version AND page_number=:page AND block_type='PAGE_TEXT'
+                """).param("version", visual.versionId()).param("page", visual.page())
+                .query((row, ignored) -> new PageTextMetadata(row.getObject(1, UUID.class),
+                        row.getObject(2, UUID.class), row.getString(3), row.getBoolean(4), row.getInt(5)))
+                .single();
+        List<VisualPageChunk> rangedChunks = jdbc.sql("""
+                SELECT id,chunk_index,document_node_id,page_start,page_end,content_type,extraction_method
+                FROM chunks
+                WHERE material_version_id=:version AND :page BETWEEN page_start AND page_end
+                ORDER BY chunk_index
+                """).param("version", visual.versionId()).param("page", visual.page())
+                .query((row, ignored) -> new VisualPageChunk(row.getObject(1, UUID.class), row.getInt(2),
+                        row.getObject(3, UUID.class), row.getInt(4), row.getInt(5), row.getString(6),
+                        row.getString(7))).list();
+        List<PrimaryPageSource> primarySources = jdbc.sql("""
+                SELECT c.id,c.chunk_index,c.document_node_id,t.id,t.document_node_id,
+                       l.source_position,t.block_type,t.extraction_method
+                FROM chunk_text_block_links l
+                JOIN chunks c ON c.id=l.chunk_id AND c.material_version_id=l.material_version_id
+                JOIN text_blocks t ON t.id=l.text_block_id AND t.material_version_id=l.material_version_id
+                WHERE l.material_version_id=:version AND t.page_number=:page AND NOT l.is_overlap
+                ORDER BY c.chunk_index,l.source_position
+                """).param("version", visual.versionId()).param("page", visual.page())
+                .query((row, ignored) -> new PrimaryPageSource(row.getObject(1, UUID.class), row.getInt(2),
+                        row.getObject(3, UUID.class), row.getObject(4, UUID.class),
+                        row.getObject(5, UUID.class), row.getInt(6), row.getString(7), row.getString(8)))
+                .list();
+        List<String> relationships = jdbc.sql("""
+                SELECT relationship_type FROM chunk_visual_links
+                WHERE material_version_id=:version AND visual_asset_id=:visual
+                ORDER BY relationship_type
+                """).param("version", visual.versionId()).param("visual", visual.id())
+                .query(String.class).list();
+        boolean matchingNode = primarySources.stream()
+                .anyMatch(source -> visual.nodeId().equals(source.chunkNodeId()));
+        SelectedVisualMetadata selected = new SelectedVisualMetadata(visual.id(), visual.page(), visual.versionId(),
+                visual.nodeId(), visual.nodeType(), visual.nodeTitle(), visual.nodeStart(), visual.nodeEnd());
+        return new VisualLinkDiagnostic(selected, pageText, rangedChunks, primarySources,
+                !primarySources.isEmpty(), matchingNode, relationships);
+    }
+
     private static String provenanceDiagnostics(JdbcClient jdbc, UUID version) {
         return jdbc.sql("""
                 SELECT concat_ws(',',
@@ -528,8 +579,19 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
     private record Progress(ProcessingJobType type, long current, Long total) {}
     private record OcrEvidence(UUID id, String method, String quality, String content) {}
     private record Visual(UUID id, UUID versionId, UUID nodeId, String storageKey, String hash, int page,
-            String status, int nodeStart, int nodeEnd) {}
+            String status, String nodeType, String nodeTitle, int nodeStart, int nodeEnd) {}
     private record ChunkRow(UUID id, int index, int start, int end, String method, String type) {}
+    private record PageTextMetadata(UUID id, UUID nodeId, String extractionMethod,
+            boolean normalizedNonblank, int page) {}
+    private record VisualPageChunk(UUID id, int index, UUID nodeId, int pageStart, int pageEnd,
+            String contentType, String extractionMethod) {}
+    private record PrimaryPageSource(UUID chunkId, int chunkIndex, UUID chunkNodeId, UUID textBlockId,
+            UUID textBlockNodeId, int sourcePosition, String blockType, String extractionMethod) {}
+    private record SelectedVisualMetadata(UUID id, int page, UUID versionId, UUID nodeId, String nodeType,
+            String nodeTitle, int nodeStart, int nodeEnd) {}
+    private record VisualLinkDiagnostic(SelectedVisualMetadata visual, PageTextMetadata pageText,
+            List<VisualPageChunk> rangedChunks, List<PrimaryPageSource> primarySources,
+            boolean hasPrimaryPageSource, boolean hasMatchingVisualNode, List<String> relationships) {}
 
     @Configuration(proxyBeanMethods = false)
     static class GateConfiguration {
