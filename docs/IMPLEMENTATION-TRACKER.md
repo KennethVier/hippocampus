@@ -770,6 +770,9 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 **Implementation items:** 18
 
+**Phase Gate State:** PASS
+
+**Phase Gate Evidence:** P3-01 through P3-18 are Done, including the explicit P3-18 large-material gate. PR [#141](https://github.com/KennethVier/hippocampus/pull/141) validated the integrated Phase 3 pipeline on a deterministic 601-page mixed PDF across extraction, structure detection, visual extraction/context, normalization, hierarchy-aware chunking, heartbeat/restart/reclaim, exact retry identity, and the pre-index readiness boundary. Exact-head quality run [#402](https://github.com/KennethVier/hippocampus/actions/runs/34741572796) (ID `34741572796`) succeeded on `efe7989305a26162906bd697a974552a9a885647` with `backend-quality`, `frontend-quality`, `auth-e2e`, `security`, `phase1-gate`, `phase2-gate`, and the new `phase3-gate` all successful; the isolated Phase 3 job installed and validated Tesseract, ran `LargeMaterialProcessingGateIT` with `-Xmx768m`, and passed. Local CI-parity validation also passed the exact large-material gate (1 test, 0 failures/errors/skips) and full `clean verify` (756 tests, 0 failures, 0 errors, 8 skips, executable JAR built). External general implementation review found no unresolved blocker, and the independent `hippocampus-security-vulnerability-review` verdict is **SECURITY PASS** with no unresolved blocking Critical, High, or Medium finding in the P3-18 changed surface. PR #141 merged into `main` as `50e9cde7e849178d6e63fbbcecaf23b967db9780`. The Phase 3 outcome is therefore satisfied: large/mixed medical material reaches a durable, structured, traceable pre-index state with bounded processing and restart-safe outputs, no Phase 4 EMBED job is created, no undocumented architecture deviation is known, and no current Phase 3 blocker remains.
 
 ## P3-01 — Create ProcessingJob schema
 
@@ -1047,7 +1050,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Gate
 - **Priority:** Must
-- **Status:** In Progress
+- **Status:** Done
 - **Goal:** Prove 600+ page ingestion architecture works.
 - **Build:** Run end-to-end large mixed PDF through extract/structure/visual/chunk/restart path.
 - **How it works:** Resource use bounded; no duplicate outputs.
@@ -1056,7 +1059,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Large textbook reaches pre-index structured state reliably.
 - **Definition of Done:** Gate evidence recorded.
 - **Authority:** Documents 21,25,26
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** P3-18 was implemented in PR [#141](https://github.com/KennethVier/hippocampus/pull/141) at final reviewed head `efe7989305a26162906bd697a974552a9a885647` and merged into `main` as `50e9cde7e849178d6e63fbbcecaf23b967db9780`. The gate generates a deterministic 601-page mixed medical PDF and exercises the real Phase 3 pipeline through MATERIAL_VALIDATE, MATERIAL_EXTRACT, STRUCTURE_DETECT, VISUAL_EXTRACT, NORMALIZE, and CHUNK, including native text, OCR-only content, tables, embedded visuals, hierarchy-aware visual provenance, conservative chunk overlap, progress bounds, worker heartbeat, simulated process loss, stale-job reclaim, exact retry/replay identity, and readiness at the pre-index boundary. Durable chunks, source links, and visual links are snapshotted before restart and reproduced exactly after reclaim without duplicate output; the gate also verifies no premature `EMBED` job is created. During final corrective validation, the large-material diagnostic confirmed legitimate conservative overlap outside a chunk's primary summary page range (`overlapOutsideChunkRange=2`, `primaryOutsideChunkRange=0`); readiness provenance was corrected narrowly so only non-overlap sources must lie inside the primary chunk range, with focused positive/negative integration coverage preserving fail-closed primary provenance. Local exact CI-parity command `.\mvnw.cmd -B -ntp -Dtest=LargeMaterialProcessingGateIT -DargLine=-Xmx768m test` passed with 1 test, 0 failures, 0 errors, 0 skips. Local `.\mvnw.cmd -B -ntp clean verify` passed with 756 tests, 0 failures, 0 errors, 8 skips and built the executable backend JAR. Authoritative exact-head quality run [#402](https://github.com/KennethVier/hippocampus/actions/runs/34741572796) (ID `34741572796`) succeeded with `backend-quality`, `frontend-quality`, `auth-e2e`, `security`, `phase1-gate`, `phase2-gate`, and `phase3-gate` all successful; the isolated `phase3-gate` installed the validated OCR runtime and passed the 601-page gate under `-Xmx768m`. External general implementation review verdict is **APPROVED/PASS** with no unresolved correctness, architecture, concurrency, migration, testing, or scope blocker. Independent adversarial security review verdict is **SECURITY PASS** for the P3-18 changed surface, with no unresolved blocking Critical, High, or Medium finding and no manual security review requirement. The Expected Result and Definition of Done are satisfied, no new ADR or undocumented architecture deviation is required, and no current blocker remains.
 - **Notes / blockers:** _None_
 
 # Phase 4 — Knowledge Base + RAG Foundation
