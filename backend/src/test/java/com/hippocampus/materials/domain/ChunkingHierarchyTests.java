@@ -38,6 +38,15 @@ class ChunkingHierarchyTests {
         assertThatThrownBy(() -> new ChunkingHierarchy(VERSION, 2, List.of(root, foreign), 10, 5)).isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void descendantContainmentFailsClosedWhenAncestorDoesNotContainThePage() {
+        DocumentNode root = node(UUID.randomUUID(), null, DocumentNodeType.DOCUMENT, "Book", 1, 3);
+        DocumentNode malformedSection = node(UUID.randomUUID(), root.id(), DocumentNodeType.SECTION, "Appendix", 3, 4);
+        ChunkingHierarchy hierarchy = new ChunkingHierarchy(VERSION, 4, List.of(root, malformedSection), 10, 5);
+
+        assertThat(hierarchy.containsDescendant(root.id(), malformedSection.id(), 4)).isFalse();
+    }
+
     private static DocumentNode node(UUID id, UUID parent, DocumentNodeType type, String title, int start, int end) {
         return new DocumentNode(id, VERSION, parent, type, title, 1, start, end, null, null,
                 DocumentNodeDetectionOrigin.NATIVE, null, Instant.EPOCH);
