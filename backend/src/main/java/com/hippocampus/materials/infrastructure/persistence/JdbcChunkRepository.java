@@ -264,15 +264,40 @@ public final class JdbcChunkRepository implements ChunkingSourceRepository, Chun
 
     private void verifyDurableVisualLinks(UUID version) {
         int invalid = jdbc.sql("""
+                WITH RECURSIVE visual_ancestry AS (
+                  SELECT l.chunk_id,l.visual_asset_id,l.material_version_id,v.page_number,
+                         dn.id AS node_id,dn.parent_id,dn.start_page,dn.end_page
+                  FROM chunk_visual_links l
+                  JOIN visual_assets v ON v.id=l.visual_asset_id
+                    AND v.material_version_id=l.material_version_id
+                  JOIN document_nodes dn ON dn.id=v.document_node_id
+                    AND dn.material_version_id=l.material_version_id
+                  WHERE l.material_version_id=:version
+                    AND v.page_number BETWEEN dn.start_page AND dn.end_page
+                  UNION ALL
+                  SELECT child.chunk_id,child.visual_asset_id,child.material_version_id,child.page_number,
+                         parent.id,parent.parent_id,parent.start_page,parent.end_page
+                  FROM visual_ancestry child
+                  JOIN document_nodes parent ON parent.id=child.parent_id
+                    AND parent.material_version_id=child.material_version_id
+                )
                 SELECT count(*) FROM chunk_visual_links l
-                JOIN chunks c ON c.id=l.chunk_id
+                LEFT JOIN chunks c ON c.id=l.chunk_id
                 LEFT JOIN visual_assets v ON v.id=l.visual_asset_id
-                WHERE c.material_version_id=:version AND (
-                  l.material_version_id<>c.material_version_id OR v.material_version_id<>c.material_version_id
-                  OR v.document_node_id IS DISTINCT FROM c.document_node_id OR l.relationship_type<>'NEARBY'
+                WHERE l.material_version_id=:version AND (
+                  c.id IS NULL OR v.id IS NULL
+                  OR l.material_version_id<>c.material_version_id OR v.material_version_id<>c.material_version_id
+                  OR l.relationship_type<>'NEARBY'
+                  OR NOT EXISTS (
+                    SELECT 1 FROM visual_ancestry hierarchy
+                    WHERE hierarchy.chunk_id=l.chunk_id AND hierarchy.visual_asset_id=l.visual_asset_id
+                      AND hierarchy.node_id=c.document_node_id
+                      AND hierarchy.page_number BETWEEN hierarchy.start_page AND hierarchy.end_page)
                   OR NOT EXISTS (
                     SELECT 1 FROM chunk_text_block_links sl JOIN text_blocks tb ON tb.id=sl.text_block_id
-                    WHERE sl.chunk_id=c.id AND NOT sl.is_overlap AND tb.page_number=v.page_number))
+                    WHERE sl.chunk_id=c.id AND sl.material_version_id=c.material_version_id
+                      AND tb.material_version_id=c.material_version_id
+                      AND NOT sl.is_overlap AND tb.page_number=v.page_number))
                 """).param("version", version).query(Integer.class).single();
         if (invalid != 0) throw new IllegalStateException("Durable visual links are invalid");
     }
@@ -309,10 +334,32 @@ public final class JdbcChunkRepository implements ChunkingSourceRepository, Chun
                         row.getObject("document_node_id", UUID.class), row.getInt("page_number")))
                 .optional().orElseThrow(() -> new IllegalStateException("Visual source is missing"));
         if (!visual.materialVersionId().equals(draft.materialVersionId())
-                || !Objects.equals(visual.documentNodeId(), draft.documentNodeId())
-                || !draft.primaryPages().contains(visual.pageNumber())) {
+                || !draft.primaryPages().contains(visual.pageNumber())
+                || !visualNodeWithinChunkHierarchy(draft, visual)) {
             throw new IllegalStateException("Visual provenance conflicts");
         }
+    }
+
+    private boolean visualNodeWithinChunkHierarchy(ChunkDraft draft, VisualSource visual) {
+        return Boolean.TRUE.equals(jdbc.sql("""
+                WITH RECURSIVE ancestry AS (
+                    SELECT id,parent_id,material_version_id,start_page,end_page
+                    FROM document_nodes WHERE id=:visualNode AND material_version_id=:version
+                      AND :page BETWEEN start_page AND end_page
+                    UNION ALL
+                    SELECT parent.id,parent.parent_id,parent.material_version_id,parent.start_page,parent.end_page
+                    FROM document_nodes parent JOIN ancestry child ON parent.id=child.parent_id
+                    WHERE parent.material_version_id=:version
+                )
+                SELECT EXISTS (
+                    SELECT 1 FROM ancestry
+                    WHERE id=:chunkNode AND :page BETWEEN start_page AND end_page
+                )
+                """).param("visualNode", visual.documentNodeId())
+                .param("version", draft.materialVersionId())
+                .param("chunkNode", draft.documentNodeId())
+                .param("page", visual.pageNumber())
+                .query(Boolean.class).single());
     }
 
     private int insertChunk(ChunkDraft draft, String headingPath) {

@@ -18,6 +18,16 @@ public final class ChunkingHierarchy {
     }
     public void validate(UUID nodeId, int page) { DocumentNode n = nodes.get(nodeId);
         if (n == null || page < n.startPage() || page > n.endPage()) throw new IllegalArgumentException("Source block is outside its hierarchy node"); }
+    public boolean containsDescendant(UUID ancestorId, UUID candidateId, int page) {
+        DocumentNode ancestor = nodes.get(ancestorId); DocumentNode candidate = nodes.get(candidateId);
+        if (ancestor == null || candidate == null
+                || page < ancestor.startPage() || page > ancestor.endPage()
+                || page < candidate.startPage() || page > candidate.endPage()) return false;
+        for (DocumentNode current = candidate; current != null; current = nodes.get(current.parentId())) {
+            if (current.id().equals(ancestor.id())) return true;
+        }
+        return false;
+    }
     public List<String> headingPath(UUID nodeId) { List<String> result = paths.get(nodeId); if (result == null) throw new IllegalArgumentException("Unknown hierarchy node"); return result; }
     private List<String> path(UUID id, Set<UUID> visiting, int maxDepth) {
         List<String> known = paths.get(id); if (known != null) return known;

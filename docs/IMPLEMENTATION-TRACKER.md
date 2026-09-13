@@ -1047,7 +1047,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Gate
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** In Progress
 - **Goal:** Prove 600+ page ingestion architecture works.
 - **Build:** Run end-to-end large mixed PDF through extract/structure/visual/chunk/restart path.
 - **How it works:** Resource use bounded; no duplicate outputs.

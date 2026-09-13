@@ -19,6 +19,9 @@ class ChunkingHierarchyTests {
         ChunkingHierarchy hierarchy = new ChunkingHierarchy(VERSION, 3, List.of(root, section), 10, 5);
         assertThat(hierarchy.headingPath(section.id())).containsExactly("Book", "Heart");
         hierarchy.validate(section.id(), 2);
+        assertThat(hierarchy.containsDescendant(root.id(), section.id(), 2)).isTrue();
+        assertThat(hierarchy.containsDescendant(section.id(), root.id(), 2)).isFalse();
+        assertThat(hierarchy.containsDescendant(root.id(), section.id(), 1)).isFalse();
         assertThatThrownBy(() -> hierarchy.validate(section.id(), 1)).isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -33,6 +36,15 @@ class ChunkingHierarchyTests {
         DocumentNode foreign = new DocumentNode(UUID.randomUUID(), UUID.randomUUID(), null, DocumentNodeType.SECTION,
                 null, 2, 1, 2, null, null, DocumentNodeDetectionOrigin.NATIVE, null, Instant.EPOCH);
         assertThatThrownBy(() -> new ChunkingHierarchy(VERSION, 2, List.of(root, foreign), 10, 5)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void descendantContainmentFailsClosedWhenAncestorDoesNotContainThePage() {
+        DocumentNode root = node(UUID.randomUUID(), null, DocumentNodeType.DOCUMENT, "Book", 1, 3);
+        DocumentNode malformedSection = node(UUID.randomUUID(), root.id(), DocumentNodeType.SECTION, "Appendix", 3, 4);
+        ChunkingHierarchy hierarchy = new ChunkingHierarchy(VERSION, 4, List.of(root, malformedSection), 10, 5);
+
+        assertThat(hierarchy.containsDescendant(root.id(), malformedSection.id(), 4)).isFalse();
     }
 
     private static DocumentNode node(UUID id, UUID parent, DocumentNodeType type, String title, int start, int end) {

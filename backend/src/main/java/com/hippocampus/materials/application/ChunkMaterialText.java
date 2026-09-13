@@ -85,21 +85,21 @@ public final class ChunkMaterialText {
                         sourceOrder = Math.incrementExact(sourceOrder);
                         session.accept(sourceUnit(block, paragraph, sourceOrder), draft -> {
                             emittedCount[0] = Math.incrementExact(emittedCount[0]);
-                            collectOne(materialVersionId, draft, pending, emittedCount[0], ownershipCheck, progress);
+                            collectOne(materialVersionId, hierarchy, draft, pending, emittedCount[0], ownershipCheck, progress);
                         });
                     }
                 } else if (block.blockType() == TextBlockType.TABLE_TEXT) {
                     sourceOrder = Math.incrementExact(sourceOrder);
                     session.accept(sourceUnit(block, block.normalizedContent(), sourceOrder), draft -> {
                         emittedCount[0] = Math.incrementExact(emittedCount[0]);
-                        collectOne(materialVersionId, draft, pending, emittedCount[0], ownershipCheck, progress);
+                        collectOne(materialVersionId, hierarchy, draft, pending, emittedCount[0], ownershipCheck, progress);
                     });
                 }
             }
         }
         for (ChunkDraft draft : session.finish()) {
             emittedCount[0] = Math.incrementExact(emittedCount[0]);
-            collectOne(materialVersionId, draft, pending, emittedCount[0], ownershipCheck, progress);
+            collectOne(materialVersionId, hierarchy, draft, pending, emittedCount[0], ownershipCheck, progress);
         }
         ownershipCheck.run();
         persistPending(materialVersionId, pending);
@@ -109,9 +109,9 @@ public final class ChunkMaterialText {
                 new ChunkingExecutionSummary(pageCount, emittedCount[0], emittedCount[0]));
     }
 
-    private void collectOne(UUID materialVersionId, ChunkDraft draft, List<ChunkDraft> pending,
+    private void collectOne(UUID materialVersionId, ChunkingHierarchy hierarchy, ChunkDraft draft, List<ChunkDraft> pending,
             int emittedCount, Runnable ownershipCheck, BiConsumer<Long, Long> progress) {
-        pending.add(associateVisuals(draft));
+        pending.add(associateVisuals(draft, hierarchy));
         if (pending.size() == persistenceBatchSize) {
             ownershipCheck.run();
             persistPending(materialVersionId, pending);
@@ -125,12 +125,13 @@ public final class ChunkMaterialText {
         pending.clear();
     }
 
-    private ChunkDraft associateVisuals(ChunkDraft draft) {
+    private ChunkDraft associateVisuals(ChunkDraft draft, ChunkingHierarchy hierarchy) {
         List<UUID> visualIds = sources.findVisualsByPhysicalPage(
                         draft.materialVersionId(), draft.pageStart(), draft.pageEnd()).stream()
                 .filter(visual -> visual.materialVersionId().equals(draft.materialVersionId()))
-                .filter(visual -> Objects.equals(visual.documentNodeId(), draft.documentNodeId()))
                 .filter(visual -> draft.primaryPages().contains(visual.pageNumber()))
+                .filter(visual -> hierarchy.containsDescendant(
+                        draft.documentNodeId(), visual.documentNodeId(), visual.pageNumber()))
                 .map(ChunkingSourceRepository.VisualSource::id)
                 .sorted()
                 .toList();

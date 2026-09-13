@@ -1,6 +1,7 @@
 package com.hippocampus.materials.infrastructure.persistence;
 
 import static org.assertj.core.api.Assertions.*;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -174,10 +175,58 @@ class MaterialReadinessIntegrationTests extends PostgresIntegrationTestSupport {
         } else assertThat(jdbc.sql("SELECT interpretation_status FROM visual_assets WHERE material_version_id=?").param(f.version()).query(String.class).single()).isEqualTo(kind);
     }
 
+    @Test void completedChunkAcceptsConservativeOverlapOutsidePrimaryRange() {
+        Fixture f=fixture(null);
+        configureChunkProvenance(f, 2, List.of(new Link(1,true), new Link(2,false)));
+        completeRequiredStages(f);
+        var snapshot=tx.execute(s -> context.getBean(MaterialReadinessRepository.class).lockAndRead(f.job()).orElseThrow());
+        assertThat(snapshot.facts().provenanceValid()).isTrue();
+    }
+    @Test void completedChunkRejectsPrimaryPageOutsideRange() {
+        Fixture f=fixture(null);
+        configureChunkProvenance(f, 2, List.of(new Link(1,false)));
+        completeRequiredStages(f);
+        var snapshot=tx.execute(s -> context.getBean(MaterialReadinessRepository.class).lockAndRead(f.job()).orElseThrow());
+        assertThat(snapshot.facts().provenanceValid()).isFalse();
+    }
     @Test void unrelatedJobDoesNotChangeMaterialLifecycle() {
         Fixture f=fixture(null);
         jdbc.sql("UPDATE processing_jobs SET job_type='CLEANUP' WHERE id=?").param(f.job()).update();
         claim(); assertState(f,"UPLOADED","UPLOADED");
+    }
+
+    private void completeRequiredStages(Fixture f) {
+        for(String stage:new String[]{"MATERIAL_VALIDATE","MATERIAL_EXTRACT","STRUCTURE_DETECT","VISUAL_EXTRACT","NORMALIZE","CHUNK"}) {
+            int existing = jdbc.sql("SELECT count(*) FROM processing_jobs WHERE material_version_id=? AND job_type=?")
+                .param(f.version()).param(stage).query(Integer.class).single();
+            if(existing == 0) {
+                job(f, stage, "COMPLETED");
+            } else {
+                jdbc.sql("UPDATE processing_jobs SET status='COMPLETED' WHERE material_version_id=? AND job_type=?")
+                    .param(f.version()).param(stage).update();
+            }
+        }
+    }
+    private void configureChunkProvenance(Fixture f, int chunkPage, java.util.List<Link> links) {
+        UUID root=UUID.randomUUID();
+        jdbc.sql("UPDATE material_versions SET page_count=2 WHERE id=?").param(f.version()).update();
+        jdbc.sql("INSERT INTO document_nodes(id,material_version_id,node_type,title,start_page,end_page,detection_origin,created_at) VALUES (?,?,'DOCUMENT','Source',1,2,'NATIVE',CURRENT_TIMESTAMP)")
+            .param(root).param(f.version()).update();
+        jdbc.sql("INSERT INTO text_blocks(id,material_version_id,document_node_id,page_number,block_type,ordinal,content,normalized_content,extraction_method,quality,created_at) VALUES (?,?,?,1,'PAGE_TEXT',1,'Page 1','Page 1','NATIVE',NULL,CURRENT_TIMESTAMP)")
+            .param(UUID.randomUUID()).param(f.version()).param(root).update();
+        jdbc.sql("INSERT INTO text_blocks(id,material_version_id,document_node_id,page_number,block_type,ordinal,content,normalized_content,extraction_method,quality,created_at) VALUES (?,?,?,2,'PAGE_TEXT',2,'Page 2','Page 2','NATIVE',NULL,CURRENT_TIMESTAMP)")
+            .param(UUID.randomUUID()).param(f.version()).param(root).update();
+        UUID chunk=UUID.randomUUID();
+        jdbc.sql("INSERT INTO chunks(id,material_version_id,document_node_id,chunk_index,content,page_start,page_end,content_type,extraction_method,quality,created_at) VALUES (?,?,?,1,'Chunk content',?,?, 'TEXT','NATIVE',NULL,CURRENT_TIMESTAMP)")
+            .param(chunk).param(f.version()).param(root).param(chunkPage).param(chunkPage).update();
+        int position=0;
+        for(Link link:links) {
+            UUID textId = jdbc.sql("SELECT id FROM text_blocks WHERE material_version_id=? AND page_number=? ORDER BY ordinal LIMIT 1")
+                .param(f.version()).param(link.page()).query(UUID.class).single();
+            position++;
+            jdbc.sql("INSERT INTO chunk_text_block_links(chunk_id,text_block_id,material_version_id,source_position,is_overlap) VALUES (?,?,?,?,?)")
+                .param(chunk).param(textId).param(f.version()).param(position).param(link.overlap()).update();
+        }
     }
 
     private Fixture fixture(String activeStatus) {
@@ -231,4 +280,5 @@ class MaterialReadinessIntegrationTests extends PostgresIntegrationTestSupport {
         assertThat(jdbc.sql("SELECT activated_at FROM material_versions WHERE id=?").param(f.version()).query((r,n)->r.getObject(1)).list().getFirst()).isNull();
     }
     private record Fixture(UUID user,UUID material,UUID version,UUID active,UUID job){}
+    private record Link(int page, boolean overlap) {}
 }
