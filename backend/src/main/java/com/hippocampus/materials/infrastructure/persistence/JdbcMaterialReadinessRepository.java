@@ -102,7 +102,7 @@ public final class JdbcMaterialReadinessRepository implements MaterialReadinessR
                             AND (l.material_version_id<>mv.id OR t.material_version_id<>mv.id
                                 OR t.normalized_content IS NULL OR btrim(t.normalized_content)=''
                                 OR t.extraction_method<>c.extraction_method
-                                OR t.page_number<c.page_start OR t.page_number>c.page_end))))
+                                OR (NOT l.is_overlap AND (t.page_number<c.page_start OR t.page_number>c.page_end))))))
                 FROM material_versions mv WHERE mv.id=:version
                 """).param("version", version).query(Boolean.class).single());
     }

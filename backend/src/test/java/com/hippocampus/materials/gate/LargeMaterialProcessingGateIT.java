@@ -566,7 +566,9 @@ class LargeMaterialProcessingGateIT extends PostgresIntegrationTestSupport {
                   'nonContiguousLinks=' || (SELECT count(*) FROM chunks c WHERE c.material_version_id=:v AND (SELECT max(source_position) FROM chunk_text_block_links l WHERE l.chunk_id=c.id)<>(SELECT count(*) FROM chunk_text_block_links l WHERE l.chunk_id=c.id)),
                   'crossVersionLinks=' || (SELECT count(*) FROM chunk_text_block_links l JOIN text_blocks t ON t.id=l.text_block_id WHERE l.material_version_id=:v AND t.material_version_id<>:v),
                   'blankLinkedSources=' || (SELECT count(*) FROM chunk_text_block_links l JOIN text_blocks t ON t.id=l.text_block_id WHERE l.material_version_id=:v AND (t.normalized_content IS NULL OR btrim(t.normalized_content)='')),
-                  'methodMismatch=' || (SELECT count(*) FROM chunk_text_block_links l JOIN chunks c ON c.id=l.chunk_id JOIN text_blocks t ON t.id=l.text_block_id WHERE l.material_version_id=:v AND c.extraction_method<>t.extraction_method))
+                  'methodMismatch=' || (SELECT count(*) FROM chunk_text_block_links l JOIN chunks c ON c.id=l.chunk_id JOIN text_blocks t ON t.id=l.text_block_id WHERE l.material_version_id=:v AND c.extraction_method<>t.extraction_method),
+                  'overlapOutsideChunkRange=' || (SELECT count(*) FROM chunk_text_block_links l JOIN chunks c ON c.id=l.chunk_id JOIN text_blocks t ON t.id=l.text_block_id WHERE l.material_version_id=:v AND l.is_overlap AND t.page_number NOT BETWEEN c.page_start AND c.page_end),
+                  'primaryOutsideChunkRange=' || (SELECT count(*) FROM chunk_text_block_links l JOIN chunks c ON c.id=l.chunk_id JOIN text_blocks t ON t.id=l.text_block_id WHERE l.material_version_id=:v AND NOT l.is_overlap AND t.page_number NOT BETWEEN c.page_start AND c.page_end))
                 """).param("v", version).query(String.class).single();
     }
 

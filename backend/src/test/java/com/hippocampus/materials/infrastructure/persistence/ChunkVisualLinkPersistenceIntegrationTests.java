@@ -51,11 +51,14 @@ class ChunkVisualLinkPersistenceIntegrationTests extends ChunkPersistenceTestFix
 
     @Test
     void finalizationRejectsVisualOutsideChunkHierarchy() {
-        UUID sibling = UUID.randomUUID();
+        UUID chunkSection = UUID.randomUUID();
+        UUID visualSection = UUID.randomUUID();
         jdbc.sql("INSERT INTO document_nodes(id,material_version_id,parent_id,node_type,ordinal,start_page,end_page,detection_origin,created_at) VALUES (?,?,?,'SECTION',2,1,1,'NATIVE',CURRENT_TIMESTAMP)")
-                .params(sibling, version, node).update();
-        UUID visual = insertVisual(1, sibling, version);
-        persistence.execute(version, List.of(draft()));
+                .params(chunkSection, version, node).update();
+        jdbc.sql("INSERT INTO document_nodes(id,material_version_id,parent_id,node_type,ordinal,start_page,end_page,detection_origin,created_at) VALUES (?,?,?,'SECTION',3,1,1,'NATIVE',CURRENT_TIMESTAMP)")
+                .params(visualSection, version, node).update();
+        UUID visual = insertVisual(1, visualSection, version);
+        persistence.execute(version, List.of(withNode(draft(), chunkSection)));
         insertNearbyLink(visual);
 
         assertThatThrownBy(this::finalizeOne).isInstanceOf(IllegalStateException.class)
