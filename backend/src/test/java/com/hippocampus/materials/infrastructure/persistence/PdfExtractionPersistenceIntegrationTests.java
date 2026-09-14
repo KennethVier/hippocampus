@@ -33,6 +33,7 @@ import com.hippocampus.materials.application.ExecuteClaimedProcessingJob;
 import com.hippocampus.materials.application.ExtractMaterialStageHandler;
 import com.hippocampus.materials.application.ExtractPdfPages;
 import com.hippocampus.materials.application.ProcessingDispatcher;
+import com.hippocampus.materials.application.ProcessingStageHandler;
 import com.hippocampus.materials.application.ProcessingStageCompletionException;
 import com.hippocampus.materials.application.PersistPdfPageBatch;
 import com.hippocampus.materials.domain.DocumentNode;
@@ -358,10 +359,14 @@ class PdfExtractionPersistenceIntegrationTests extends PostgresIntegrationTestSu
                     transactionCheckingExtractor);
             ExtractMaterialStageHandler handler = new ExtractMaterialStageHandler(
                     extraction, context.getBean(PersistPdfPageBatch.class), context.getBean(FinalizePdfExtraction.class));
+            ProcessingStageHandler structureHandler = new ProcessingStageHandler() {
+                @Override public ProcessingJobType jobType() { return ProcessingJobType.STRUCTURE_DETECT; }
+                @Override public void handle(ClaimedProcessingJob claimed) { }
+            };
             ClaimedProcessingJob job = new ClaimedProcessingJob(
                     jobId, ProcessingJobType.MATERIAL_EXTRACT, versionId, "processor-v1");
             ExecuteClaimedProcessingJob completionFails = new ExecuteClaimedProcessingJob(
-                    new ProcessingDispatcher(List.of(handler)),
+                    new ProcessingDispatcher(List.of(handler, structureHandler)),
                     new CompleteProcessingStage((ignoredJob, ignoredNext) -> false, org.mockito.Mockito.mock(com.hippocampus.materials.application.DeriveMaterialReadiness.class)));
 
             assertThatThrownBy(() -> completionFails.execute(job))
@@ -373,7 +378,7 @@ class PdfExtractionPersistenceIntegrationTests extends PostgresIntegrationTestSu
                     .param(jobId).query(String.class).single()).isEqualTo("RUNNING");
 
             new ExecuteClaimedProcessingJob(
-                    new ProcessingDispatcher(List.of(handler)), context.getBean(CompleteProcessingStage.class))
+                    new ProcessingDispatcher(List.of(handler, structureHandler)), context.getBean(CompleteProcessingStage.class))
                     .execute(job);
 
             assertThat(jdbc.sql("SELECT status FROM processing_jobs WHERE id = ?")

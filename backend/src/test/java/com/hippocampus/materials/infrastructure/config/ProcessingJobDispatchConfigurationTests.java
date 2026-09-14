@@ -55,14 +55,14 @@ class ProcessingJobDispatchConfigurationTests {
     }
 
     @Test
-    void wiresRegisteredHandlerList() {
+    void wiresRegisteredHandlerListAndStopsWhenNextHandlerIsUnavailable() {
         runner.withUserConfiguration(HandlerConfiguration.class).run(context -> {
             assertThat(context).hasNotFailed().hasSingleBean(ProcessingStageHandler.class);
             ProcessingDispatcher dispatcher = context.getBean(ProcessingDispatcher.class);
             ClaimedProcessingJob job = new ClaimedProcessingJob(
                     java.util.UUID.randomUUID(), ProcessingJobType.MATERIAL_VALIDATE,
                     java.util.UUID.randomUUID(), "processor-v1");
-            assertThat(dispatcher.dispatch(job).nextStage()).isEqualTo(ProcessingJobType.MATERIAL_EXTRACT);
+            assertThat(dispatcher.dispatch(job).nextStage()).isNull();
         });
     }
 

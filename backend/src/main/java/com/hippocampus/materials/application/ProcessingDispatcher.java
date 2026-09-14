@@ -44,6 +44,7 @@ public final class ProcessingDispatcher {
         }
 
         handler.handle(job);
-        return new ProcessingStageResult(jobType, ProcessingStageSequence.nextStage(jobType));
+        ProcessingJobType nextStage = ProcessingStageSequence.nextStage(jobType);
+        return new ProcessingStageResult(jobType, handlers.containsKey(nextStage) ? nextStage : null);
     }
 }

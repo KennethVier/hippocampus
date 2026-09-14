@@ -21,9 +21,11 @@ public class CompleteProcessingStage {
         if (job.jobType() != result.executedStage()) {
             throw new IllegalArgumentException("Executed stage does not match the claimed job");
         }
-        ProcessingJobType nextDurableStage =
-                ProcessingStageSequence.nextDurablePhaseThreeStage(result.executedStage());
-        if (!jobs.completeSuccessfulStage(job, nextDurableStage)) {
+        ProcessingJobType expectedNextStage = ProcessingStageSequence.nextStage(result.executedStage());
+        if (result.nextStage() != null && result.nextStage() != expectedNextStage) {
+            throw new IllegalArgumentException("Next stage does not follow the processing sequence");
+        }
+        if (!jobs.completeSuccessfulStage(job, result.nextStage())) {
             throw new ProcessingStageCompletionException(job.jobId(), result.executedStage());
         }
         readiness.execute(job.jobId());

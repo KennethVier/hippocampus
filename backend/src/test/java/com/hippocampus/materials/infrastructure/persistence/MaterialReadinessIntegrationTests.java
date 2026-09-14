@@ -268,7 +268,18 @@ class MaterialReadinessIntegrationTests extends PostgresIntegrationTestSupport {
     }
     private ClaimedProcessingJob claim(){return context.getBean(ClaimNextProcessingJob.class).execute("worker").orElseThrow();}
     private void fail(ClaimedProcessingJob job,ProcessingFailure.Kind kind){context.getBean(FinalizeProcessingFailure.class).execute(job,new ProcessingFailure(kind,"EXTRACTION_FAILED"));}
-    private void complete(ClaimedProcessingJob job){context.getBean(CompleteProcessingStage.class).execute(job,new ProcessingStageResult(job.jobType(),null));}
+    private void complete(ClaimedProcessingJob job){
+        ProcessingJobType next = switch (job.jobType()) {
+            case MATERIAL_VALIDATE -> ProcessingJobType.MATERIAL_EXTRACT;
+            case MATERIAL_EXTRACT -> ProcessingJobType.STRUCTURE_DETECT;
+            case STRUCTURE_DETECT -> ProcessingJobType.VISUAL_EXTRACT;
+            case VISUAL_EXTRACT -> ProcessingJobType.NORMALIZE;
+            case NORMALIZE -> ProcessingJobType.CHUNK;
+            case CHUNK -> null;
+            default -> null;
+        };
+        context.getBean(CompleteProcessingStage.class).execute(job,new ProcessingStageResult(job.jobType(),next));
+    }
     private void exhaust(ClaimedProcessingJob job){jdbc.sql("UPDATE processing_jobs SET attempt_count=3,last_heartbeat_at=CURRENT_TIMESTAMP-interval '2 minutes' WHERE id=?").param(job.jobId()).update();}
     private String jobStatus(UUID id){return jdbc.sql("SELECT status FROM processing_jobs WHERE id=?").param(id).query(String.class).single();}
     private void assertState(Fixture f,String version,String material){

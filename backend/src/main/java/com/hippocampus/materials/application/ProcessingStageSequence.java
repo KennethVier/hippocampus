@@ -24,11 +24,6 @@ final class ProcessingStageSequence {
         return nextStage;
     }
 
-    static ProcessingJobType nextDurablePhaseThreeStage(ProcessingJobType jobType) {
-        ProcessingJobType nextStage = nextStage(jobType);
-        return nextStage == ProcessingJobType.EMBED ? null : nextStage;
-    }
-
     private static Map<ProcessingJobType, ProcessingJobType> nextStages() {
         EnumMap<ProcessingJobType, ProcessingJobType> stages = new EnumMap<>(ProcessingJobType.class);
         stages.put(ProcessingJobType.MATERIAL_VALIDATE, ProcessingJobType.MATERIAL_EXTRACT);
@@ -37,6 +32,7 @@ final class ProcessingStageSequence {
         stages.put(ProcessingJobType.VISUAL_EXTRACT, ProcessingJobType.NORMALIZE);
         stages.put(ProcessingJobType.NORMALIZE, ProcessingJobType.CHUNK);
         stages.put(ProcessingJobType.CHUNK, ProcessingJobType.EMBED);
+        stages.put(ProcessingJobType.EMBED, ProcessingJobType.INDEX);
         return Map.copyOf(stages);
     }
 }

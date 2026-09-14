@@ -16,6 +16,8 @@ spring:
 hippocampus:
   rag:
     embedding:
+      processing:
+        batch-size: ${HIPPOCAMPUS_EMBEDDING_BATCH_SIZE:100}
       gemini:
         enabled: ${HIPPOCAMPUS_GEMINI_EMBEDDING_ENABLED:false}
         model: ${HIPPOCAMPUS_GEMINI_EMBEDDING_MODEL:gemini-embedding-2}

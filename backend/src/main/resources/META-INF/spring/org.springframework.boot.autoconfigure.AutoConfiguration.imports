@@ -16,3 +16,4 @@ com.hippocampus.materials.infrastructure.config.DetectedDocumentStructureConfigu
 com.hippocampus.materials.infrastructure.config.PdfVisualExtractionConfiguration
 com.hippocampus.materials.infrastructure.config.TextNormalizationConfiguration
 com.hippocampus.materials.infrastructure.config.ChunkingConfiguration
+com.hippocampus.rag.infrastructure.config.EmbeddingProcessingConfiguration

@@ -150,10 +150,10 @@ class ProcessingJobStageCompletionIntegrationTests extends PostgresIntegrationTe
     }
 
     @Test
-    void completesChunkWithoutCreatingEmbedJob() throws SQLException {
+    void completesChunkWithoutCreatingEmbedJobWhenDispatcherReportsNoAvailableNextHandler() throws SQLException {
         try (var context = startApplicationWithFlyway()) {
             Fixture fixture = insertFixture(ProcessingJobType.CHUNK, ProcessingJobStatus.RUNNING);
-            complete(context.getBean(CompleteProcessingStage.class), fixture, ProcessingJobType.EMBED);
+            complete(context.getBean(CompleteProcessingStage.class), fixture, null);
 
             assertThat(loadJob(fixture.jobId()).status()).isEqualTo(ProcessingJobStatus.COMPLETED);
             assertThat(countJobs(ProcessingJobType.EMBED)).isZero();

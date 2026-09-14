@@ -34,7 +34,9 @@ public class ProcessingRecoveryConfiguration {
     @Bean ProcessingRetryPolicy processingRetryPolicy(ProcessingRecoveryProperties properties) {
         return new ProcessingRetryPolicy(properties.initialRetryDelay(), properties.maximumRetryDelay());
     }
-    @Bean ProcessingFailureClassifier processingFailureClassifier() { return new ProcessingFailureClassifier(); }
+    @Bean ProcessingFailureClassifier processingFailureClassifier(java.util.List<ProcessingFailureMapping> mappings) {
+        return new ProcessingFailureClassifier(mappings);
+    }
     @Bean FinalizeProcessingFailure finalizeProcessingFailure(ProcessingJobExecutionRepository jobs,
             ProcessingRetryPolicy retries, DeriveMaterialReadiness readiness) { return new FinalizeProcessingFailure(jobs, retries, readiness); }
     @Bean(name = "taskScheduler") TaskScheduler taskScheduler() {
