@@ -1137,7 +1137,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** RAG
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Support exact medical terms.
 - **Build:** Build PostgreSQL FTS + pg_trgm search over active authorized chunks.
 - **How it works:** Metadata ownership/version filters applied in SQL.
@@ -1146,7 +1146,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Exact terms retrieve expected evidence.
 - **Definition of Done:** Golden lexical tests pass.
 - **Authority:** Documents 13,17
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Implementation in `backend/src/main/java/com/hippocampus/rag/port/`, `backend/src/main/java/com/hippocampus/rag/infrastructure/persistence/JdbcLexicalSearchRepository.java`, and `backend/src/main/resources/db/migration/V16__add_lexical_search_indexes.sql`; regression and integration proof in `backend/src/test/java/com/hippocampus/rag/infrastructure/persistence/JdbcLexicalSearchRepositoryIntegrationTests.java`; `backend-clean-verify` PASS via `node scripts/validation/validate.mjs backend`; `git diff --check` PASS; fresh PostgreSQL/Testcontainers lexical suite passed for golden terms, authorization/version exclusions, document-node narrowing, literal escaping, injection-shaped input, and limit/order behavior.
 - **Notes / blockers:** _None_
 
 ## P4-06 — Implement vector search repository
