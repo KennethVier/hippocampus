@@ -40,7 +40,7 @@ BEGIN
       INTO expected_dimension
       FROM public.index_generations
      WHERE id = NEW.index_generation_id
-       FOR KEY SHARE;
+       FOR SHARE;
 
     IF expected_dimension IS NOT NULL
        AND public.vector_dims(NEW.embedding) <> expected_dimension THEN

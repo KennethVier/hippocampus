@@ -1069,7 +1069,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 **Implementation items:** 14
 
 
-### P4-01 — Create IndexGeneration/ChunkEmbedding schema
+## P4-01 — Create IndexGeneration/ChunkEmbedding schema
 
 - **Workstream:** Database
 - **Priority:** Must
@@ -1082,8 +1082,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Embeddings are generation-scoped and rebuildable.
 - **Definition of Done:** Tests pass.
 - **Authority:** Document 18
-- **Evidence:** V15 creates `index_generations` and `chunk_embeddings`; PostgreSQL/Testcontainers validation proves fresh V1→V15 migration, restart idempotency, dimension enforcement, `(chunk_id, index_generation_id)` uniqueness, and cross-generation embeddings. Backend `clean verify` and `git diff --check` pass.
-- **Blockers:** None.
+- **Evidence / link:** V15 creates `index_generations` and `chunk_embeddings`; PostgreSQL/Testcontainers validation proves fresh V1→V15 migration, restart idempotency, sequential and concurrent dimension enforcement, `(chunk_id, index_generation_id)` uniqueness, cross-generation embeddings, and concurrent same-generation embedding writes. Backend validation and `git diff --check` pass.
+- **Notes / blockers:** _None_
 
 ## P4-02 — Implement embedding port
 

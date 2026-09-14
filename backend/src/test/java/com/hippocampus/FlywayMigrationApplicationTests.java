@@ -166,6 +166,115 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         }
     }
 
+    @Test
+    void committedEmbeddingWritePreventsConcurrentInvalidDimensionChange() throws Exception {
+        try (var context = startMigrationApplication()) {
+            assertThat(context.isActive()).isTrue();
+        }
+
+        UUID chunkId = insertChunk();
+        UUID generationId = UUID.randomUUID();
+        insertIndexGeneration(generationId, 3);
+
+        try (var embeddingConnection = openPostgresConnection();
+                var dimensionConnection = openPostgresConnection()) {
+            embeddingConnection.setAutoCommit(false);
+            dimensionConnection.setAutoCommit(false);
+
+            try (var embeddingStatement = embeddingConnection.createStatement();
+                    var dimensionStatement = dimensionConnection.createStatement()) {
+                embeddingStatement.executeUpdate(chunkEmbeddingInsert(
+                        UUID.randomUUID(), chunkId, generationId, "[1,2,3]"));
+                dimensionStatement.execute("SET LOCAL lock_timeout = '250ms'");
+
+                assertThatThrownBy(() -> dimensionStatement.executeUpdate("""
+                        UPDATE index_generations
+                           SET embedding_dimension = 4
+                         WHERE id = '%s'
+                        """.formatted(generationId)))
+                        .isInstanceOf(SQLException.class)
+                        .satisfies(error -> assertThat(((SQLException) error).getSQLState())
+                                .isEqualTo("55P03"));
+
+                dimensionConnection.rollback();
+                embeddingConnection.commit();
+            }
+        }
+
+        assertEmbeddingDimensionsMatchGeneration(generationId, 3, 1);
+    }
+
+    @Test
+    void committedDimensionChangePreventsConcurrentInvalidEmbeddingWrite() throws Exception {
+        try (var context = startMigrationApplication()) {
+            assertThat(context.isActive()).isTrue();
+        }
+
+        UUID chunkId = insertChunk();
+        UUID generationId = UUID.randomUUID();
+        insertIndexGeneration(generationId, 3);
+
+        try (var dimensionConnection = openPostgresConnection();
+                var embeddingConnection = openPostgresConnection()) {
+            dimensionConnection.setAutoCommit(false);
+            embeddingConnection.setAutoCommit(false);
+
+            try (var dimensionStatement = dimensionConnection.createStatement();
+                    var embeddingStatement = embeddingConnection.createStatement()) {
+                dimensionStatement.executeUpdate("""
+                        UPDATE index_generations
+                           SET embedding_dimension = 4
+                         WHERE id = '%s'
+                        """.formatted(generationId));
+                embeddingStatement.execute("SET LOCAL lock_timeout = '250ms'");
+
+                assertThatThrownBy(() -> embeddingStatement.executeUpdate(chunkEmbeddingInsert(
+                        UUID.randomUUID(), chunkId, generationId, "[1,2,3]")))
+                        .isInstanceOf(SQLException.class)
+                        .satisfies(error -> assertThat(((SQLException) error).getSQLState())
+                                .isEqualTo("55P03"));
+
+                embeddingConnection.rollback();
+                dimensionConnection.commit();
+            }
+        }
+
+        assertEmbeddingDimensionsMatchGeneration(generationId, 4, 0);
+    }
+
+    @Test
+    void ordinaryEmbeddingWritesForSameGenerationKeepSharedConcurrency() throws Exception {
+        try (var context = startMigrationApplication()) {
+            assertThat(context.isActive()).isTrue();
+        }
+
+        UUID firstChunkId = insertChunk();
+        UUID secondChunkId = insertChunk();
+        UUID generationId = UUID.randomUUID();
+        insertIndexGeneration(generationId, 3);
+
+        try (var firstConnection = openPostgresConnection();
+                var secondConnection = openPostgresConnection()) {
+            firstConnection.setAutoCommit(false);
+            secondConnection.setAutoCommit(false);
+
+            try (var firstStatement = firstConnection.createStatement();
+                    var secondStatement = secondConnection.createStatement()) {
+                firstStatement.executeUpdate(chunkEmbeddingInsert(
+                        UUID.randomUUID(), firstChunkId, generationId, "[1,2,3]"));
+                secondStatement.execute("SET LOCAL lock_timeout = '250ms'");
+                assertThat(secondStatement.executeUpdate(chunkEmbeddingInsert(
+                        UUID.randomUUID(), secondChunkId, generationId, "[4,5,6]")))
+                        .isEqualTo(1);
+
+                secondConnection.commit();
+                firstConnection.commit();
+            }
+        }
+
+        assertEmbeddingDimensionsMatchGeneration(generationId, 3, 2);
+    }
+
     private static void assertDatabaseIsEmpty() throws SQLException {
         try (var connection = openPostgresConnection();
                 var statement = connection.createStatement();
@@ -520,6 +629,38 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                     (id, chunk_id, index_generation_id, embedding, created_at)
                 VALUES ('%s', '%s', '%s', '%s'::vector, now())
                 """.formatted(id, chunkId, generationId, embedding);
+    }
+
+    private static void insertIndexGeneration(UUID generationId, int dimension) throws SQLException {
+        try (var connection = openPostgresConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate(indexGenerationInsert(generationId, dimension, "BUILDING"));
+        }
+    }
+
+    private static void assertEmbeddingDimensionsMatchGeneration(
+            UUID generationId, int expectedDimension, int expectedEmbeddingCount) throws SQLException {
+        try (var connection = openPostgresConnection();
+                var statement = connection.prepareStatement("""
+                        SELECT generation.embedding_dimension,
+                               count(embedding.id) AS embedding_count,
+                               count(embedding.id) FILTER (
+                                   WHERE vector_dims(embedding.embedding) <> generation.embedding_dimension
+                               ) AS mismatch_count
+                          FROM index_generations generation
+                          LEFT JOIN chunk_embeddings embedding
+                            ON embedding.index_generation_id = generation.id
+                         WHERE generation.id = ?
+                         GROUP BY generation.embedding_dimension
+                        """)) {
+            statement.setObject(1, generationId);
+            try (var result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getInt("embedding_dimension")).isEqualTo(expectedDimension);
+                assertThat(result.getInt("embedding_count")).isEqualTo(expectedEmbeddingCount);
+                assertThat(result.getInt("mismatch_count")).isZero();
+                assertThat(result.next()).isFalse();
+            }
+        }
     }
 
     private static void assertLearningOrganizationSchema() throws SQLException {
