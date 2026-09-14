@@ -1153,7 +1153,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** RAG
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Support semantic retrieval.
 - **Build:** Implement pgvector similarity query constrained by allowed user/material/version scope.
 - **How it works:** Authorization filters occur before ranking.
@@ -1162,7 +1162,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Semantically relevant chunks returned only from allowed scope.
 - **Definition of Done:** Zero-leakage test passes.
 - **Authority:** Documents 13,22
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Implemented provider-neutral `VectorSearchRepository`, `VectorSearchScope`, `VectorSearchRequest`, and source-traceable `VectorSearchHit` contracts with a Spring-composed `JdbcVectorSearchRepository`. Exact pgvector cosine search uses a `MATERIALIZED` authorized-candidate CTE before distance calculation or ranking; its bound predicates require the requested generation ID, `ACTIVE` generation status, matching embedding dimension, active chunk, owning user, non-deleted material, candidate equality to the material's active version, explicit allowed-version membership, optional allowed-node membership, and a positive stored-embedding vector norm. Empty allowed-version scope returns no candidates, all-zero query vectors are rejected without normalization, zero-norm stored candidates are excluded before ranking, and missing, `BUILDING`, `INACTIVE`, `FAILED`, or dimension-incompatible generations fail closed. Results expose finite `1 - cosine_distance` scores and order deterministically by cosine distance, chunk index, then chunk UUID while preserving canonical content and provenance. PostgreSQL 18 + pgvector Testcontainers validation passed 10 repository tests, proving known-vector ranking, limits, exact provenance, node narrowing, historical/deleted/inactive exclusion, generation and dimension isolation, deterministic ties, zero-norm candidate exclusion for mixed and zero-only authorized candidate sets, and zero cross-user leakage: User B's semantically identical and perfect-match vectors were excluded from User A's mixed scope, and a forged User B-only version scope returned zero rows. Seven focused request/hit tests and ten architecture tests passed. Required `node scripts/validation/validate.mjs backend` returned **VALIDATION PASS** with 841 tests, 0 failures, 0 errors, and 9 skips; `git diff --check` passed. No migration, dependency, ANN index, provider call/type, controller, frontend, P4-07+ behavior, or undocumented architecture deviation was introduced. External implementation review, independent adversarial security review, exact-head CI, merge, and final tracker completion remain pending.
 - **Notes / blockers:** _None_
 
 ## P4-07 — Implement hybrid candidate merge
