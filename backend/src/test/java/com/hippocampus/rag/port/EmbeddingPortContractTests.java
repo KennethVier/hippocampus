@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.OptionalLong;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -37,8 +38,8 @@ class EmbeddingPortContractTests {
                 .isEqualTo(new EmbeddingModelMetadata("counting-fake", "word-shape", "1", 2));
         assertThat(constant.model())
                 .isEqualTo(new EmbeddingModelMetadata("constant-fake", "constant-shape", "test", 2));
-        assertThat(counting.usage().inputTokenCount()).isEqualTo(6);
-        assertThat(constant.usage().inputTokenCount()).isZero();
+        assertThat(counting.usage().inputTokenCount()).hasValue(6);
+        assertThat(constant.usage().inputTokenCount()).hasValue(0);
         assertThat(counting.vectors()).allSatisfy(vector -> assertThat(vector.vector().dimension()).isEqualTo(2));
         assertThat(constant.vectors()).allSatisfy(vector -> assertThat(vector.vector().dimension()).isEqualTo(2));
     }
@@ -107,7 +108,14 @@ class EmbeddingPortContractTests {
     }
 
     @Test
-    void rejectsInvalidMetadataAndUsage() {
+    void acceptsAbsentAndNonBlankModelVersions() {
+        assertThat(new EmbeddingModelMetadata("provider", "model", null, 2).version()).isNull();
+        assertThat(new EmbeddingModelMetadata("provider", "model", "2026-09", 2).version())
+                .isEqualTo("2026-09");
+    }
+
+    @Test
+    void rejectsInvalidModelMetadata() {
         assertThatThrownBy(() -> new EmbeddingModelMetadata(null, "model", "1", 2))
                 .isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> new EmbeddingModelMetadata(" ", "model", "1", 2))
@@ -118,6 +126,24 @@ class EmbeddingPortContractTests {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new EmbeddingModelMetadata("provider", "model", "1", 0))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void distinguishesUnavailableUsageFromReportedZeroAndAcceptsPositiveUsage() {
+        EmbeddingUsageMetadata unavailable = EmbeddingUsageMetadata.unavailable();
+        EmbeddingUsageMetadata reportedZero = new EmbeddingUsageMetadata(0);
+        EmbeddingUsageMetadata reportedPositive = new EmbeddingUsageMetadata(6);
+
+        assertThat(unavailable.inputTokenCount()).isEmpty();
+        assertThat(reportedZero.inputTokenCount()).hasValue(0);
+        assertThat(reportedPositive.inputTokenCount()).hasValue(6);
+        assertThat(unavailable).isNotEqualTo(reportedZero);
+    }
+
+    @Test
+    void rejectsInvalidUsage() {
+        assertThatThrownBy(() -> new EmbeddingUsageMetadata((OptionalLong) null))
+                .isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> new EmbeddingUsageMetadata(-1)).isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -207,7 +233,10 @@ class EmbeddingPortContractTests {
             List<EmbeddingVectorResult> vectors = providerPayloads.stream()
                     .map(payload -> result(payload.reference(), payload.providerVector()[0], payload.providerVector()[1]))
                     .toList();
-            return new EmbeddingBatchResult(metadata(), usage(), vectors);
+            return new EmbeddingBatchResult(
+                    new EmbeddingModelMetadata("payload-fake", "provider-payload", null, 2),
+                    EmbeddingUsageMetadata.unavailable(),
+                    vectors);
         }
 
         private record FakeProviderPayload(UUID reference, float[] providerVector) {}

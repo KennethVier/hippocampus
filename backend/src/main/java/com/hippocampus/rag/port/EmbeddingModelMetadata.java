@@ -6,7 +6,9 @@ public record EmbeddingModelMetadata(String provider, String model, String versi
     public EmbeddingModelMetadata {
         requireNonBlank(provider, "provider");
         requireNonBlank(model, "model");
-        requireNonBlank(version, "version");
+        if (version != null && version.isBlank()) {
+            throw new IllegalArgumentException("version must not be blank");
+        }
         if (dimension < 1) {
             throw new IllegalArgumentException("embedding dimension must be positive");
         }
