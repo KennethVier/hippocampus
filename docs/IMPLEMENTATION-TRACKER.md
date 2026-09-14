@@ -1073,7 +1073,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Database
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Version embedding indexes explicitly.
 - **Build:** Create `index_generations` and `chunk_embeddings` with provider/model/dimension/chunking version/status and uniqueness.
 - **How it works:** Generations never mix silently.
@@ -1082,8 +1082,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Embeddings are generation-scoped and rebuildable.
 - **Definition of Done:** Tests pass.
 - **Authority:** Document 18
-- **Evidence / link:** V15 creates `index_generations` and `chunk_embeddings`; PostgreSQL/Testcontainers validation proves fresh V1→V15 migration, restart idempotency, sequential and concurrent dimension enforcement, `(chunk_id, index_generation_id)` uniqueness, cross-generation embeddings, and concurrent same-generation embedding writes. Backend validation and `git diff --check` pass.
-- **Notes / blockers:** _None_
+- **Evidence / link:** P4-01 was implemented in PR [#144](https://github.com/KennethVier/hippocampus/pull/144) at final reviewed head `7e87715ef626acc4d70c1fc291808af5c1da013c` and merged into `main` as `31a1f518c49775b63f0366af6252eebe581da5ef`. V15 creates `index_generations` and `chunk_embeddings` with generation metadata, status and positive-dimension checks, generic pgvector `VECTOR` storage, documented foreign keys, and `UNIQUE(chunk_id, index_generation_id)`. PostgreSQL trigger enforcement preserves the invariant that each stored vector dimension matches its associated generation and serializes concurrent generation-dimension changes using `FOR SHARE` without unnecessarily serializing ordinary embedding writes. Focused PostgreSQL/Testcontainers validation passed with 5 tests, proving fresh V1→V15 migration, restart idempotency, sequential and concurrent dimension enforcement in both transaction orderings, generation-scoped uniqueness, cross-generation embeddings, and concurrent same-generation embedding writes. Local backend validation passed with 760 tests, 0 failures, 0 errors, and 8 skips; `git diff --check` passed. Exact-head GitHub Actions quality run #416 (ID `34802199503`) succeeded with `backend-quality`, `frontend-quality`, `auth-e2e`, `security`, `phase1-gate`, `phase2-gate`, and `phase3-gate` all successful. External implementation re-review verdict is **APPROVED/PASS** with no unresolved correctness, architecture, concurrency, migration, testing, or scope blocker. Independent security review verdict is **SECURITY PASS** for the P4-01 changed surface, with no unresolved blocking Critical, High, or Medium finding and no manual security review requirement. The Expected Result and Definition of Done are satisfied, no P4-02+ behavior or undocumented architecture deviation was introduced, and no current blocker remains.
+- **Notes / blockers:** *None*
 
 ## P4-02 — Implement embedding port
 
