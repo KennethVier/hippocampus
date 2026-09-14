@@ -1169,7 +1169,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** RAG
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Combine lexical and semantic strengths.
 - **Build:** Merge/dedupe candidates using configurable scoring/rank fusion strategy.
 - **How it works:** No LLM needed for base retrieval.
@@ -1178,7 +1178,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Hybrid improves or matches expected retrieval.
 - **Definition of Done:** Offline metrics recorded.
 - **Authority:** Documents 13
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** P4-07 implements deterministic, provider-neutral hybrid candidate fusion in `com.hippocampus.rag.application` over already-authorized and already-ranked `LexicalSearchHit` and `VectorSearchHit` inputs. The immutable balanced `HybridFusionPolicy` uses Reciprocal Rank Fusion with `fusionScore = 1.0 / (60 + lexicalRank) + 1.0 / (60 + vectorRank)`, with a missing-channel contribution of zero; configurable weights are finite and non-negative, at least one must be positive, and `rrfK >= 1`. Candidates deduplicate by `chunkId`, preserve canonical content/provenance and exact source diagnostics, reject within-channel duplicate chunk IDs, and fail closed with `IllegalStateException` when shared cross-channel provenance disagrees. Final ordering is fusion score descending then chunk UUID ascending before the positive caller limit, and results plus heading paths are immutable. The small synthetic P4-07 offline baseline (not the P4-12 formal Golden Retrieval Dataset) passed exact lexical (`C5-T1`), semantic-only (`wrist drop`), and mixed lexical/semantic (`β1 receptor` / `SA node automaticity`) fixtures. Each fixture achieved Recall@3 = `1.0` and MRR = `1.0`; in the mixed fixture the expected chunk at lexical rank 2 and vector rank 2 ranked ahead of both rank-1 single-channel competitors. Focused validation passed 36 P4-07 tests (including 3 offline metric cases), and all 10 architecture tests passed. Required `node scripts/validation/validate.mjs backend` returned **VALIDATION PASS** with 877 tests, 0 failures, 0 errors, and 9 skips; `git diff --check` passed. No repository query/orchestration, RetrievalScope construction, EvidencePackage/SourceReference, inspector, formal golden dataset, reranking, LLM, API/controller, frontend, migration, dependency, or other P4-08+ behavior was introduced.
 - **Notes / blockers:** _None_
 
 ## P4-08 — Implement retrieval scope builder
