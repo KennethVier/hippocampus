@@ -3,15 +3,18 @@ package com.hippocampus.rag.infrastructure.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -99,6 +102,86 @@ class EmbeddingJobPersistenceIntegrationTests extends PostgresIntegrationTestSup
 
             assertThat(provider.batchSizes()).containsExactly(3, 1);
             assertThat(embeddingCount(jdbc)).isEqualTo(7);
+        }
+    }
+
+    @Test
+    void deletedMaterialBeforeEmbeddingStartsProducesNoProviderCallsOrEmbeddings() {
+        try (ConfigurableApplicationContext context = startEmbeddingApplication()) {
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            ScriptedEmbeddingPort provider = context.getBean(ScriptedEmbeddingPort.class);
+            UUID version = insertMaterialWithChunks(jdbc, 4, null);
+            deleteMaterial(jdbc, version);
+
+            context.getBean(EmbedMaterialVersion.class)
+                    .execute(version, () -> {}, (current, total) -> {});
+
+            assertThat(provider.batchSizes()).isEmpty();
+            assertThat(embeddingCount(jdbc)).isZero();
+        }
+    }
+
+    @Test
+    void deletionAfterSuccessfulBatchStopsBeforeSendingAnotherProviderBatch() {
+        try (ConfigurableApplicationContext context = startEmbeddingApplication()) {
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            ScriptedEmbeddingPort provider = context.getBean(ScriptedEmbeddingPort.class);
+            UUID version = insertMaterialWithChunks(jdbc, 7, null);
+
+            assertThatThrownBy(() -> context.getBean(EmbedMaterialVersion.class).execute(
+                    version,
+                    () -> {},
+                    (current, total) -> {
+                        if (current == 3) {
+                            deleteMaterial(jdbc, version);
+                        }
+                    }))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("eligible chunks");
+
+            assertThat(provider.batchSizes()).containsExactly(3);
+            assertThat(embeddingCount(jdbc)).isEqualTo(3);
+        }
+    }
+
+    @Test
+    void deletionDuringProviderCallWinsPersistenceLockRaceAndRejectsReturnedBatch() throws Exception {
+        try (ConfigurableApplicationContext context = startEmbeddingApplication();
+                Connection deletion = openPostgresConnection()) {
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            ScriptedEmbeddingPort provider = context.getBean(ScriptedEmbeddingPort.class);
+            UUID version = insertMaterialWithChunks(jdbc, 3, null);
+            CountDownLatch deletionStarted = new CountDownLatch(1);
+            deletion.setAutoCommit(false);
+            provider.onCall(() -> {
+                deleteMaterial(deletion, version);
+                deletionStarted.countDown();
+            });
+            ExecutorService executor = Executors.newSingleThreadExecutor();
+            try {
+                Future<?> embedding = executor.submit(() -> context.getBean(EmbedMaterialVersion.class)
+                        .execute(version, () -> {}, (current, total) -> {}));
+                assertThat(deletionStarted.await(5, TimeUnit.SECONDS)).isTrue();
+                try {
+                    assertThatThrownBy(() -> embedding.get(250, TimeUnit.MILLISECONDS))
+                            .isInstanceOf(TimeoutException.class);
+                } finally {
+                    deletion.commit();
+                }
+                assertThatThrownBy(() -> embedding.get(10, TimeUnit.SECONDS))
+                        .isInstanceOf(ExecutionException.class)
+                        .cause()
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("material is deleted");
+            } finally {
+                executor.shutdownNow();
+                assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+            }
+
+            assertThat(provider.batchSizes()).containsExactly(3);
+            assertThat(embeddingCount(jdbc)).isZero();
+            assertThat(jdbc.sql("SELECT count(*) FROM index_generations")
+                    .query(Long.class).single()).isZero();
         }
     }
 
@@ -340,6 +423,27 @@ class EmbeddingJobPersistenceIntegrationTests extends PostgresIntegrationTestSup
         return jdbc.sql("SELECT count(*) FROM chunk_embeddings").query(Long.class).single();
     }
 
+    private static void deleteMaterial(JdbcClient jdbc, UUID version) {
+        jdbc.sql("""
+                UPDATE materials m SET status='DELETED', updated_at=CURRENT_TIMESTAMP
+                FROM material_versions mv
+                WHERE mv.id=? AND mv.material_id=m.id
+                """).param(version).update();
+    }
+
+    private static void deleteMaterial(Connection connection, UUID version) {
+        try (var deletion = connection.prepareStatement("""
+                UPDATE materials m SET status='DELETED', updated_at=CURRENT_TIMESTAMP
+                FROM material_versions mv
+                WHERE mv.id=? AND mv.material_id=m.id
+                """)) {
+            deletion.setObject(1, version);
+            deletion.executeUpdate();
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Could not arrange concurrent material deletion", exception);
+        }
+    }
+
     private static UUID insertRunningJob(
             JdbcClient jdbc, UUID user, UUID version, ProcessingJobType type) {
         UUID id = UUID.randomUUID();
@@ -371,6 +475,7 @@ class EmbeddingJobPersistenceIntegrationTests extends PostgresIntegrationTestSup
         private final List<UUID> referenceIds = new ArrayList<>();
         private final AtomicInteger calls = new AtomicInteger();
         private int failureCall;
+        private Runnable onCall = () -> {};
 
         @Override
         public EmbeddingBatchResult embed(EmbeddingBatchRequest request) {
@@ -378,6 +483,7 @@ class EmbeddingJobPersistenceIntegrationTests extends PostgresIntegrationTestSup
             int call = calls.incrementAndGet();
             batchSizes.add(request.inputs().size());
             request.inputs().forEach(input -> referenceIds.add(input.referenceId()));
+            onCall.run();
             if (call == failureCall) {
                 throw new EmbeddingFailureException(EmbeddingFailureException.Reason.PROVIDER_FAILURE);
             }
@@ -398,6 +504,11 @@ class EmbeddingJobPersistenceIntegrationTests extends PostgresIntegrationTestSup
             calls.set(0);
             batchSizes.clear();
             referenceIds.clear();
+            onCall = () -> {};
+        }
+
+        void onCall(Runnable callback) {
+            onCall = callback;
         }
 
         List<Integer> batchSizes() {

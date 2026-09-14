@@ -60,7 +60,14 @@ public final class JdbcEmbeddingJobRepository implements EmbeddingJobRepository 
 
     @Override
     public long countEligibleChunks(UUID materialVersionId) {
-        return jdbc.sql("SELECT count(*) FROM chunks WHERE material_version_id=:version AND is_active")
+        return jdbc.sql("""
+                SELECT count(*)
+                FROM chunks c
+                JOIN material_versions mv ON mv.id=c.material_version_id
+                JOIN materials m ON m.id=mv.material_id
+                WHERE c.material_version_id=:version AND c.is_active
+                  AND m.status <> 'DELETED'
+                """)
                 .param("version", materialVersionId).query(Long.class).single();
     }
 
@@ -86,7 +93,10 @@ public final class JdbcEmbeddingJobRepository implements EmbeddingJobRepository 
         JdbcClient.StatementSpec query = jdbc.sql("""
                 SELECT c.id, c.chunk_index, c.content
                 FROM chunks c
+                JOIN material_versions mv ON mv.id=c.material_version_id
+                JOIN materials m ON m.id=mv.material_id
                 WHERE c.material_version_id=:version AND c.is_active
+                  AND m.status <> 'DELETED'
                 """ + generationFilter + " ORDER BY c.chunk_index LIMIT :limit")
                 .param("version", materialVersionId).param("limit", batchSize);
         if (indexGenerationId != null) {
@@ -131,6 +141,15 @@ public final class JdbcEmbeddingJobRepository implements EmbeddingJobRepository 
         if (embeddings.isEmpty()) {
             throw new IllegalArgumentException("Embedding persistence batch must not be empty");
         }
+        jdbc.sql("""
+                SELECT mv.id
+                FROM material_versions mv
+                JOIN materials m ON m.id=mv.material_id
+                WHERE mv.id=:version AND m.status <> 'DELETED'
+                FOR SHARE OF m, mv
+                """).param("version", materialVersionId).query(UUID.class).optional()
+                .orElseThrow(() -> new IllegalStateException(
+                        "Embedding material version is missing or its material is deleted"));
         List<UUID> chunkIds = new ArrayList<>(embeddings.size());
         for (ChunkEmbedding embedding : embeddings) {
             UUID eligible = jdbc.sql("""
