@@ -124,6 +124,13 @@ class HippocampusArchitectureTests {
             .because("bootstrap may compose feature modules, but feature and shared code must not depend on bootstrap")
             .allowEmptyShould(true);
 
+    static final ArchRule RAG_PORT_PROVIDER_INDEPENDENCE_RULE = noClasses()
+            .that().resideInAPackage(BASE_PACKAGE + ".rag.port..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                    "org.springframework..",
+                    "com.google.genai..")
+            .because("the RAG embedding port must remain provider and framework independent");
+
     @Test
     void productionClassesBelongToApprovedModuleRoots() {
         APPROVED_PACKAGE_ROOTS_RULE.check(PRODUCTION_CLASSES);
@@ -173,6 +180,11 @@ class HippocampusArchitectureTests {
     @Test
     void featureModulesDoNotDependOnBootstrap() {
         BOOTSTRAP_DIRECTION_RULE.check(PRODUCTION_CLASSES);
+    }
+
+    @Test
+    void ragPortRemainsProviderAndFrameworkIndependent() {
+        RAG_PORT_PROVIDER_INDEPENDENCE_RULE.check(PRODUCTION_CLASSES);
     }
 
     @Test

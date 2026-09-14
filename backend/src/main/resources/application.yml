@@ -14,6 +14,13 @@ spring:
       initialize-schema: never
 
 hippocampus:
+  rag:
+    embedding:
+      gemini:
+        enabled: ${HIPPOCAMPUS_GEMINI_EMBEDDING_ENABLED:false}
+        model: ${HIPPOCAMPUS_GEMINI_EMBEDDING_MODEL:gemini-embedding-2}
+        dimension: ${HIPPOCAMPUS_GEMINI_EMBEDDING_DIMENSION:768}
+        api-key: ${GEMINI_API_KEY:}
   materials:
     processing:
       recovery:
