@@ -18,3 +18,4 @@ com.hippocampus.materials.infrastructure.config.TextNormalizationConfiguration
 com.hippocampus.materials.infrastructure.config.ChunkingConfiguration
 com.hippocampus.rag.infrastructure.config.EmbeddingProcessingConfiguration
 com.hippocampus.rag.infrastructure.config.LexicalSearchConfiguration
+com.hippocampus.rag.infrastructure.config.VectorSearchConfiguration
