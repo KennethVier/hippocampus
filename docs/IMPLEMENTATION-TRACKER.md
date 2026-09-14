@@ -1073,16 +1073,16 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Database
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Version embedding indexes explicitly.
-- **Build:** Create index_generations and chunk_embeddings with provider/model/dimension/chunking version/status and uniqueness.
+- **Build:** Create `index_generations` and `chunk_embeddings` with provider/model/dimension/chunking version/status and uniqueness.
 - **How it works:** Generations never mix silently.
 - **Dependencies:** P3 chunks
 - **Tests / validation:** Migration/uniqueness/dimension metadata tests.
 - **Expected result:** Embeddings are generation-scoped and rebuildable.
 - **Definition of Done:** Tests pass.
-- **Authority:** Documents 18
-- **Evidence / link:** _To be recorded during implementation_
+- **Authority:** Document 18
+- **Evidence / link:** V15 creates `index_generations` and `chunk_embeddings`; PostgreSQL/Testcontainers validation proves fresh V1→V15 migration, restart idempotency, sequential and concurrent dimension enforcement, `(chunk_id, index_generation_id)` uniqueness, cross-generation embeddings, and concurrent same-generation embedding writes. Backend validation and `git diff --check` pass.
 - **Notes / blockers:** _None_
 
 ## P4-02 — Implement embedding port
