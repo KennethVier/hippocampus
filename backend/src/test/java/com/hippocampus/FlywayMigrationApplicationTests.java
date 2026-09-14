@@ -52,6 +52,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("13");
         assertSuccessfulFlywayVersion("14");
         assertSuccessfulFlywayVersion("15");
+        assertSuccessfulFlywayVersion("16");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -90,6 +91,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("13");
         assertSuccessfulFlywayVersion("14");
         assertSuccessfulFlywayVersion("15");
+        assertSuccessfulFlywayVersion("16");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -489,6 +491,10 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 "PRIMARY KEY (chunk_id, source_position)", null);
         assertIndex("chunk_text_block_links", "idx_chunk_text_block_links_text_block", false,
                 "text_block_id", "material_version_id");
+        assertIndex("chunks", "idx_chunks_active_content_fts", false,
+                "USING gin", "to_tsvector('simple'::regconfig, content)", "WHERE (is_active = true)");
+        assertIndex("chunks", "idx_chunks_active_content_trgm", false,
+                "USING gin", "content gin_trgm_ops", "WHERE (is_active = true)");
         assertCheckConstraintContains("chunks", "chk_chunks_content_type", "TEXT", "TABLE");
         assertCheckConstraintContains("chunks", "chk_chunks_extraction_method", "NATIVE", "OCR");
         assertCheckConstraintContains("chunk_text_block_links", "chk_chunk_text_block_links_position",
