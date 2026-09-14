@@ -181,10 +181,14 @@ class ProcessingJobRecoveryIntegrationTests extends PostgresIntegrationTestSuppo
                     }
                 }
             };
+            ProcessingStageHandler nextHandler = new ProcessingStageHandler() {
+                @Override public ProcessingJobType jobType() { return ProcessingJobType.MATERIAL_EXTRACT; }
+                @Override public void handle(ClaimedProcessingJob job) { }
+            };
             JdbcProcessingJobClaimRepository claims = new JdbcProcessingJobClaimRepository(jdbc);
             JdbcProcessingJobExecutionRepository execution = new JdbcProcessingJobExecutionRepository(jdbc);
             ExecuteClaimedProcessingJob executor = new ExecuteClaimedProcessingJob(
-                    new ProcessingDispatcher(java.util.List.of(handler)),
+                    new ProcessingDispatcher(java.util.List.of(handler, nextHandler)),
                     context.getBean(CompleteProcessingStage.class),
                     new ProcessingFailureClassifier(),
                     new FinalizeProcessingFailure(execution,

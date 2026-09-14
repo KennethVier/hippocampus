@@ -43,7 +43,7 @@ class ProcessingDispatcherTests {
 
     @ParameterizedTest
     @EnumSource(value = ProcessingJobType.class, names = {
-            "EMBED", "INDEX", "ACTIVATE", "REINDEX", "CLEANUP"
+            "INDEX", "ACTIVATE", "REINDEX", "CLEANUP"
     })
     void rejectsUnsupportedStagesWithoutInvokingHandlers(ProcessingJobType stage) {
         ProcessingStageHandler handler = handler(ProcessingJobType.MATERIAL_VALIDATE);
@@ -74,7 +74,7 @@ class ProcessingDispatcherTests {
 
     @Test
     void rejectsHandlerAdvertisingUnsupportedOrNullRoute() {
-        ProcessingStageHandler unsupported = handler(ProcessingJobType.EMBED);
+        ProcessingStageHandler unsupported = handler(ProcessingJobType.INDEX);
         ProcessingStageHandler nullRoute = handler(null);
 
         assertThatThrownBy(() -> new ProcessingDispatcher(List.of(unsupported)))
@@ -126,9 +126,21 @@ class ProcessingDispatcherTests {
         ProcessingDispatcher dispatcher = new ProcessingDispatcher(List.of(chunk));
 
         assertThat(dispatcher.dispatch(job(ProcessingJobType.CHUNK, MATERIAL_VERSION_ID)).nextStage())
-                .isEqualTo(ProcessingJobType.EMBED);
+                .isNull();
         verify(chunk).handle(org.mockito.ArgumentMatchers.any());
         verifyNoInteractions(embed);
+    }
+
+    @Test
+    void exposesNextStageOnlyWhenItsHandlerIsAvailable() {
+        ProcessingStageHandler chunk = handler(ProcessingJobType.CHUNK);
+        ProcessingStageHandler embed = handler(ProcessingJobType.EMBED);
+        ProcessingDispatcher dispatcher = new ProcessingDispatcher(List.of(chunk, embed));
+
+        assertThat(dispatcher.dispatch(job(ProcessingJobType.CHUNK, MATERIAL_VERSION_ID)).nextStage())
+                .isEqualTo(ProcessingJobType.EMBED);
+        assertThat(dispatcher.dispatch(job(ProcessingJobType.EMBED, MATERIAL_VERSION_ID)).nextStage())
+                .isNull();
     }
 
     @Test
@@ -141,7 +153,7 @@ class ProcessingDispatcherTests {
         verifyNoInteractions(normalization);
         ProcessingDispatcher dispatcher = new ProcessingDispatcher(List.of(handler));
         assertThat(dispatcher.dispatch(job(ProcessingJobType.NORMALIZE, MATERIAL_VERSION_ID)))
-                .isEqualTo(new ProcessingStageResult(ProcessingJobType.NORMALIZE, ProcessingJobType.CHUNK));
+                .isEqualTo(new ProcessingStageResult(ProcessingJobType.NORMALIZE, null));
         verify(normalization).execute(MATERIAL_VERSION_ID);
         org.mockito.Mockito.verifyNoMoreInteractions(normalization);
         assertThatThrownBy(() -> dispatcher.dispatch(job(ProcessingJobType.CHUNK, MATERIAL_VERSION_ID)))
@@ -169,7 +181,8 @@ class ProcessingDispatcherTests {
                 ProcessingJobType.STRUCTURE_DETECT,
                 ProcessingJobType.VISUAL_EXTRACT,
                 ProcessingJobType.NORMALIZE,
-                ProcessingJobType.CHUNK);
+                ProcessingJobType.CHUNK,
+                ProcessingJobType.EMBED);
     }
 
     private static Stream<Arguments> routes() {
@@ -179,6 +192,7 @@ class ProcessingDispatcherTests {
                 Arguments.of(ProcessingJobType.STRUCTURE_DETECT, ProcessingJobType.VISUAL_EXTRACT),
                 Arguments.of(ProcessingJobType.VISUAL_EXTRACT, ProcessingJobType.NORMALIZE),
                 Arguments.of(ProcessingJobType.NORMALIZE, ProcessingJobType.CHUNK),
-                Arguments.of(ProcessingJobType.CHUNK, ProcessingJobType.EMBED));
+                Arguments.of(ProcessingJobType.CHUNK, ProcessingJobType.EMBED),
+                Arguments.of(ProcessingJobType.EMBED, null));
     }
 }

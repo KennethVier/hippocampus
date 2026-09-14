@@ -1,5 +1,9 @@
 package com.hippocampus.materials.application;
 
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.dao.DataAccessResourceFailureException;
 
@@ -11,8 +15,19 @@ import com.hippocampus.materials.port.PdfStructureInspectionException;
 import com.hippocampus.materials.port.PdfTableExtractionException;
 import com.hippocampus.materials.port.PdfVisualExtractionException;
 import com.hippocampus.materials.port.MaterialSourceValidationException;
+import com.hippocampus.materials.port.ProcessingFailureMapping;
 
 public final class ProcessingFailureClassifier {
+    private final List<ProcessingFailureMapping> mappings;
+
+    public ProcessingFailureClassifier() {
+        this(List.of());
+    }
+
+    public ProcessingFailureClassifier(List<ProcessingFailureMapping> mappings) {
+        this.mappings = List.copyOf(Objects.requireNonNull(mappings));
+    }
+
     public ProcessingFailure classify(RuntimeException failure) {
         if (failure instanceof TransientDataAccessException
                 || failure instanceof DataAccessResourceFailureException) return transientFailure("DB_UNAVAILABLE");
@@ -38,6 +53,10 @@ public final class ProcessingFailureClassifier {
             case SOURCE_NOT_AVAILABLE, CONTENT_TYPE_MISMATCH, PASSWORD_PROTECTED, MALFORMED_PDF,
                     PAGE_LIMIT_EXCEEDED, RESOURCE_LIMIT_EXCEEDED, OUTPUT_REJECTED -> fatalFailure("TABLE_EXTRACTION_FAILED");
         };
+        for (ProcessingFailureMapping mapping : mappings) {
+            Optional<ProcessingFailure> classification = mapping.classify(failure);
+            if (classification.isPresent()) return classification.orElseThrow();
+        }
         return fatalFailure("PROCESSING_INTERNAL_ERROR");
     }
 
