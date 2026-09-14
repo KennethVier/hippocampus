@@ -1089,7 +1089,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** RAG
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Decouple retrieval indexing from provider.
 - **Build:** Define EmbeddingPort and batch request/result contracts.
 - **How it works:** Provider/model implementation selected by configuration/evaluation.
@@ -1098,7 +1098,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Chunk indexing is provider-independent.
 - **Definition of Done:** Port tests pass.
 - **Authority:** Documents 13,17
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** P4-02 implementation candidate adds a framework-independent `rag.port` embedding boundary: `EmbeddingPort`, immutable batch input/result and vector contracts, generic provider/model/version/dimension metadata, and provider-neutral input-token usage metadata. Contract validation rejects null, empty, blank, duplicate-reference, non-finite, non-positive-dimension, and dimension-mismatch states; request, result, and vector collections are defensively immutable. Three test-only fake adapters prove multi-input batching, caller-controlled UUID correlation, provider interchangeability without caller changes, provider-type containment, metadata visibility, and dimension consistency without Spring, network, provider, or database use. Focused validation `mvn -B -ntp "-Dtest=EmbeddingPortContractTests,HippocampusArchitectureTests" test` passed 17 tests (8 contract and 9 architecture), with 0 failures, 0 errors, and 0 skips. Required backend validation `node scripts/validation/validate.mjs backend` passed `mvnw.cmd -B -ntp clean verify` with 768 tests, 0 failures, 0 errors, and 8 skips, plus `git diff --check`. Complete scope/leakage inspection found no provider SDK, Spring AI/framework, HTTP, JPA, persistence, configuration, job orchestration, migration, or P4-03+ behavior. Validation verdict: **VALIDATION PASS**; external implementation and independent security review remain pending before `Done`.
 - **Notes / blockers:** _None_
 
 ## P4-03 — Implement initial embedding adapter
