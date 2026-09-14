@@ -1105,7 +1105,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** RAG
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Produce v1 embeddings using approved candidate/provider.
 - **Build:** Implement selected Gemini embedding adapter initially; capture model/dimension/usage.
 - **How it works:** No provider types escape adapter.
@@ -1114,7 +1114,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Embeddings persist correctly.
 - **Definition of Done:** Adapter and dimension tests pass.
 - **Authority:** Documents 17
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** P4-03 implements the initial direct Gemini embedding adapter. The backend imports the official Spring AI BOM at `2.0.1` and adds only `org.springframework.ai:spring-ai-google-genai-embedding`; the resolved AI path is Spring AI `2.0.1`, Google GenAI `1.65.0`, and the required Spring AI model/commons/template/retry transitive modules, with no chat, vector-store, Ollama, agent, memory, or provider-router dependency. `GeminiEmbeddingConfiguration` activates only when `hippocampus.rag.embedding.gemini.enabled=true`; normal startup remains credential-free, while enabled configuration fails closed for missing/blank `GEMINI_API_KEY`, blank model, or non-positive dimension. The configuration-owned candidate is `gemini-embedding-2` at dimension `768`. `GeminiEmbeddingAdapter` sends one unchanged text batch through Spring AI, correlates results by provider index to caller UUIDs, restores deterministic request order, validates exact cardinality, unique in-range indices, exact configured dimension, and finite immutable vectors, maps provider/model/version metadata, and preserves reported, zero, unavailable, and invalid usage semantics. Provider/client and malformed-response failures cross the port only as fixed-message provider-neutral failures without provider causes or sensitive payloads. Focused embedding/configuration/architecture validation passed 35 executed tests with 0 failures and 0 errors; the separately gated smoke was then run with `GEMINI_API_KEY` set and `HIPPOCAMPUS_GEMINI_LIVE_TEST=true` using `.\mvnw\.cmd -B -ntp "-Dtest=GeminiEmbeddingLiveSmokeTest" test`. The real Gemini smoke completed with **BUILD SUCCESS**: 1 test executed, 0 failures, 0 errors, 0 skips, test time 1.467 seconds, and total Maven time 4.234 seconds. It exercised the real `EmbeddingPort` path and verified caller correlation, model metadata, and configured 768-dimensional finite vectors. Required `node scripts/validation/validate.mjs backend` passed clean backend verification with 787 tests, 0 failures, 0 errors, and 9 skips; dependency review, architecture review, scope inspection, and `git diff --check` also passed. No P4-04 job/orchestration, persistence/upsert, repository, migration, retrieval, endpoint, frontend, prompt policy, multimodal, Ollama, chat, or later-phase behavior was introduced. Final validation verdict: **VALIDATION PASS**. Implementation-time security assessment found no blocking issue in the changed surface. The mandatory independent security review remains pending after external implementation review. P4-03 remains `Ready for Review` and is not `Done`.
 - **Notes / blockers:** _None_
 
 ## P4-04 — Implement batched embedding jobs
