@@ -37,6 +37,7 @@ public final class JdbcVectorSearchRepository implements VectorSearchRepository 
                   AND m.status <> 'DELETED'
                   AND m.active_version_id = c.material_version_id
                   AND c.material_version_id IN (:versionIds)
+                  AND vector_norm(ce.embedding) > 0
             """;
     private static final String RANK_AND_LIMIT = """
             )

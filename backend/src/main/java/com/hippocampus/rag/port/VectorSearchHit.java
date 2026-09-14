@@ -32,5 +32,8 @@ public record VectorSearchHit(
         if (chunkIndex < 1) {
             throw new IllegalArgumentException("chunkIndex must be positive");
         }
+        if (!Double.isFinite(cosineSimilarity)) {
+            throw new IllegalArgumentException("cosineSimilarity must be finite");
+        }
     }
 }

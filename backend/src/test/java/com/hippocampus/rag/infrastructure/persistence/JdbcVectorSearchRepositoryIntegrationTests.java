@@ -101,6 +101,41 @@ class JdbcVectorSearchRepositoryIntegrationTests extends PostgresIntegrationTest
     }
 
     @Test
+    void excludesZeroNormCandidateBeforeRankingAlongsideValidCandidate() {
+        try (ConfigurableApplicationContext context = startApplication()) {
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            UUID generation = insertGeneration(jdbc, "ACTIVE", 2);
+            UUID user = insertUser(jdbc, "mixed-zero-norm");
+            Material material = insertMaterial(jdbc, user, "ACTIVE", 1);
+            UUID valid = insertChunk(jdbc, material.activeVersion(), null, 1, "Valid candidate", true, null);
+            UUID zeroNorm = insertChunk(jdbc, material.activeVersion(), null, 2, "Zero-norm candidate", true, null);
+            insertEmbedding(jdbc, valid, generation, List.of(1.0F, 0.0F));
+            insertEmbedding(jdbc, zeroNorm, generation, List.of(0.0F, 0.0F));
+
+            List<VectorSearchHit> hits = search(context, user, Set.of(material.activeVersion()), Set.of(),
+                    generation, List.of(1.0F, 0.0F), 10);
+
+            assertThat(hits).extracting(VectorSearchHit::chunkId).containsExactly(valid);
+            assertThat(hits).allMatch(hit -> Double.isFinite(hit.cosineSimilarity()));
+        }
+    }
+
+    @Test
+    void returnsNoHitsWhenAuthorizedCandidatesAreOnlyZeroNorm() {
+        try (ConfigurableApplicationContext context = startApplication()) {
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            UUID generation = insertGeneration(jdbc, "ACTIVE", 2);
+            UUID user = insertUser(jdbc, "only-zero-norm");
+            Material material = insertMaterial(jdbc, user, "ACTIVE", 1);
+            UUID zeroNorm = insertChunk(jdbc, material.activeVersion(), null, 1, "Zero-norm candidate", true, null);
+            insertEmbedding(jdbc, zeroNorm, generation, List.of(0.0F, 0.0F));
+
+            assertThat(search(context, user, Set.of(material.activeVersion()), Set.of(),
+                    generation, List.of(1.0F, 0.0F), 10)).isEmpty();
+        }
+    }
+
+    @Test
     void excludesHistoricalDeletedAndInactiveCandidatesAndSupportsNodeNarrowing() {
         try (ConfigurableApplicationContext context = startApplication()) {
             JdbcClient jdbc = context.getBean(JdbcClient.class);
