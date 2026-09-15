@@ -20,3 +20,4 @@ com.hippocampus.rag.infrastructure.config.EmbeddingProcessingConfiguration
 com.hippocampus.rag.infrastructure.config.LexicalSearchConfiguration
 com.hippocampus.rag.infrastructure.config.VectorSearchConfiguration
 com.hippocampus.rag.infrastructure.config.RetrievalScopeConfiguration
+com.hippocampus.rag.infrastructure.config.EvidencePackageConfiguration
