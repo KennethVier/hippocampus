@@ -7,6 +7,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import com.hippocampus.rag.application.BuildEvidencePackage;
+import com.hippocampus.rag.application.MaterializeEvidenceSourceReferences;
+import com.hippocampus.materials.application.CreateSourceReferences;
 import com.hippocampus.rag.infrastructure.persistence.JdbcEvidenceVisualRepository;
 import com.hippocampus.rag.port.EvidenceVisualRepository;
 
@@ -22,5 +24,11 @@ public class EvidencePackageConfiguration {
     @Bean
     BuildEvidencePackage buildEvidencePackage(EvidenceVisualRepository visuals) {
         return new BuildEvidencePackage(visuals);
+    }
+
+    @Bean
+    MaterializeEvidenceSourceReferences materializeEvidenceSourceReferences(
+            CreateSourceReferences createSourceReferences) {
+        return new MaterializeEvidenceSourceReferences(createSourceReferences);
     }
 }

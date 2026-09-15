@@ -54,6 +54,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("15");
         assertSuccessfulFlywayVersion("16");
         assertSuccessfulFlywayVersion("17");
+        assertSuccessfulFlywayVersion("18");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -94,6 +95,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("15");
         assertSuccessfulFlywayVersion("16");
         assertSuccessfulFlywayVersion("17");
+        assertSuccessfulFlywayVersion("18");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -375,7 +377,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                     "chunk_embeddings", "chunk_text_block_links", "chunk_visual_links", "chunks", "document_nodes",
                     "index_generations",
                     "material_topic_links", "material_versions", "materials", "processing_jobs",
-                    "spring_session", "spring_session_attributes",
+                    "source_references", "spring_session", "spring_session_attributes",
                     "subjects", "subtopics", "text_blocks", "topics",
                     "user_password_credentials", "users", "visual_assets");
         }
