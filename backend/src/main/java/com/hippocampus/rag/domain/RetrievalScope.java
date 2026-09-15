@@ -48,6 +48,14 @@ public record RetrievalScope(
         return targets.isEmpty();
     }
 
+    public boolean allows(UUID materialVersionId, UUID documentNodeId) {
+        Objects.requireNonNull(materialVersionId, "materialVersionId must not be null");
+        return targets.stream()
+                .filter(target -> target.materialVersionId().equals(materialVersionId))
+                .anyMatch(target -> target.allowsWholeMaterialVersion()
+                        || documentNodeId != null && target.documentNodeIds().contains(documentNodeId));
+    }
+
     private static Set<RetrievalScopeTarget> immutableUniqueTargets(
             Collection<RetrievalScopeTarget> targets) {
         Objects.requireNonNull(targets, "targets must not be null");
