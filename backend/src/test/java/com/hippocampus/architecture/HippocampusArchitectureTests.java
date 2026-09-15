@@ -131,6 +131,11 @@ class HippocampusArchitectureTests {
                     "com.google.genai..")
             .because("the RAG embedding port must remain provider and framework independent");
 
+    static final ArchRule MATERIALS_OWNS_SOURCE_REFERENCES_RULE = noClasses()
+            .that().resideInAPackage(BASE_PACKAGE + ".materials..")
+            .should().dependOnClassesThat().resideInAPackage(BASE_PACKAGE + ".rag..")
+            .because("materials owns canonical source references and must not depend on RAG");
+
     @Test
     void productionClassesBelongToApprovedModuleRoots() {
         APPROVED_PACKAGE_ROOTS_RULE.check(PRODUCTION_CLASSES);
@@ -185,6 +190,11 @@ class HippocampusArchitectureTests {
     @Test
     void ragPortRemainsProviderAndFrameworkIndependent() {
         RAG_PORT_PROVIDER_INDEPENDENCE_RULE.check(PRODUCTION_CLASSES);
+    }
+
+    @Test
+    void materialsOwnsCanonicalSourceReferencesWithoutDependingOnRag() {
+        MATERIALS_OWNS_SOURCE_REFERENCES_RULE.check(PRODUCTION_CLASSES);
     }
 
     @Test
