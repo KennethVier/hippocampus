@@ -2,7 +2,9 @@ package com.hippocampus.rag.port;
 
 import java.util.Objects;
 
-public record LexicalSearchRequest(LexicalSearchScope scope, String query, int limit) {
+import com.hippocampus.rag.domain.RetrievalScope;
+
+public record LexicalSearchRequest(RetrievalScope scope, String query, int limit) {
     public LexicalSearchRequest {
         Objects.requireNonNull(scope, "scope must not be null");
         Objects.requireNonNull(query, "query must not be null");

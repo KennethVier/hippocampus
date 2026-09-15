@@ -14,11 +14,13 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
+import com.hippocampus.rag.domain.GroundingMode;
+import com.hippocampus.rag.domain.RetrievalScope;
+import com.hippocampus.rag.domain.RetrievalScopeTarget;
 import com.hippocampus.rag.port.EmbeddingVector;
 import com.hippocampus.rag.port.VectorSearchHit;
 import com.hippocampus.rag.port.VectorSearchRepository;
 import com.hippocampus.rag.port.VectorSearchRequest;
-import com.hippocampus.rag.port.VectorSearchScope;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 
 class JdbcVectorSearchRepositoryIntegrationTests extends PostgresIntegrationTestSupport {
@@ -239,6 +241,36 @@ class JdbcVectorSearchRepositoryIntegrationTests extends PostgresIntegrationTest
         }
     }
 
+    @Test
+    void supportsMixedWholeVersionAndNodeTargetsBeforeRanking() {
+        try (ConfigurableApplicationContext context = startApplication()) {
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            UUID generation = insertGeneration(jdbc, "ACTIVE", 2);
+            UUID user = insertUser(jdbc, "mixed");
+            Material whole = insertMaterial(jdbc, user, "ACTIVE", 1);
+            Material narrowed = insertMaterial(jdbc, user, "ACTIVE", 1);
+            UUID allowedNode = insertNode(jdbc, narrowed.activeVersion(), "Allowed");
+            UUID otherNode = insertNode(jdbc, narrowed.activeVersion(), "Other");
+            UUID wholeChunk = insertChunk(jdbc, whole.activeVersion(), null, 1, "Whole", true, null);
+            UUID allowedChunk = insertChunk(jdbc, narrowed.activeVersion(), allowedNode, 1, "Allowed", true, null);
+            UUID forbiddenBest = insertChunk(jdbc, narrowed.activeVersion(), otherNode, 2, "Forbidden", true, null);
+            insertEmbedding(jdbc, wholeChunk, generation, List.of(0.8F, 0.2F));
+            insertEmbedding(jdbc, allowedChunk, generation, List.of(0.7F, 0.3F));
+            insertEmbedding(jdbc, forbiddenBest, generation, List.of(1.0F, 0.0F));
+            RetrievalScope scope = new RetrievalScope(user, UUID.randomUUID(), GroundingMode.STRICT_SOURCE,
+                    List.of(new RetrievalScopeTarget(whole.activeVersion(), Set.of()),
+                            new RetrievalScopeTarget(narrowed.activeVersion(), Set.of(allowedNode))));
+
+            List<VectorSearchHit> hits = context.getBean(VectorSearchRepository.class).search(
+                    new VectorSearchRequest(scope, generation,
+                            new EmbeddingVector(List.of(1.0F, 0.0F)), 10));
+
+            assertThat(hits).extracting(VectorSearchHit::chunkId)
+                    .containsExactly(wholeChunk, allowedChunk)
+                    .doesNotContain(forbiddenBest);
+        }
+    }
+
     private static org.assertj.core.data.Offset<Double> within(double value) {
         return org.assertj.core.data.Offset.offset(value);
     }
@@ -252,7 +284,12 @@ class JdbcVectorSearchRepositoryIntegrationTests extends PostgresIntegrationTest
             ConfigurableApplicationContext context, UUID user, Set<UUID> versions, Set<UUID> nodes,
             UUID generation, List<Float> query, int limit) {
         return context.getBean(VectorSearchRepository.class).search(new VectorSearchRequest(
-                new VectorSearchScope(user, versions, nodes), generation, new EmbeddingVector(query), limit));
+                scope(user, versions, nodes), generation, new EmbeddingVector(query), limit));
+    }
+
+    private static RetrievalScope scope(UUID user, Set<UUID> versions, Set<UUID> nodes) {
+        return new RetrievalScope(user, UUID.randomUUID(), GroundingMode.STRICT_SOURCE,
+                versions.stream().map(version -> new RetrievalScopeTarget(version, nodes)).toList());
     }
 
     private static UUID insertUser(JdbcClient jdbc, String name) {

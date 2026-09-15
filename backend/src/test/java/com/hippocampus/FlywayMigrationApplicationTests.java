@@ -53,6 +53,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("14");
         assertSuccessfulFlywayVersion("15");
         assertSuccessfulFlywayVersion("16");
+        assertSuccessfulFlywayVersion("17");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -92,6 +93,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("14");
         assertSuccessfulFlywayVersion("15");
         assertSuccessfulFlywayVersion("16");
+        assertSuccessfulFlywayVersion("17");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -773,8 +775,9 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 "r");
         assertNamedConstraint("material_topic_links", "chk_material_topic_links_document_node_requires_version",
                 "CHECK (((document_node_id IS NULL) OR (material_version_id IS NOT NULL)))", null);
-        assertNamedConstraint("material_topic_links", "chk_material_topic_links_document_node_phase2_disabled",
-                "CHECK ((document_node_id IS NULL))", null);
+        assertNamedConstraint("material_topic_links", "fk_material_topic_links_node_same_version",
+                "FOREIGN KEY (document_node_id, material_version_id) REFERENCES document_nodes(id, material_version_id) ON DELETE RESTRICT",
+                "r");
         assertIndex("material_topic_links", "idx_material_topic_links_topic_status", false, "topic_id", "status");
         assertIndex("material_topic_links", "uq_material_topic_links_active_exact_target", true,
                 "topic_id", "material_id", "material_version_id", "document_node_id",
