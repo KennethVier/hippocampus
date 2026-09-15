@@ -3,8 +3,10 @@ package com.hippocampus.rag.port;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.hippocampus.rag.domain.RetrievalScope;
+
 public record VectorSearchRequest(
-        VectorSearchScope scope,
+        RetrievalScope scope,
         UUID indexGenerationId,
         EmbeddingVector queryEmbedding,
         int limit) {

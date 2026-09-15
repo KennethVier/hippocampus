@@ -1185,7 +1185,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** RAG
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Derive authorized search scope from task/topic/material links.
 - **Build:** Build RetrievalScope from authenticated user, topic, active material versions/nodes and grounding mode.
 - **How it works:** Client cannot widen scope.
@@ -1194,7 +1194,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Every retrieval is scoped centrally.
 - **Definition of Done:** Scope tests pass.
 - **Authority:** Documents 13,22
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** P4-08 implemented a single framework/provider-neutral `RetrievalScope` and `RetrievalScopeTarget` model with immutable targets and derived allowed-version, whole-version, and node views. `BuildRetrievalScope.Query` accepts only `topicId` and server-selected `GroundingMode`; ownership is derived exclusively from `CurrentUser.authenticatedUser().userId()`. The JDBC scope resolver uses bound parameters and returns rows only for an owned ACTIVE Subject and Topic, ACTIVE MaterialTopicLink, same-owner non-DELETED Material with a non-null current active version, and either an implicit-current link or an explicit link equal to that current version. Historical versions, foreign/missing topics, malicious cross-user material links, inactive links, archived organization, deleted materials, materials without an active version, and malformed node links fail closed. Node rows coalesce by active MaterialVersion, while any whole-version row dominates node rows for that version; all grounding modes preserve exactly the same authorization scope. V17 removes the Phase 2 node-disable check, retains the node-requires-version check, and adds a restrictive composite `(document_node_id, material_version_id)` foreign key to `document_nodes`. Lexical and vector search requests now consume `RetrievalScope`; both repositories retain ownership/deletion/chunk/current-version checks, vector generation/dimension checks, empty-scope short-circuiting, and enforce mixed whole-version/node authorization before ranking without generating empty `IN` lists. Focused validation passed 56 domain/application/request, resolver, lexical/vector, Flyway, and architecture tests (0 failures/errors), followed by 7 updated MaterialTopicLink regression tests (0 failures/errors); all 10 architecture tests passed. Mixed-scope tests proved all eligible chunks from whole Version A plus only the authorized node from Version B, including exclusion of a better-ranked unauthorized vector candidate. Required `node scripts/validation/validate.mjs backend` returned **VALIDATION PASS** with 884 tests, 0 failures, 0 errors, and 9 skips; `git diff --check` passed. Independent review returned **SECURITY PASS** with no unresolved blocking finding in the P4-08 scope. Exact working-tree base HEAD: `37c4f5df045cf2a21b2f4607da55b0b1a5b91858`. No P4-09+ behavior, controller/API, provider call, orchestration, frontend, dependency, or unrelated schema change was introduced.
 - **Notes / blockers:** _None_
 
 ## P4-09 — Implement EvidencePackage builder

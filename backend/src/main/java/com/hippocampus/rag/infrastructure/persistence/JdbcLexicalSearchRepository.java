@@ -59,13 +59,14 @@ public final class JdbcLexicalSearchRepository implements LexicalSearchRepositor
     @Override
     public List<LexicalSearchHit> search(LexicalSearchRequest request) {
         Objects.requireNonNull(request, "request must not be null");
-        if (request.scope().allowedMaterialVersionIds().isEmpty()) {
+        if (request.scope().isEmpty()) {
             return List.of();
         }
 
-        boolean narrowByNode = !request.scope().allowedDocumentNodeIds().isEmpty();
+        boolean hasWholeVersions = !request.scope().wholeMaterialVersionIds().isEmpty();
+        boolean hasNodes = !request.scope().allowedDocumentNodeIds().isEmpty();
         String sql = BASE_QUERY
-                + (narrowByNode ? "  AND c.document_node_id IN (:nodeIds)\n" : "")
+                + authorizationTargetClause(hasWholeVersions, hasNodes)
                 + ORDER_AND_LIMIT;
         JdbcClient.StatementSpec statement = jdbc.sql(sql)
                 .param("query", request.query())
@@ -73,7 +74,10 @@ public final class JdbcLexicalSearchRepository implements LexicalSearchRepositor
                 .param("userId", request.scope().userId())
                 .param("versionIds", request.scope().allowedMaterialVersionIds())
                 .param("limit", request.limit());
-        if (narrowByNode) {
+        if (hasWholeVersions) {
+            statement = statement.param("wholeVersionIds", request.scope().wholeMaterialVersionIds());
+        }
+        if (hasNodes) {
             statement = statement.param("nodeIds", request.scope().allowedDocumentNodeIds());
         }
 
@@ -94,6 +98,17 @@ public final class JdbcLexicalSearchRepository implements LexicalSearchRepositor
                 row.getDouble("full_text_rank"),
                 row.getDouble("trigram_score")))
                 .list();
+    }
+
+    private static String authorizationTargetClause(boolean hasWholeVersions, boolean hasNodes) {
+        if (hasWholeVersions && hasNodes) {
+            return "  AND (c.material_version_id IN (:wholeVersionIds)"
+                    + " OR c.document_node_id IN (:nodeIds))\n";
+        }
+        if (hasWholeVersions) {
+            return "  AND c.material_version_id IN (:wholeVersionIds)\n";
+        }
+        return "  AND c.document_node_id IN (:nodeIds)\n";
     }
 
     private List<String> readHeadingPath(String json) {

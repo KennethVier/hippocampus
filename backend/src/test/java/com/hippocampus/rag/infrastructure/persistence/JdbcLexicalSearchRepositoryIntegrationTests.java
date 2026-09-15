@@ -14,10 +14,12 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
+import com.hippocampus.rag.domain.GroundingMode;
+import com.hippocampus.rag.domain.RetrievalScope;
+import com.hippocampus.rag.domain.RetrievalScopeTarget;
 import com.hippocampus.rag.port.LexicalSearchHit;
 import com.hippocampus.rag.port.LexicalSearchRepository;
 import com.hippocampus.rag.port.LexicalSearchRequest;
-import com.hippocampus.rag.port.LexicalSearchScope;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 
 class JdbcLexicalSearchRepositoryIntegrationTests extends PostgresIntegrationTestSupport {
@@ -177,6 +179,32 @@ class JdbcLexicalSearchRepositoryIntegrationTests extends PostgresIntegrationTes
     }
 
     @Test
+    void supportsMixedWholeVersionAndNodeTargets() {
+        try (ConfigurableApplicationContext context = startApplication()) {
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            UUID user = insertUser(jdbc, "mixed");
+            Material whole = insertMaterial(jdbc, user, "ACTIVE", 1);
+            Material narrowed = insertMaterial(jdbc, user, "ACTIVE", 1);
+            Material unrelated = insertMaterial(jdbc, user, "ACTIVE", 1);
+            UUID allowedNode = insertNode(jdbc, narrowed.activeVersion(), "Allowed");
+            UUID otherNode = insertNode(jdbc, narrowed.activeVersion(), "Other");
+            UUID wholeChunk = insertChunk(jdbc, whole.activeVersion(), null, 1, "mixed-marker", true, null);
+            UUID allowedChunk = insertChunk(jdbc, narrowed.activeVersion(), allowedNode, 1, "mixed-marker", true, null);
+            insertChunk(jdbc, narrowed.activeVersion(), otherNode, 2, "mixed-marker", true, null);
+            insertChunk(jdbc, unrelated.activeVersion(), null, 1, "mixed-marker", true, null);
+            RetrievalScope scope = new RetrievalScope(user, UUID.randomUUID(), GroundingMode.STRICT_SOURCE,
+                    List.of(new RetrievalScopeTarget(whole.activeVersion(), Set.of()),
+                            new RetrievalScopeTarget(narrowed.activeVersion(), Set.of(allowedNode))));
+
+            List<LexicalSearchHit> hits = context.getBean(LexicalSearchRepository.class)
+                    .search(new LexicalSearchRequest(scope, "mixed-marker", 10));
+
+            assertThat(hits).extracting(LexicalSearchHit::chunkId)
+                    .containsExactlyInAnyOrder(wholeChunk, allowedChunk);
+        }
+    }
+
+    @Test
     void installsPartialFtsAndTrigramIndexes() {
         try (ConfigurableApplicationContext context = startApplication()) {
             JdbcClient jdbc = context.getBean(JdbcClient.class);
@@ -205,7 +233,12 @@ class JdbcLexicalSearchRepositoryIntegrationTests extends PostgresIntegrationTes
             ConfigurableApplicationContext context, UUID user, Set<UUID> versions,
             Set<UUID> nodes, String query, int limit) {
         return context.getBean(LexicalSearchRepository.class).search(
-                new LexicalSearchRequest(new LexicalSearchScope(user, versions, nodes), query, limit));
+                new LexicalSearchRequest(scope(user, versions, nodes), query, limit));
+    }
+
+    private static RetrievalScope scope(UUID user, Set<UUID> versions, Set<UUID> nodes) {
+        return new RetrievalScope(user, UUID.randomUUID(), GroundingMode.STRICT_SOURCE,
+                versions.stream().map(version -> new RetrievalScopeTarget(version, nodes)).toList());
     }
 
     private static UUID insertUser(JdbcClient jdbc, String name) {

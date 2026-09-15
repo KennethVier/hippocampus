@@ -149,7 +149,7 @@ class MaterialTopicLinkRepositoryIntegrationTests extends PostgresIntegrationTes
     }
 
     @Test
-    void inactiveHistoryDoesNotConflictButDocumentNodeIsDisabledInPhaseTwo() throws Exception {
+    void inactiveHistoryDoesNotConflictAndDocumentNodeMustMatchLinkedVersion() throws Exception {
         try (var context = startApplicationWithFlyway()) {
             Fixture fixture = fixture(context, "link-schema-guards");
             UUID first = UUID.randomUUID();
@@ -160,11 +160,16 @@ class MaterialTopicLinkRepositoryIntegrationTests extends PostgresIntegrationTes
                     "STRUCTURE_DETECTED", "ACTIVE");
             assertThat(countLinks()).isEqualTo(3);
 
+            UUID node = insertDocumentNode(fixture.versionA1());
+            insertRaw(UUID.randomUUID(), fixture.topicA2(), fixture.materialA1(), fixture.versionA1(),
+                    node, "STRUCTURE_DETECTED", "ACTIVE");
+            assertThat(countLinks()).isEqualTo(4);
+
             assertThatThrownBy(() -> insertRaw(
                     UUID.randomUUID(), fixture.topicA2(), fixture.materialA1(), fixture.versionA1(),
                     UUID.randomUUID(), "STRUCTURE_DETECTED", "ACTIVE"))
                     .isInstanceOf(SQLException.class)
-                    .hasMessageContaining("chk_material_topic_links_document_node_phase2_disabled");
+                    .hasMessageContaining("fk_material_topic_links_node_same_version");
             assertThat(linkOrigin(first)).isEqualTo("AI_ASSISTED");
         }
     }
@@ -254,6 +259,22 @@ class MaterialTopicLinkRepositoryIntegrationTests extends PostgresIntegrationTes
             statement.setObject(9, now);
             statement.executeUpdate();
         }
+    }
+
+    private static UUID insertDocumentNode(UUID materialVersionId) throws SQLException {
+        UUID nodeId = UUID.randomUUID();
+        try (Connection connection = openPostgresConnection();
+                var statement = connection.prepareStatement("""
+                        INSERT INTO document_nodes (
+                            id, material_version_id, node_type, ordinal, detection_origin, created_at
+                        ) VALUES (?, ?, 'SECTION', 1, 'NATIVE', ?)
+                        """)) {
+            statement.setObject(1, nodeId);
+            statement.setObject(2, materialVersionId);
+            statement.setObject(3, OffsetDateTime.now(ZoneOffset.UTC));
+            statement.executeUpdate();
+        }
+        return nodeId;
     }
 
     private static long countLinks() throws SQLException {
