@@ -1249,7 +1249,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Testing
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Establish measurable retrieval quality baseline.
 - **Build:** Create versioned queries with expected/acceptable sections/chunks and irrelevant negatives.
 - **How it works:** Use authorized synthetic/public fixtures.
@@ -1258,7 +1258,19 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Baseline quality known before AI phase.
 - **Definition of Done:** Dataset committed; thresholds recorded.
 - **Authority:** Documents 15,25
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Implemented Golden Retrieval Dataset v1.
+  - Dataset Version: 1.0.0
+  - Case Count: 10
+  - Subject Coverage: Anatomy, Physiology
+  - Query Categories: EXACT, SEMANTIC, MIXED
+  - Resources: `dataset.json`, `corpus.json`, `baseline.json`, `thresholds.json`, `README.md`
+  - Metrics: Recall@K, Precision@K, MRR (Lexical, Vector, Hybrid)
+  - Evaluation K Values: [1, 3, 5], Primary K: 3
+  - Infrastructure: `GoldenRetrievalDatasetLoader`, `GoldenRetrievalFixtureSeeder`, `GoldenRetrievalMetrics`, `GoldenRetrievalEvaluationIntegrationTests`
+  - Execution: PostgreSQL/pgvector production-component execution via `GoldenRetrievalEvaluationIntegrationTests` with deterministic synthetic embedding port.
+  - Validation: Metric unit tests passed; integration tests execute retrieval loop.
+  - Visual Relevance: Explicitly documented as NOT MEASURED in v1.
+  - Constraints: No production retrieval tuning introduced. P4-13/P4-14+ unchanged.
 - **Notes / blockers:** _None_
 
 ## P4-13 — Run RAG isolation release suite
