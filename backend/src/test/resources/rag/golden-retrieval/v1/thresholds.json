@@ -1,5 +1,12 @@
 {
-  "datasetVersion": "1.0.0",
-  "primaryK": 3,
-  "metrics": {}
+  "case-anatomy-exact-roots": { "hybrid": { "recall": 1.0, "precision": 0.6, "mrr": 1.0 }, "sectionHitRate": 1.0, "irrelevantRate": 0.4 },
+  "case-anatomy-semantic-posterior-cord": { "hybrid": { "recall": 1.0, "precision": 0.6, "mrr": 1.0 }, "sectionHitRate": 1.0, "irrelevantRate": 0.1 },
+  "case-anatomy-mixed-radial-nerve": { "hybrid": { "recall": 1.0, "precision": 0.9, "mrr": 1.0 }, "sectionHitRate": 1.0, "irrelevantRate": 0.1 },
+  "case-anatomy-semantic-wrist-drop": { "hybrid": { "recall": 1.0, "precision": 0.6, "mrr": 1.0 }, "sectionHitRate": 1.0, "irrelevantRate": 0.1 },
+  "case-physio-exact-beta1": { "hybrid": { "recall": 1.0, "precision": 0.3, "mrr": 1.0 }, "sectionHitRate": 1.0, "irrelevantRate": 0.4 },
+  "case-physio-semantic-sa-node": { "hybrid": { "recall": 1.0, "precision": 0.6, "mrr": 1.0 }, "sectionHitRate": 1.0, "irrelevantRate": 0.4 },
+  "case-physio-mixed-phase4": { "hybrid": { "recall": 1.0, "precision": 0.9, "mrr": 1.0 }, "sectionHitRate": 1.0, "irrelevantRate": 0.1 },
+  "case-physio-semantic-pacemaker-behavior": { "hybrid": { "recall": 1.0, "precision": 0.6, "mrr": 1.0 }, "sectionHitRate": 1.0, "irrelevantRate": 0.1 },
+  "case-mixed-domain-cross": { "hybrid": { "recall": 0.4, "precision": 0.3, "mrr": 0.3 }, "sectionHitRate": 1.0, "irrelevantRate": 0.1 },
+  "case-physio-semantic-beta-receptors": { "hybrid": { "recall": 1.0, "precision": 0.3, "mrr": 1.0 }, "sectionHitRate": 1.0, "irrelevantRate": 0.1 }
 }
