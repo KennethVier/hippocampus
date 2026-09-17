@@ -76,7 +76,6 @@ public class GoldenRetrievalFixtureSeeder {
             UUID versionUuidDerived = deriveUuid("version", corpus.documentNodes().get(v.node()).version());
 
             String em = v.extractionMethod();
-            if (!"NATIVE".equals(em) && !"OCR".equals(em)) em = "NATIVE";
 
             int ordinal = chunkOrdinals.getOrDefault(versionUuidDerived, 0) + 1;
             chunkOrdinals.put(versionUuidDerived, ordinal);

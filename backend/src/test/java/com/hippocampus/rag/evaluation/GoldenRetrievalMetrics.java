@@ -7,10 +7,17 @@ public final class GoldenRetrievalMetrics {
 
     public record MetricResult(double recall, double precision, double mrr) {}
 
+    public record ChannelResults(
+            MetricResult k1,
+            MetricResult k3,
+            MetricResult k5,
+            double plainMrr
+    ) {}
+
     public record CaseResult(
-            MetricResult lexical,
-            MetricResult vector,
-            MetricResult hybrid,
+            ChannelResults lexical,
+            ChannelResults vector,
+            ChannelResults hybrid,
             double expectedSectionHitRate,
             double explicitIrrelevantContextRate
     ) {}
@@ -26,28 +33,32 @@ public final class GoldenRetrievalMetrics {
             throw new IllegalArgumentException("expected chunks must not be empty");
         }
 
+        // Recall@K and Precision@K use top K
         List<String> topK = observedChunkKeys.stream().limit(k).toList();
-
-        // Recall@K: observed in top K intersection expected / total expected
         long foundExpected = topK.stream().filter(expectedChunkKeys::contains).count();
         double recall = (double) foundExpected / expectedChunkKeys.size();
 
-        // Precision@K: observed in top K intersection (expected U acceptable) / K
         Set<String> allRelevant = new HashSet<>(expectedChunkKeys);
         allRelevant.addAll(acceptableChunkKeys);
         long foundRelevant = topK.stream().filter(allRelevant::contains).count();
         double precision = (double) foundRelevant / k;
 
-        // MRR: reciprocal rank of first expected chunk
-        double mrr = 0;
-        for (int i = 0; i < topK.size(); i++) {
-            if (expectedChunkKeys.contains(topK.get(i))) {
-                mrr = 1.0 / (i + 1);
-                break;
-            }
-        }
+        // MRR scans full observed list, not truncated to top K
+        double mrr = calculatePlainMrr(observedChunkKeys, expectedChunkKeys);
 
         return new MetricResult(recall, precision, mrr);
+    }
+
+    static double calculatePlainMrr(
+            List<String> observedChunkKeys,
+            Set<String> expectedChunkKeys) {
+
+        for (int i = 0; i < observedChunkKeys.size(); i++) {
+            if (expectedChunkKeys.contains(observedChunkKeys.get(i))) {
+                return 1.0 / (i + 1);
+            }
+        }
+        return 0.0;
     }
 
     public static double calculateSectionHitRate(

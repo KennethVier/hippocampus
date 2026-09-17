@@ -2,6 +2,9 @@ package com.hippocampus.rag.evaluation;
 
 import java.util.*;
 
+/**
+ * Golden Retrieval Corpus - a synthetic corpus for evaluation benchmarking.
+ */
 public record GoldenRetrievalCorpus(
         Map<String, User> users,
         Map<String, Subject> subjects,
@@ -15,6 +18,9 @@ public record GoldenRetrievalCorpus(
         Map<String, float[]> chunkEmbeddings) {
 
     public void validate(GoldenRetrievalDataset dataset) {
+        if (users == null || users.isEmpty()) throw new IllegalArgumentException("corpus must contain at least one user");
+        if (subjects == null || subjects.isEmpty()) throw new IllegalArgumentException("corpus must contain at least one subject");
+
         for (Map.Entry<String, Chunk> entry : chunks.entrySet()) {
             String chunkKey = entry.getKey();
             Chunk chunk = entry.getValue();
@@ -22,26 +28,68 @@ public record GoldenRetrievalCorpus(
             DocumentNode node = documentNodes.get(chunk.node());
             if (node == null) throw new IllegalArgumentException("chunk " + chunkKey + " references missing node " + chunk.node());
 
-            MaterialVersion version = materialVersions.get(node.version());
-            if (version == null) throw new IllegalArgumentException("node " + node.version() + " references missing version");
+            if (chunk.index() < 1) {
+                throw new IllegalArgumentException("chunk " + chunkKey + " index must be >= 1");
+            }
+            if (chunk.extractionMethod() == null || !Set.of("NATIVE", "OCR").contains(chunk.extractionMethod())) {
+                throw new IllegalArgumentException("chunk " + chunkKey + " invalid extractionMethod: " + chunk.extractionMethod());
+            }
 
-            if (!chunkEmbeddings.containsKey(chunkKey)) throw new IllegalArgumentException("missing embedding for chunk " + chunkKey);
+
+            if (!chunkEmbeddings.containsKey(chunkKey)) {
+                throw new IllegalArgumentException("missing embedding for chunk " + chunkKey);
+            }
             float[] vec = chunkEmbeddings.get(chunkKey);
-            for (float v : vec) if (!Float.isFinite(v)) throw new IllegalArgumentException("non-finite value in embedding for chunk " + chunkKey);
+            for (float v : vec) if (!Float.isFinite(v)) {
+                throw new IllegalArgumentException("non-finite value in embedding for chunk " + chunkKey);
+            }
+        }
+
+        for (Map.Entry<String, float[]> entry : chunkEmbeddings.entrySet()) {
+            float[] vec = entry.getValue();
+            int dim = indexGenerations.values().stream().findFirst().map(IndexGeneration::dimension).orElseThrow();
+            if (vec.length != dim) throw new IllegalArgumentException("embedding for chunk " + entry.getKey() + " dimension mismatch");
+            for (float v : vec) if (!Float.isFinite(v)) {
+                throw new IllegalArgumentException("non-finite value in embedding for chunk " + entry.getKey());
+            }
         }
 
         for (GoldenRetrievalDataset.Case c : dataset.cases()) {
             for (String sourceKey : c.allowedSourceKeys()) {
-                if (!materialVersions.containsKey(sourceKey)) throw new IllegalArgumentException("allowed source " + sourceKey + " missing in corpus for case " + c.id());
+                if (!materialVersions.containsKey(sourceKey)) {
+                    throw new IllegalArgumentException("allowed source " + sourceKey + " missing in corpus for case " + c.id());
+                }
+            }
+            for (String sectionKey : c.expectedSectionKeys()) {
+                DocumentNode node = documentNodes.get(sectionKey);
+                if (node == null) throw new IllegalArgumentException("expected section " + sectionKey + " missing in corpus for case " + c.id());
+                if (!c.allowedSourceKeys().contains(node.version())) {
+                    throw new IllegalArgumentException("expected section " + sectionKey + " belongs to unauthorized source " + node.version() + " for case " + c.id());
+                }
             }
             for (String chunkKey : c.expectedChunkKeys()) {
-                if (!chunks.containsKey(chunkKey)) throw new IllegalArgumentException("expected chunk " + chunkKey + " missing in corpus for case " + c.id());
+                Chunk chunk = chunks.get(chunkKey);
+                if (chunk == null) throw new IllegalArgumentException("expected chunk " + chunkKey + " missing in corpus for case " + c.id());
+                DocumentNode node = documentNodes.get(chunk.node());
+                if (!c.allowedSourceKeys().contains(node.version())) {
+                    throw new IllegalArgumentException("expected chunk " + chunkKey + " belongs to unauthorized source " + node.version() + " for case " + c.id());
+                }
             }
             for (String chunkKey : c.acceptableAlternativeChunkKeys()) {
-                if (!chunks.containsKey(chunkKey)) throw new IllegalArgumentException("acceptable chunk " + chunkKey + " missing in corpus for case " + c.id());
+                Chunk chunk = chunks.get(chunkKey);
+                if (chunk == null) throw new IllegalArgumentException("acceptable chunk " + chunkKey + " missing in corpus for case " + c.id());
+                DocumentNode node = documentNodes.get(chunk.node());
+                if (!c.allowedSourceKeys().contains(node.version())) {
+                    throw new IllegalArgumentException("acceptable chunk " + chunkKey + " belongs to unauthorized source " + node.version() + " for case " + c.id());
+                }
             }
             for (String chunkKey : c.irrelevantChunkKeys()) {
-                if (!chunks.containsKey(chunkKey)) throw new IllegalArgumentException("irrelevant chunk " + chunkKey + " missing in corpus for case " + c.id());
+                Chunk chunk = chunks.get(chunkKey);
+                if (chunk == null) throw new IllegalArgumentException("irrelevant chunk " + chunkKey + " missing in corpus for case " + c.id());
+                DocumentNode node = documentNodes.get(chunk.node());
+                if (!c.allowedSourceKeys().contains(node.version())) {
+                    throw new IllegalArgumentException("irrelevant chunk " + chunkKey + " belongs to unauthorized source " + node.version() + " for case " + c.id());
+                }
             }
         }
     }

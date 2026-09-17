@@ -23,7 +23,14 @@ public record GoldenRetrievalDataset(
         for (Case c : cases) {
             if (c.id() == null || c.id().isBlank()) throw new IllegalArgumentException("case id must be provided");
             if (!caseIds.add(c.id())) throw new IllegalArgumentException("duplicate case id: " + c.id());
-            if (c.query() == null || c.query().isBlank()) throw new IllegalArgumentException("query must be provided for case " + c.id());
+            if (c.queryType() == null || !Set.of("EXACT", "SEMANTIC", "MIXED").contains(c.queryType())) throw new IllegalArgumentException("invalid queryType for case " + c.id());
+            if (c.groundingMode() == null || !Set.of("STRICT_SOURCE").contains(c.groundingMode())) throw new IllegalArgumentException("invalid groundingMode for case " + c.id());
+            if (c.queryVector() == null) throw new IllegalArgumentException("queryVector must be provided for case " + c.id());
+            for (float v : c.queryVector()) if (!Float.isFinite(v)) throw new IllegalArgumentException("non-finite value in queryVector for case " + c.id());
+            boolean allZero = true;
+            for (float v : c.queryVector()) if (v != 0) allZero = false;
+            if (allZero) throw new IllegalArgumentException("queryVector must be non-zero for case " + c.id());
+
             if (c.allowedSourceKeys() == null || c.allowedSourceKeys().isEmpty()) throw new IllegalArgumentException("allowed sources must be provided for case " + c.id());
             if (c.expectedChunkKeys() == null || c.expectedChunkKeys().isEmpty()) throw new IllegalArgumentException("expected chunks must be provided for case " + c.id());
             if (c.expectedSectionKeys() == null || c.expectedSectionKeys().isEmpty()) throw new IllegalArgumentException("expected sections must be provided for case " + c.id());

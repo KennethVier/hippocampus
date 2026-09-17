@@ -33,69 +33,69 @@
   "chunks": {
     "chunk-roots-1": {
       "node": "node-brachial-roots",
-      "index": 0,
+      "index": 1,
       "content": "The brachial plexus is formed by the anterior rami of C5-T1 spinal nerves.",
-      "pageStart": 1, "pageEnd": 1, "heading": "Roots", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "MANUAL"
+      "pageStart": 1, "pageEnd": 1, "heading": "Roots", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     },
     "chunk-roots-2": {
       "node": "node-brachial-roots",
-      "index": 1,
+      "index": 2,
       "content": "The roots consist of C5, C6, C7, C8, and T1 nerves.",
-      "pageStart": 1, "pageEnd": 1, "heading": "Roots", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "MANUAL"
+      "pageStart": 1, "pageEnd": 1, "heading": "Roots", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     },
     "chunk-post-cord-1": {
       "node": "node-posterior-cord",
-      "index": 0,
+      "index": 1,
       "content": "The posterior cord is formed by the posterior divisions of all three trunks.",
-      "pageStart": 5, "pageEnd": 5, "heading": "Cords", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "MANUAL"
+      "pageStart": 5, "pageEnd": 5, "heading": "Cords", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     },
     "chunk-radial-1": {
       "node": "node-radial-nerve",
-      "index": 0,
+      "index": 1,
       "content": "The radial nerve is the largest branch of the posterior cord.",
-      "pageStart": 10, "pageEnd": 10, "heading": "Radial Nerve", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "MANUAL"
+      "pageStart": 10, "pageEnd": 10, "heading": "Radial Nerve", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     },
     "chunk-radial-2": {
       "node": "node-radial-nerve",
-      "index": 1,
+      "index": 2,
       "content": "Injury to the radial nerve results in wrist-drop due to loss of extensor muscle function.",
-      "pageStart": 11, "pageEnd": 11, "heading": "Clinical Correlation", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "MANUAL"
+      "pageStart": 11, "pageEnd": 11, "heading": "Clinical Correlation", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     },
     "chunk-sa-node-1": {
       "node": "node-sa-node",
-      "index": 0,
+      "index": 1,
       "content": "The SA node acts as the primary pacemaker of the heart.",
-      "pageStart": 20, "pageEnd": 20, "heading": "SA Node", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "MANUAL"
+      "pageStart": 20, "pageEnd": 20, "heading": "SA Node", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     },
     "chunk-pacemaker-1": {
       "node": "node-pacemaker-potential",
-      "index": 0,
+      "index": 1,
       "content": "Phase 4 depolarization in the SA node is characterized by the funny current (If).",
-      "pageStart": 22, "pageEnd": 22, "heading": "Pacemaker Potential", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "MANUAL"
+      "pageStart": 22, "pageEnd": 22, "heading": "Pacemaker Potential", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     },
     "chunk-pacemaker-2": {
       "node": "node-pacemaker-potential",
-      "index": 1,
+      "index": 2,
       "content": "The funny current is activated by hyperpolarization.",
-      "pageStart": 22, "pageEnd": 22, "heading": "Pacemaker Potential", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "MANUAL"
+      "pageStart": 22, "pageEnd": 22, "heading": "Pacemaker Potential", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     },
     "chunk-beta-1": {
       "node": "node-beta-receptors",
-      "index": 0,
+      "index": 1,
       "content": "Beta-1 receptors are primarily located in the heart and increase heart rate.",
-      "pageStart": 30, "pageEnd": 30, "heading": "Beta-1", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "MANUAL"
+      "pageStart": 30, "pageEnd": 30, "heading": "Beta-1", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     },
     "chunk-irrelevant-1": {
       "node": "node-sa-node",
-      "index": 1,
+      "index": 2,
       "content": "The SA node is located in the right atrium.",
-      "pageStart": 20, "pageEnd": 20, "heading": "Location", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "MANUAL"
+      "pageStart": 20, "pageEnd": 20, "heading": "Location", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     },
     "chunk-irrelevant-2": {
       "node": "node-beta-receptors",
-      "index": 1,
+      "index": 2,
       "content": "Beta-2 receptors are primarily in the lungs.",
-      "pageStart": 31, "pageEnd": 31, "heading": "Beta-2", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "MANUAL"
+      "pageStart": 31, "pageEnd": 31, "heading": "Beta-2", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     }
   },
   "indexGenerations": {
