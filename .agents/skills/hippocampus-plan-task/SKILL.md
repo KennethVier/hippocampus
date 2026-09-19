@@ -1,67 +1,78 @@
 ---
 name: hippocampus-plan-task
-description: Use only when a detailed Hippocampus tracker-task plan is requested before coding. Planning is read-only and should produce a compact execution packet so the implementation agent can start immediately without re-planning.
+description: Optional fallback planner for Hippocampus tracker work. Normal planning is Human + ChatGPT. Produce a compact Codex-ready implementation packet with minimum authority, exact scope, permitted changed-test execution, user-run validation commands, and stop conditions.
 ---
 
 # Plan a Hippocampus Tracker Task
 
-## Non-Negotiable
+## Role
 
-PLAN ONLY. Do not modify files, install dependencies, implement, commit, push, or create a PR.
+Normal Hippocampus planning happens with Human + ChatGPT. Use this skill only when planning is intentionally performed inside the coding environment.
+
+PLAN ONLY. Do not modify files, run validation commands, install dependencies, implement, commit, push, or create a PR.
 
 ## Workflow
 
 1. Identify the exact tracker task.
-2. Resolve only the required Source-of-Truth context.
-3. Inspect only repository files needed to understand the current implementation boundary.
-4. Determine goal, dependencies, scope exclusions, required behavior, expected files, validation, DoD, and security-sensitive boundaries.
-5. Make architecture/framework decisions only where the task creates real design pressure.
-6. Flag unresolved significant decisions for reviewer/ADR handling.
-7. Produce the detailed plan and a short implementation execution packet.
-8. Stop.
+2. Resolve only the Source-of-Truth/ADR context required by that task.
+3. Inspect only repository files needed to understand the implementation boundary.
+4. Determine required behavior, exclusions, affected responsibilities, tests to create/modify, user-run validation commands, Definition of Done, and stop conditions.
+5. Make architecture/framework decisions only when current scope creates real design pressure.
+6. Flag significant unresolved decisions for human/ADR handling.
+7. Produce the implementation packet and stop.
 
-Do not automatically load Java, Spring Boot, architecture, testing, or security skills. Load a detailed skill only when the plan contains a concrete question that requires its guidance.
+Do not automatically load Java, Spring Boot, architecture, testing, or security skills. Load detailed guidance only for a concrete unresolved question.
 
-## Required Plan
+## Implementation Packet
 
-Cover:
+Keep the handoff compact and implementation-ready:
 
-- task and authority;
-- current repository assessment;
-- MUST / MUST NOT / DEFERRED;
-- responsibility/module boundaries;
-- significant architecture/framework decisions and why;
-- security risks and required negative cases;
-- projected file changes;
-- ordered implementation steps;
-- focused and tracker-required validation;
-- Definition of Done mapping;
-- scope exclusions;
-- unresolved decisions / ADR requirement;
-- expected end state.
+```text
+TASK
+<TASK-ID>
 
-Be detailed enough that implementation does not need to rediscover the plan, but do not copy large source passages.
+GOAL
+<required behavior>
 
-## Execution Packet
+AUTHORITY
+<only controlling docs/ADR/tracker facts needed by implementation>
 
-End with a compact handoff containing only:
+IMPLEMENT
+- <required change>
 
-1. task ID;
-2. required behavior;
-3. controlling decisions/adjustments not obvious from the tracker;
-4. expected scope/files when useful;
-5. validation requirements;
-6. stop conditions;
-7. publication restriction if applicable.
+DO NOT
+- <scope exclusions / later work / prohibited changes>
 
-The implementation agent should use `hippocampus-implement-task` and implement this packet directly.
+EXPECTED FILES
+- <only when useful>
 
-## Reject the Plan If It
+AGENT TEST AUTHORIZATION
+- Codex may run only tests/test methods it creates or modifies.
+- Prefer exact changed test method; fall back to changed class/file only when needed.
+- If the changed test requires Docker, Testcontainers, external infrastructure, application/browser startup, or expensive environment setup: do not run it.
 
-- pulls later tracker work forward;
-- changes architecture without governance;
-- adds undocumented services/dependencies/features;
-- introduces speculative abstraction;
-- omits required tests/DoD/security-sensitive negative behavior;
-- leaves a significant unresolved decision hidden inside implementation;
-- delegates deterministic application decisions to AI.
+USER VALIDATION
+- <exact command user should run after implementation>
+- <exact command user should run after implementation>
+
+STOP CONDITIONS
+- <contradiction / ADR / security-sensitive ambiguity / scope conflict>
+
+PUBLICATION
+- <normally no commit/push/PR unless explicitly authorized>
+```
+
+Do not require Codex to rediscover or restate this plan.
+
+## Planning Rules
+
+- Keep authority reads minimal.
+- Do not scan all docs/repository history.
+- Do not pull later tracker work forward.
+- Do not add undocumented services/dependencies/features.
+- Do not introduce speculative abstractions.
+- Do not delegate deterministic application decisions to AI.
+- Do not make broad command execution part of Codex implementation.
+- Put broad/integration/build/lint/container/E2E validation under `USER VALIDATION` instead.
+
+Reject/replan only when a material scope, authority, architecture, security, or dependency conflict prevents a safe implementation packet.
