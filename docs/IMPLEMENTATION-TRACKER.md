@@ -1281,7 +1281,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Gate
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Prove source-grounded knowledge layer works without AI.
 - **Build:** Run representative queries across anatomy/physiology exact/semantic/visual contexts and inspect EvidencePackages.
 - **How it works:** No generative model involved.
@@ -1290,8 +1290,8 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Hippocampus can reliably find correct authorized evidence.
 - **Definition of Done:** Gate evidence recorded.
 - **Authority:** Documents 26
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Added `Phase4RetrievalGateIntegrationTests`, composing the representative Anatomy exact, Physiology semantic, and linked supported-visual scenarios through authorized `BuildRetrievalScope`, lexical and deterministic pgvector retrieval, `HybridCandidateMerger`, `BuildEvidencePackage`, canonical source-reference materialization, and authenticated resolution without generative AI. Added the durable `phase4-gate` GitHub Actions job with all prior phase and quality prerequisites. User validation passed: `Phase4RetrievalGateIntegrationTests`, `GoldenRetrievalEvaluationIntegrationTests`, `SourceReferenceIntegrationTests`, `RagIsolationReleaseIntegrationTests`, and `HippocampusArchitectureTests`; `node scripts/validation/validate.mjs backend` returned `VERDICT PASS`, including `backend-clean-verify` and `git-diff-check`.
+- **Notes / blockers:** No implementation blocker. Final Phase 4 gate state remains Not Evaluated pending implementation review, the independent security gate, exact-head CI including `phase4-gate`, merge, and final completion evidence.
 
 # Phase 5 — AI Provider & Prompt Infrastructure
 
