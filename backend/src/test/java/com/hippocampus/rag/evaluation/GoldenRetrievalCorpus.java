@@ -20,6 +20,32 @@ public record GoldenRetrievalCorpus(
     public void validate(GoldenRetrievalDataset dataset) {
         if (users == null || users.isEmpty()) throw new IllegalArgumentException("corpus must contain at least one user");
         if (subjects == null || subjects.isEmpty()) throw new IllegalArgumentException("corpus must contain at least one subject");
+        if (materials == null || materialVersions == null || documentNodes == null || chunks == null
+                || indexGenerations == null || indexGenerations.isEmpty() || chunkEmbeddings == null) {
+            throw new IllegalArgumentException("corpus fixture collections must be provided");
+        }
+
+        for (Map.Entry<String, MaterialVersion> entry : materialVersions.entrySet()) {
+            if (!materials.containsKey(entry.getValue().material())) {
+                throw new IllegalArgumentException("material version " + entry.getKey()
+                        + " references missing material " + entry.getValue().material());
+            }
+        }
+
+        for (Map.Entry<String, DocumentNode> entry : documentNodes.entrySet()) {
+            if (!materialVersions.containsKey(entry.getValue().version())) {
+                throw new IllegalArgumentException("document node " + entry.getKey()
+                        + " references missing material version " + entry.getValue().version());
+            }
+        }
+
+        if (indexGenerations.size() != 1) {
+            throw new IllegalArgumentException("golden corpus must define exactly one active synthetic index generation");
+        }
+        int activeDimension = indexGenerations.values().iterator().next().dimension();
+        if (activeDimension <= 0) throw new IllegalArgumentException("synthetic index generation dimension must be positive");
+
+        Map<String, Set<Integer>> indexesByVersion = new HashMap<>();
 
         for (Map.Entry<String, Chunk> entry : chunks.entrySet()) {
             String chunkKey = entry.getKey();
@@ -30,6 +56,11 @@ public record GoldenRetrievalCorpus(
 
             if (chunk.index() < 1) {
                 throw new IllegalArgumentException("chunk " + chunkKey + " index must be >= 1");
+            }
+            String versionKey = node.version();
+            if (!indexesByVersion.computeIfAbsent(versionKey, ignored -> new HashSet<>()).add(chunk.index())) {
+                throw new IllegalArgumentException("duplicate chunk index " + chunk.index()
+                        + " within material version " + versionKey);
             }
             if (chunk.extractionMethod() == null || !Set.of("NATIVE", "OCR").contains(chunk.extractionMethod())) {
                 throw new IllegalArgumentException("chunk " + chunkKey + " invalid extractionMethod: " + chunk.extractionMethod());
@@ -47,14 +78,20 @@ public record GoldenRetrievalCorpus(
 
         for (Map.Entry<String, float[]> entry : chunkEmbeddings.entrySet()) {
             float[] vec = entry.getValue();
-            int dim = indexGenerations.values().stream().findFirst().map(IndexGeneration::dimension).orElseThrow();
-            if (vec.length != dim) throw new IllegalArgumentException("embedding for chunk " + entry.getKey() + " dimension mismatch");
+            if (!chunks.containsKey(entry.getKey())) {
+                throw new IllegalArgumentException("embedding references missing chunk " + entry.getKey());
+            }
+            if (vec.length != activeDimension) throw new IllegalArgumentException("embedding for chunk " + entry.getKey() + " dimension mismatch");
             for (float v : vec) if (!Float.isFinite(v)) {
                 throw new IllegalArgumentException("non-finite value in embedding for chunk " + entry.getKey());
             }
         }
 
         for (GoldenRetrievalDataset.Case c : dataset.cases()) {
+            if (c.queryVector().length != activeDimension) {
+                throw new IllegalArgumentException("queryVector dimension mismatch for case " + c.id()
+                        + ": expected " + activeDimension + " but was " + c.queryVector().length);
+            }
             for (String sourceKey : c.allowedSourceKeys()) {
                 if (!materialVersions.containsKey(sourceKey)) {
                     throw new IllegalArgumentException("allowed source " + sourceKey + " missing in corpus for case " + c.id());
@@ -90,6 +127,18 @@ public record GoldenRetrievalCorpus(
                 if (!c.allowedSourceKeys().contains(node.version())) {
                     throw new IllegalArgumentException("irrelevant chunk " + chunkKey + " belongs to unauthorized source " + node.version() + " for case " + c.id());
                 }
+            }
+
+            long authorizedCandidateCount = chunks.values().stream()
+                    .map(chunk -> documentNodes.get(chunk.node()))
+                    .filter(Objects::nonNull)
+                    .map(DocumentNode::version)
+                    .filter(c.allowedSourceKeys()::contains)
+                    .count();
+            int maxK = dataset.kValues().stream().mapToInt(Integer::intValue).max().orElseThrow();
+            if (authorizedCandidateCount < maxK) {
+                throw new IllegalArgumentException("case " + c.id() + " has only " + authorizedCandidateCount
+                        + " authorized candidate chunks; requires at least " + maxK);
             }
         }
     }

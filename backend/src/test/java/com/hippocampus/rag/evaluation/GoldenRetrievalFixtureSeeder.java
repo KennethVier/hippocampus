@@ -70,18 +70,14 @@ public class GoldenRetrievalFixtureSeeder {
                     .param("id", deriveUuid("node", k)).param("mv", versionUuid).param("title", v.title()).param("ord", ordinal).update();
         });
 
-        Map<UUID, Integer> chunkOrdinals = new HashMap<>();
         corpus.chunks().forEach((k, v) -> {
             UUID nodeUuid = deriveUuid("node", v.node());
             UUID versionUuidDerived = deriveUuid("version", corpus.documentNodes().get(v.node()).version());
 
             String em = v.extractionMethod();
 
-            int ordinal = chunkOrdinals.getOrDefault(versionUuidDerived, 0) + 1;
-            chunkOrdinals.put(versionUuidDerived, ordinal);
-
             jdbc.sql("INSERT INTO chunks (id, material_version_id, document_node_id, chunk_index, content, token_count, page_start, page_end, heading_path, content_type, extraction_method, quality, source_order, is_active, created_at) VALUES (:id, :mv, :node, :idx, :content, 100, :ps, :pe, CAST(:hp AS jsonb), :ct, :em, :q, 1, true, now())")
-                    .param("id", deriveUuid("chunk", k)).param("mv", versionUuidDerived).param("node", nodeUuid).param("idx", ordinal).param("content", v.content())
+                    .param("id", deriveUuid("chunk", k)).param("mv", versionUuidDerived).param("node", nodeUuid).param("idx", v.index()).param("content", v.content())
                     .param("ps", v.pageStart()).param("pe", v.pageEnd()).param("hp", "[]")
                     .param("ct", v.contentType()).param("em", em).param("q", v.quality()).update();
         });

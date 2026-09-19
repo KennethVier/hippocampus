@@ -24,6 +24,7 @@ import java.util.stream.IntStream;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class GoldenRetrievalEvaluationIntegrationTests extends PostgresIntegrationTestSupport {
+    private static final double NUMERIC_TOLERANCE = 1.0e-12;
 
     private JdbcClient jdbc;
     private LexicalSearchRepository lexicalSearch;
@@ -273,95 +274,22 @@ public class GoldenRetrievalEvaluationIntegrationTests extends PostgresIntegrati
         }
     }
 
-    private record Baseline(
-            String datasetVersion,
-            int primaryK,
-            List<Integer> kValues,
-            Map<String, CaseBaseline> cases
-    ) {}
-
-    private record CaseBaseline(
-            ChannelBaseline lexical,
-            ChannelBaseline vector,
-            ChannelBaseline hybrid,
-            double expectedSectionHitRate,
-            double explicitIrrelevantContextRate
-    ) {}
-
-    private record ChannelBaseline(
-            MetricResult k1,
-            MetricResult k3,
-            MetricResult k5,
-            double plainMrr
-    ) {}
-
-    private record MetricResult(double recall, double precision, double mrr) {}
-
     private void verifyThresholds(Map<String, CaseEvaluationResult> results) throws IOException {
-        Map<String, Object> baselineMap = objectMapper.readValue(
-                getClass().getResourceAsStream("/rag/golden-retrieval/v1/baseline.json"),
-                Map.class);
-        Map<String, Object> thresholdsMap = objectMapper.readValue(
-                getClass().getResourceAsStream("/rag/golden-retrieval/v1/thresholds.json"),
-                Map.class);
+        GoldenRetrievalBenchmarkContract.Baseline baseline = GoldenRetrievalBenchmarkContract.load(
+                objectMapper, "/rag/golden-retrieval/v1/baseline.json");
+        GoldenRetrievalBenchmarkContract.Baseline thresholds = GoldenRetrievalBenchmarkContract.load(
+                objectMapper, "/rag/golden-retrieval/v1/thresholds.json");
 
-        assertEquals(dataset.datasetVersion(), baselineMap.get("datasetVersion"), "dataset version mismatch");
-        assertEquals(dataset.primaryK(), baselineMap.get("primaryK"), "primaryK mismatch");
-        assertEquals(dataset.kValues(), baselineMap.get("kValues"), "kValues mismatch");
+        GoldenRetrievalBenchmarkContract.validate(baseline, dataset, "baseline.json");
+        GoldenRetrievalBenchmarkContract.validate(thresholds, dataset, "thresholds.json");
+        GoldenRetrievalBenchmarkContract.verifyBaselineAsThreshold(baseline, thresholds, NUMERIC_TOLERANCE);
 
-        Map<String, Map<String, Object>> thresholdsCases = (Map<String, Map<String, Object>>) thresholdsMap.get("cases");
-
-        for (var entry : results.entrySet()) {
-            String caseId = entry.getKey();
-            CaseEvaluationResult evalResult = entry.getValue();
-            GoldenRetrievalMetrics.CaseResult result = evalResult.metrics();
-
-            Map<String, Object> caseThreshold = thresholdsCases.get(caseId);
-            if (caseThreshold == null) continue;
-
-            java.util.function.Supplier<String> diag = () -> {
-                GoldenRetrievalDataset.Case c = dataset.cases().stream().filter(case_ -> case_.id().equals(caseId)).findFirst().orElseThrow();
-                return String.format("\nExpected: %s\nObserved: %s",
-                    c.expectedChunkKeys(), evalResult.observedKeys());
-            };
-
-            verifyChannel(caseId, "LEXICAL", result.lexical(), (Map<String, Object>) caseThreshold.get("lexical"), diag);
-            verifyChannel(caseId, "VECTOR", result.vector(), (Map<String, Object>) caseThreshold.get("vector"), diag);
-            verifyChannel(caseId, "HYBRID", result.hybrid(), (Map<String, Object>) caseThreshold.get("hybrid"), diag);
-
-            double thresholdSectionHit = ((Number) caseThreshold.get("expectedSectionHitRate")).doubleValue();
-            if (result.expectedSectionHitRate() < thresholdSectionHit) {
-                fail(String.format("Case %s: observed sectionHitRate %.4f < threshold %.4f", caseId, result.expectedSectionHitRate(), thresholdSectionHit));
-            }
-            double thresholdIrrelevant = ((Number) caseThreshold.get("explicitIrrelevantContextRate")).doubleValue();
-            if (result.explicitIrrelevantContextRate() > thresholdIrrelevant) {
-                fail(String.format("Case %s: observed irrelevantRate %.4f > threshold %.4f", caseId, result.explicitIrrelevantContextRate(), thresholdIrrelevant));
-            }
-        }
-    }
-
-    private void verifyChannel(String caseId, String channel, GoldenRetrievalMetrics.ChannelResults observed, Map<String, Object> threshold, java.util.function.Supplier<String> diag) {
-        verifyMetric(caseId, channel, "K1", observed.k1(), (Map<String, Object>) threshold.get("k1"), diag);
-        verifyMetric(caseId, channel, "K3", observed.k3(), (Map<String, Object>) threshold.get("k3"), diag);
-        verifyMetric(caseId, channel, "K5", observed.k5(), (Map<String, Object>) threshold.get("k5"), diag);
-        double thresholdPlainMrr = ((Number) threshold.get("plainMrr")).doubleValue();
-        if (observed.plainMrr() < thresholdPlainMrr) {
-            fail(String.format("Case %s [%s]: observed plain MRR %.4f < threshold %.4f%s", caseId, channel, observed.plainMrr(), thresholdPlainMrr, diag.get()));
-        }
-    }
-
-    private void verifyMetric(String caseId, String channel, String k, GoldenRetrievalMetrics.MetricResult obs, Map<String, Object> thr, java.util.function.Supplier<String> diag) {
-        double thresholdRecall = ((Number) thr.get("recall")).doubleValue();
-        if (obs.recall() < thresholdRecall) {
-            fail(String.format("Case %s [%s %s]: observed recall %.4f < threshold %.4f%s", caseId, channel, k, obs.recall(), thresholdRecall, diag.get()));
-        }
-        double thresholdPrecision = ((Number) thr.get("precision")).doubleValue();
-        if (obs.precision() < thresholdPrecision) {
-            fail(String.format("Case %s [%s %s]: observed precision %.4f < threshold %.4f%s", caseId, channel, k, obs.precision(), thresholdPrecision, diag.get()));
-        }
-        double thresholdMrr = ((Number) thr.get("mrr")).doubleValue();
-        if (obs.mrr() < thresholdMrr) {
-            fail(String.format("Case %s [%s %s]: observed MRR %.4f < threshold %.4f%s", caseId, channel, k, obs.mrr(), thresholdMrr, diag.get()));
-        }
+        Map<String, GoldenRetrievalMetrics.CaseResult> observed = results.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> entry.getValue().metrics(),
+                        (left, right) -> { throw new IllegalStateException("duplicate observed case"); },
+                        LinkedHashMap::new));
+        GoldenRetrievalBenchmarkContract.verifyObserved(baseline, observed, NUMERIC_TOLERANCE);
     }
 }

@@ -28,10 +28,4 @@ public class GoldenRetrievalDatasetLoader {
         }
     }
 
-    public GoldenRetrievalCorpus loadCorpus(String path) throws IOException {
-        try (InputStream is = getClass().getResourceAsStream(path)) {
-            if (is == null) throw new IOException("Corpus not found: " + path);
-            return mapper.readValue(is, GoldenRetrievalCorpus.class);
-        }
-    }
 }

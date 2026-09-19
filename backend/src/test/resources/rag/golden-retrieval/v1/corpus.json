@@ -45,19 +45,19 @@
     },
     "chunk-post-cord-1": {
       "node": "node-posterior-cord",
-      "index": 1,
+      "index": 3,
       "content": "The posterior cord is formed by the posterior divisions of all three trunks.",
       "pageStart": 5, "pageEnd": 5, "heading": "Cords", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     },
     "chunk-radial-1": {
       "node": "node-radial-nerve",
-      "index": 1,
+      "index": 4,
       "content": "The radial nerve is the largest branch of the posterior cord.",
       "pageStart": 10, "pageEnd": 10, "heading": "Radial Nerve", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     },
     "chunk-radial-2": {
       "node": "node-radial-nerve",
-      "index": 2,
+      "index": 5,
       "content": "Injury to the radial nerve results in wrist-drop due to loss of extensor muscle function.",
       "pageStart": 11, "pageEnd": 11, "heading": "Clinical Correlation", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     },
@@ -69,31 +69,31 @@
     },
     "chunk-pacemaker-1": {
       "node": "node-pacemaker-potential",
-      "index": 1,
+      "index": 2,
       "content": "Phase 4 depolarization in the SA node is characterized by the funny current (If).",
       "pageStart": 22, "pageEnd": 22, "heading": "Pacemaker Potential", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     },
     "chunk-pacemaker-2": {
       "node": "node-pacemaker-potential",
-      "index": 2,
+      "index": 3,
       "content": "The funny current is activated by hyperpolarization.",
       "pageStart": 22, "pageEnd": 22, "heading": "Pacemaker Potential", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     },
     "chunk-beta-1": {
       "node": "node-beta-receptors",
-      "index": 1,
+      "index": 4,
       "content": "Beta-1 receptors are primarily located in the heart and increase heart rate.",
       "pageStart": 30, "pageEnd": 30, "heading": "Beta-1", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     },
     "chunk-irrelevant-1": {
       "node": "node-sa-node",
-      "index": 2,
+      "index": 5,
       "content": "The SA node is located in the right atrium.",
       "pageStart": 20, "pageEnd": 20, "heading": "Location", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     },
     "chunk-irrelevant-2": {
       "node": "node-beta-receptors",
-      "index": 2,
+      "index": 6,
       "content": "Beta-2 receptors are primarily in the lungs.",
       "pageStart": 31, "pageEnd": 31, "heading": "Beta-2", "quality": "STRONG", "contentType": "TEXT", "extractionMethod": "NATIVE"
     }
