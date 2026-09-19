@@ -1249,16 +1249,41 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Testing
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Establish measurable retrieval quality baseline.
 - **Build:** Create versioned queries with expected/acceptable sections/chunks and irrelevant negatives.
 - **How it works:** Use authorized synthetic/public fixtures.
 - **Dependencies:** RAG complete
-- **Tests / validation:** Calculate Recall@K/Precision@K/MRR as appropriate.
+- **Tests / validation:** Calculate Recall@K/Precision@K/MRR as appropriate, canonical baseline verification against committed baseline.json, v1 baseline-as-threshold policy equality enforced.
 - **Expected result:** Baseline quality known before AI phase.
 - **Definition of Done:** Dataset committed; thresholds recorded.
 - **Authority:** Documents 15,25
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Implemented Golden Retrieval Dataset v1.
+  - Dataset Version: 1.0.0
+  - Case Count: 10
+  - Subject Coverage: Anatomy, Physiology
+  - Query Categories: EXACT, SEMANTIC, MIXED
+  - Resources: `dataset.json`, `corpus.json`, `baseline.json`, `thresholds.json`
+  - Metrics: Recall@K and Precision@K (K=1/3/5), plain full-ranked-list MRR per Lexical/Vector/Hybrid channel, and primaryK=3 section hit / explicit irrelevant-context rates; visual relevance is **NOT MEASURED**.
+  - Evaluation K Values: [1, 3, 5], Primary K: 3
+  - Infrastructure: `GoldenRetrievalDatasetLoader`, `GoldenRetrievalFixtureSeeder`, `GoldenRetrievalMetrics`, typed `GoldenRetrievalBenchmarkContract`, `GoldenRetrievalEvaluationIntegrationTests`
+  - Execution: PostgreSQL/pgvector production-component execution via `GoldenRetrievalEvaluationIntegrationTests.generateBaseline()` and `GoldenRetrievalEvaluationIntegrationTests.evaluateAndVerify()`.
+  - Validation: the requested focused golden, lexical, vector, hybrid, RetrievalScope, and architecture matrix passed 91 tests with 0 failures/errors/skips. Required `node scripts/validation/validate.mjs backend` returned **VALIDATION PASS** from `mvnw.cmd -B -ntp clean verify` with 962 tests, 0 failures, 0 errors, and 9 skips; its `git diff --check` gate also passed.
+  - Baseline Thresholds: v1 baseline-as-threshold policy; thresholds equal exact observed deterministic baseline values without tolerance margins.
+    - `case-anatomy-exact-roots`: lexical k1 recall=0.0 (exact match rejection), vector/hybrid plainMrr=1.0, sectionHitRate=1.0, irrelevantRate=0.3333333333333333
+    - `case-anatomy-semantic-posterior-cord`: all channels precision 1.0 at K1, plainMrr=1.0 across channels
+    - `case-anatomy-mixed-radial-nerve`: lexical recall/precision/plainMrr=0.0; vector/hybrid k3 recall=1.0, precision=1.0, plainMrr=1.0
+    - `case-anatomy-semantic-wrist-drop`: lexical recall/precision/plainMrr=0.0; vector/hybrid k1 recall=1.0, precision=1.0, plainMrr=1.0
+    - `case-physio-exact-beta1`: all channels k5 precision=0.2, irrelevantRate=0.3333333333333333
+    - `case-physio-semantic-sa-node`: vector/hybrid k3 precision=0.6666666666666666 plainMrr=1.0, irrelevantRate=0.3333333333333333
+    - `case-physio-mixed-phase4`: lexical k3 recall=0.5 precision=0.3333333333333333 plainMrr=1.0, vector/hybrid k3 recall=1.0 precision=1.0
+    - `case-physio-semantic-pacemaker-behavior`: lexical recall/precision/plainMrr=0.0; vector/hybrid plainMrr=1.0; sectionHitRate=1.0
+    - `case-mixed-domain-cross`: lexical metrics=0.0; vector/hybrid k3 recall=0.5, precision=0.3333333333333333, plainMrr=0.3333333333333333 (first expected at rank 3), irrelevantRate=0.0
+    - `case-physio-semantic-beta-receptors`: lexical recall/precision/plainMrr=0.0; vector/hybrid k1 recall=1.0, precision=1.0, plainMrr=1.0
+  - Synthetic Query Vectors: deterministic 4D vectors passed directly to `VectorSearchRepository`; no synthetic EmbeddingPort exists.
+  - Canonical Verification: `evaluateAndVerify()` strictly validates baseline/threshold metadata and typed structure, compares every observed case/channel metric to committed `baseline.json` with `1e-12` numeric tolerance, and enforces exact v1 baseline-as-threshold equality. Missing cases/channels/K metrics/values, non-finite or out-of-range values, stale MRR, or relaxed thresholds fail CI.
+  - General Review: **APPROVED**; the correction is confined to test/evaluation resources and documentation, preserves production retrieval, and has no unresolved correctness, architecture, or scope finding.
+  - Security Gate: **SECURITY PASS**; authorized-source checks are preserved and fixture validation is stricter, with no production surface, dependency, migration, secret, or authorization-policy change.
 - **Notes / blockers:** _None_
 
 ## P4-13 — Run RAG isolation release suite
