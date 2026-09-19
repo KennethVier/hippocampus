@@ -1247,44 +1247,50 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 ## P4-12 — Create Golden Retrieval Dataset v1
 
-- **Workstream:** Testing
-- **Priority:** Must
-- **Status:** Ready for Review
-- **Goal:** Establish measurable retrieval quality baseline.
-- **Build:** Create versioned queries with expected/acceptable sections/chunks and irrelevant negatives.
-- **How it works:** Use authorized synthetic/public fixtures.
-- **Dependencies:** RAG complete
-- **Tests / validation:** Calculate Recall@K/Precision@K/MRR as appropriate, canonical baseline verification against committed baseline.json, v1 baseline-as-threshold policy equality enforced.
-- **Expected result:** Baseline quality known before AI phase.
-- **Definition of Done:** Dataset committed; thresholds recorded.
-- **Authority:** Documents 15,25
-- **Evidence / link:** Implemented Golden Retrieval Dataset v1.
-  - Dataset Version: 1.0.0
-  - Case Count: 10
-  - Subject Coverage: Anatomy, Physiology
-  - Query Categories: EXACT, SEMANTIC, MIXED
-  - Resources: `dataset.json`, `corpus.json`, `baseline.json`, `thresholds.json`
-  - Metrics: Recall@K and Precision@K (K=1/3/5), plain full-ranked-list MRR per Lexical/Vector/Hybrid channel, and primaryK=3 section hit / explicit irrelevant-context rates; visual relevance is **NOT MEASURED**.
-  - Evaluation K Values: [1, 3, 5], Primary K: 3
-  - Infrastructure: `GoldenRetrievalDatasetLoader`, `GoldenRetrievalFixtureSeeder`, `GoldenRetrievalMetrics`, typed `GoldenRetrievalBenchmarkContract`, `GoldenRetrievalEvaluationIntegrationTests`
-  - Execution: PostgreSQL/pgvector production-component execution via `GoldenRetrievalEvaluationIntegrationTests.generateBaseline()` and `GoldenRetrievalEvaluationIntegrationTests.evaluateAndVerify()`.
-  - Validation: the requested focused golden, lexical, vector, hybrid, RetrievalScope, and architecture matrix passed 91 tests with 0 failures/errors/skips. Required `node scripts/validation/validate.mjs backend` returned **VALIDATION PASS** from `mvnw.cmd -B -ntp clean verify` with 962 tests, 0 failures, 0 errors, and 9 skips; its `git diff --check` gate also passed.
-  - Baseline Thresholds: v1 baseline-as-threshold policy; thresholds equal exact observed deterministic baseline values without tolerance margins.
-    - `case-anatomy-exact-roots`: lexical k1 recall=0.0 (exact match rejection), vector/hybrid plainMrr=1.0, sectionHitRate=1.0, irrelevantRate=0.3333333333333333
-    - `case-anatomy-semantic-posterior-cord`: all channels precision 1.0 at K1, plainMrr=1.0 across channels
-    - `case-anatomy-mixed-radial-nerve`: lexical recall/precision/plainMrr=0.0; vector/hybrid k3 recall=1.0, precision=1.0, plainMrr=1.0
-    - `case-anatomy-semantic-wrist-drop`: lexical recall/precision/plainMrr=0.0; vector/hybrid k1 recall=1.0, precision=1.0, plainMrr=1.0
-    - `case-physio-exact-beta1`: all channels k5 precision=0.2, irrelevantRate=0.3333333333333333
-    - `case-physio-semantic-sa-node`: vector/hybrid k3 precision=0.6666666666666666 plainMrr=1.0, irrelevantRate=0.3333333333333333
-    - `case-physio-mixed-phase4`: lexical k3 recall=0.5 precision=0.3333333333333333 plainMrr=1.0, vector/hybrid k3 recall=1.0 precision=1.0
-    - `case-physio-semantic-pacemaker-behavior`: lexical recall/precision/plainMrr=0.0; vector/hybrid plainMrr=1.0; sectionHitRate=1.0
-    - `case-mixed-domain-cross`: lexical metrics=0.0; vector/hybrid k3 recall=0.5, precision=0.3333333333333333, plainMrr=0.3333333333333333 (first expected at rank 3), irrelevantRate=0.0
-    - `case-physio-semantic-beta-receptors`: lexical recall/precision/plainMrr=0.0; vector/hybrid k1 recall=1.0, precision=1.0, plainMrr=1.0
-  - Synthetic Query Vectors: deterministic 4D vectors passed directly to `VectorSearchRepository`; no synthetic EmbeddingPort exists.
-  - Canonical Verification: `evaluateAndVerify()` strictly validates baseline/threshold metadata and typed structure, compares every observed case/channel metric to committed `baseline.json` with `1e-12` numeric tolerance, and enforces exact v1 baseline-as-threshold equality. Missing cases/channels/K metrics/values, non-finite or out-of-range values, stale MRR, or relaxed thresholds fail CI.
-  - General Review: **APPROVED**; the correction is confined to test/evaluation resources and documentation, preserves production retrieval, and has no unresolved correctness, architecture, or scope finding.
-  - Security Gate: **SECURITY PASS**; authorized-source checks are preserved and fixture validation is stricter, with no production surface, dependency, migration, secret, or authorization-policy change.
-- **Notes / blockers:** _None_
+* **Workstream:** Testing
+* **Priority:** Must
+* **Status:** Done
+* **Goal:** Establish measurable retrieval quality baseline.
+* **Build:** Create versioned queries with expected/acceptable sections/chunks and irrelevant negatives.
+* **How it works:** Use authorized synthetic/public fixtures.
+* **Dependencies:** RAG complete
+* **Tests / validation:** Calculate Recall@K/Precision@K/MRR as appropriate, canonical baseline verification against committed `baseline.json`, v1 baseline-as-threshold policy equality enforced.
+* **Expected result:** Baseline quality known before AI phase.
+* **Definition of Done:** Dataset committed; thresholds recorded.
+* **Authority:** Documents 15,25
+* **Evidence / link:** Completed in implementation PR #167.
+
+  * Implementation PR: #167 — `P4-12: Add Golden Retrieval Dataset v1`
+  * Final reviewed implementation head: `dfc8eba6ef5e60c402ff715f0eafb6f162a5dda7`
+  * Merge commit: `8091bcbee078c408352988917709c4402cb9a7aa`
+  * Dataset Version: `1.0.0`
+  * Case Count: 10
+  * Subject Coverage: Anatomy, Physiology
+  * Query Categories: EXACT, SEMANTIC, MIXED
+  * Resources: `dataset.json`, `corpus.json`, `baseline.json`, `thresholds.json`, `README.md`
+  * Metrics: Recall@K and Precision@K at K=1/3/5; plain full-ranked-list MRR for Lexical, Vector, and Hybrid channels; primaryK=3 expected-section hit and explicit irrelevant-context rates.
+  * Evaluation K Values: `[1, 3, 5]`; Primary K: `3`.
+  * Infrastructure: `GoldenRetrievalDatasetLoader`, `GoldenRetrievalFixtureSeeder`, `GoldenRetrievalMetrics`, typed `GoldenRetrievalBenchmarkContract`, and `GoldenRetrievalEvaluationIntegrationTests`.
+  * Execution: PostgreSQL/pgvector production-component retrieval using case-specific `BuildRetrievalScope`, lexical search, deterministic direct query vectors through `VectorSearchRepository`, and existing `HybridCandidateMerger`.
+  * Authorization: each Golden case constructs scope through the production `BuildRetrievalScope` path and asserts that the resulting authorized MaterialVersion IDs exactly match the case's declared allowed sources before ranking.
+  * Synthetic Query Vectors: deterministic 4D vectors passed directly to `VectorSearchRepository`; no live embedding provider or synthetic `EmbeddingPort` is used.
+  * Baseline Integrity: committed `baseline.json` is verified against every observed case/channel/K metric using `1e-12` floating-point tolerance.
+  * Threshold Integrity: committed `thresholds.json` equals the deterministic v1 baseline exactly; missing metrics, stale values, relaxed thresholds, invalid MRR semantics, or incomplete case/channel/K coverage fail validation.
+  * Resource Validation: rejects malformed query metadata, blank queries, invalid/non-finite/zero vectors, incorrect embedding dimensions, invalid material/node/chunk relationships, unauthorized evidence references, insufficient authorized candidates, duplicate/non-positive chunk indexes, invalid extraction methods, and non-finite embeddings.
+  * Baseline Result: deterministic retrieval quality is now recorded for all 10 cases across Lexical, Vector, and Hybrid channels without modifying production retrieval ranking or fusion behavior.
+  * Focused Validation: requested Golden Retrieval, lexical, vector, hybrid, RetrievalScope, validation-contract, MRR-semantics, and architecture suites passed — 91 tests, 0 failures, 0 errors, 0 skips.
+  * Broad Local Validation: `node scripts/validation/validate.mjs backend` returned `VALIDATION PASS`; Maven verification completed with 962 tests, 0 failures, 0 errors, and 9 skips; `git diff --check` passed.
+  * External Implementation Review: **APPROVED** at exact head `dfc8eba6ef5e60c402ff715f0eafb6f162a5dda7`.
+  * Independent Security Review: **SECURITY PASS** at the same exact head; no unresolved Critical, High, or Medium findings within P4-12 scope.
+  * Exact-Head CI: quality workflow **#470**, run ID `35447620687`, completed **SUCCESS** at `dfc8eba6ef5e60c402ff715f0eafb6f162a5dda7`.
+  * CI Jobs: `backend-quality`, `frontend-quality`, `auth-e2e`, `security`, `phase1-gate`, `phase2-gate`, and `phase3-gate` all succeeded.
+  * Secret Scan: pinned Gitleaks v8.28.0 scanned implementation range `aa7d121b5489edb47eac835c0761193e336c5554..dfc8eba6ef5e60c402ff715f0eafb6f162a5dda7`; four commits / ~163.89 KB scanned; no leaks found.
+  * Dependency Review: no newly introduced High-or-higher vulnerable packages and no denied packages.
+  * Visual Relevance: explicitly **NOT MEASURED** in Golden Retrieval Dataset v1 because no production visual retrieval search path exists in P4-12 scope.
+  * Production Impact: no production retrieval tuning, new ranking algorithm, migration, runtime evaluation table, API endpoint, live AI/provider dependency, or external dependency was introduced.
+  * Scope: P4-13 RAG isolation release suite and P4-14 Phase 4 gate remain separate later tasks and were not implemented by P4-12.
+  * Definition of Done: dataset committed, deterministic baseline recorded, thresholds recorded and enforced, implementation externally approved, independent security gate passed, exact-head CI passed, and implementation PR merged.
+* **Notes / blockers:** *None*
 
 ## P4-13 — Run RAG isolation release suite
 
