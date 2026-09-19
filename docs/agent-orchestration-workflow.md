@@ -2,137 +2,193 @@
 
 ## Purpose
 
-This document describes the preferred human/ChatGPT/Codex working loop for Hippocampus. It supplements `AGENTS.md`; it does not override numbered Source-of-Truth documents, accepted ADRs, or the implementation tracker.
+This document defines the preferred Human/ChatGPT/Codex workflow for Hippocampus. It supplements `AGENTS.md`; it does not override numbered Source-of-Truth documents, accepted ADRs, or the implementation tracker.
 
-The goal is to reduce unnecessary Codex context/tool usage without weakening implementation quality, review, testing, runtime proof, or security gates.
+The goal is to minimize agent context, tool usage, command output, and narration without weakening scope control, review, or security gates.
 
-## Default Loop
+## Three-Role Model
 
-### 1. Human + ChatGPT: detailed planning
+Normal work uses only three roles:
 
-Before implementation, resolve the hard reasoning here:
+1. **Plan — Human + ChatGPT**
+2. **Implement — Codex**
+3. **Review — independent reviewer**
+
+There is no separate validation agent in the normal loop. Broad validation is run by the user or CI and supplied to review as evidence.
+
+## 1. Plan — Human + ChatGPT
+
+Resolve the hard reasoning once:
 
 - exact tracker task and phase scope;
-- relevant Source-of-Truth authority;
+- minimum relevant Source-of-Truth/ADR authority;
 - current implementation boundary;
 - required behavior and exclusions;
 - architecture/framework decisions that actually matter;
-- expected files/change shape when useful;
-- test/validation strategy;
-- real-artifact behavior that must be proved after implementation;
+- tests Codex should create/modify;
+- exact commands the user should run after implementation;
 - security-sensitive cases;
 - Definition of Done and stop conditions.
 
-The output should be detailed enough to avoid Codex rediscovering the task, then end with a compact execution packet.
+End with a compact implementation packet. Codex should not re-plan it.
 
-### 2. Codex: implement directly
+The packet should contain:
 
-Codex receives the execution packet and uses `hippocampus-implement-task`.
+```text
+TASK
+GOAL
+AUTHORITY
+IMPLEMENT
+DO NOT
+EXPECTED FILES (when useful)
+AGENT TEST AUTHORIZATION
+USER VALIDATION
+STOP CONDITIONS
+PUBLICATION
+```
+
+`AGENT TEST AUTHORIZATION` always follows the repository command policy: Codex may run only tests/test methods it creates or modifies, and it must not run them when they require Docker/Testcontainers/external infrastructure/application/browser startup or similarly expensive setup.
+
+`USER VALIDATION` contains the exact broader commands the user should run manually.
+
+## 2. Implement — Codex
+
+Codex receives the packet and uses `hippocampus-implement-task`.
 
 Default behavior:
 
-- implement immediately rather than re-planning;
-- read only tracker/authority/code needed for the task;
-- use targeted searches and focused tests;
-- keep the change minimal and reviewable;
+- implement immediately; do not re-plan;
+- read only affected code/authority needed by the packet;
+- make the smallest complete change;
 - use one agent;
-- avoid Git/head/history/branch/PR reconnaissance unless implementation genuinely depends on it;
-- avoid agent/subagent/skill discovery unless a concrete blocker requires it;
-- avoid new tools/dependencies unless required for the approved implementation;
-- load detailed engineering skills only when their guidance is materially needed;
-- do not report the candidate ready for review until the validation gate completes.
+- load detailed engineering guidance only for a concrete issue;
+- do not perform broad repository/Git/agent/skill reconnaissance;
+- do not run broad commands;
+- remain quiet while working unless a blocker, contradiction, significant decision, or eligible changed-test failure must be reported.
 
-For ordinary implementation, prefer balanced/medium reasoning. Escalate reasoning only when the task is genuinely ambiguous, cross-cutting, unfamiliar, or architecturally difficult.
+### Command rule
 
-### 3. Codex: post-implementation validation gate
+Default: **run nothing**.
 
-After the implementation and focused changed-behavior tests exist, Codex must use `hippocampus-validate-implementation` before finishing the task report.
+The only default exception is the narrowest practical test/test method that Codex itself created or modified in the current implementation.
 
-The gate has two layers:
+Even that test is user-run instead when it needs:
 
-1. **Deterministic local validation** — run the task-required automated checks from narrow to broad. Use `scripts/validation/validate.mjs` for the ordinary broad backend/frontend checks when applicable. The runner stores complete logs under `.validation/` and prints only concise pass/fail evidence so successful validation does not consume unnecessary model context.
-2. **Real-artifact verification** — when the tracker Expected Result is observable runtime behavior, exercise the actual application/use case with the lowest-cost reliable proof. A production-composed integration/E2E test may satisfy this when an additional live run would add no material evidence.
+- Docker or Docker Compose;
+- Testcontainers;
+- PostgreSQL/database/container startup;
+- external services/infrastructure;
+- application/server startup;
+- Playwright/browser/E2E startup;
+- similarly expensive environment setup.
 
-Typical commands:
+Codex must not run unchanged tests, full suites, build/package/verify, lint/typecheck, validation scripts, architecture suites, application startup, container validation, or Git hygiene commands merely because they are normally useful.
 
-- backend: `node scripts/validation/validate.mjs backend`
-- frontend: `node scripts/validation/validate.mjs frontend`
-- both: `node scripts/validation/validate.mjs all`
+The user may explicitly authorize an exact additional command when desired.
 
-The validation verdict must be one of:
+### Final implementation report
 
-- `VALIDATION PASS` — required local deterministic evidence passed and required real-artifact behavior was proved;
-- `VALIDATION FAIL` — a reproducible defect remains;
-- `VALIDATION INCONCLUSIVE` — required evidence could not be produced because of a genuine environment/tooling/external-capability limitation.
+Keep it terse:
 
-Only `VALIDATION PASS` proceeds to ordinary external implementation review. A failure returns to narrow correction. Inconclusive validation must name the missing evidence and where it must be run; it is never converted into a pass by assumption.
+```text
+IMPLEMENTED — USER VALIDATION REQUIRED
 
-### 4. Human + ChatGPT: review implementation report and PR/diff
+Changed:
+- ...
 
-Review the actual implementation, not only Codex's report:
+Agent-run tests:
+- <changed test — PASS>
+# or: none
 
+USER VALIDATION
+- <exact command>
+- <exact command>
+```
+
+Add a short note only when a material caveat exists.
+
+Codex must not claim `VALIDATION PASS`, `Ready for Review`, or `Done` based only on its changed-test execution.
+
+## 3. User / CI Validation
+
+After implementation, the user runs the commands listed in `USER VALIDATION`.
+
+Examples may include focused existing regression tests, broader Maven/npm validation, Docker/Testcontainers integration tests, application startup, E2E, lint/typecheck/build, or repository validation scripts when the tracker/task requires them.
+
+Successful broad output does not need to be pasted into agent context. Prefer concise evidence such as:
+
+```text
+backend validation: PASS
+integration test: PASS
+frontend validation: PASS
+```
+
+When a command fails, provide only the first causal failure/relevant log section to Codex or the reviewer unless more context is required.
+
+This keeps expensive deterministic work outside agent context while preserving evidence.
+
+## 4. Review — Independent Reviewer
+
+The reviewer inspects:
+
+- implementation packet;
+- actual diff/changed files;
 - tracker/SOT alignment;
 - scope discipline;
 - architecture/module boundaries;
 - correctness and failure behavior;
-- test quality and required validation;
-- real-artifact proof and any validation limitation;
+- created/modified tests;
+- user/CI validation evidence;
 - security-sensitive behavior;
 - tracker/evidence accuracy.
 
-Do not make Codex run a second broad AI review of its own work by default. Deterministic validation plus real-artifact proof are not substitutes for this external diff review; they are evidence for it.
+The reviewer does not rerun broad validation by default. Missing evidence results in `VALIDATION INCOMPLETE` with the exact user/CI command required.
 
-### 5. Codex or ChatGPT: narrow correction when needed
+### Review pass 1 — general implementation review
 
-If review or validation finds a defect, send only a correction packet:
+Use `hippocampus-review-implementation`.
 
-- exact finding;
-- required behavior;
-- affected scope;
-- tests/validation;
-- explicit no-scope-expansion rule.
+If a correction is narrow, send only a narrow correction packet back to Codex. Do not re-plan the whole task unless the finding invalidates the plan.
 
-Do not resend the full original plan unless the finding invalidates the plan itself.
+### Review pass 2 — independent security review
 
-After a correction, rerun only the focused checks and broader validation that the change could invalidate, then repeat review on the updated diff/PR.
+After general review is clean and required user/CI evidence is available, run `hippocampus-security-vulnerability-review` independently.
 
-### 6. Independent security gate
+Use OWASP ASVS 5.0.0 as the verification baseline with OWASP Top 10:2025 and OWASP API Security Top 10 as threat lenses.
 
-After required tests pass and general review has no blocker, run `hippocampus-security-vulnerability-review` independently as required by `AGENTS.md`.
+Critical/High findings block completion. Medium findings normally block unless a human explicitly accepts the risk. If a control cannot be adequately verified, return `MANUAL SECURITY REVIEW REQUIRED`.
 
-This gate is not removed or merged into routine implementation validation to save tokens.
+The security pass belongs to the Review role; it is not a fourth normal agent role.
 
-## Validation Cost Rule
+## Correction Loop
 
-Prefer deterministic local computation over model reasoning whenever a machine can prove the same fact more reliably.
+For a narrow defect:
 
-- Let Maven, Vitest, TypeScript, ESLint, Flyway/Testcontainers, Playwright, Git, and task-specific scripts produce evidence.
-- Keep successful command output in `.validation/logs/` rather than pasting it into Codex context.
-- Let Codex read detailed logs only for the first causal failure or when a specific piece of evidence is needed.
-- Do not add another AI validation/review agent by default.
+```text
+Reviewer finding
+  -> narrow correction packet
+  -> Codex implementation
+  -> Codex runs only newly created/modified eligible test
+  -> user runs listed affected validation commands
+  -> reviewer checks updated diff/evidence
+```
 
-The agent orchestrates and interprets validation; the expensive work should remain local and deterministic wherever practical.
+Do not resend the full plan or rerun unrelated validation.
 
-## Context Expansion Rule
+## Communication Rule
 
-Start narrow. Expand context only when a concrete dependency, contradiction, failure, architecture question, or security requirement justifies it.
+Implementation agents are silent by default.
 
-Do not optimize by making prompts vague. The desired tradeoff is:
+Do not narrate file reads, searches, routine reasoning, progress, skipped commands, or obvious edits. Speak only for a real blocker/contradiction/decision, a material eligible-test failure, or the final report.
 
-**detailed planning once -> compact execution packet -> focused implementation -> deterministic/runtime validation -> evidence-based review -> narrow fixes**
+Reviewers should likewise report only material findings, missing evidence, verdict, and next action.
 
-not repeated full-context planning/review inside every Codex run.
+## Context / Token Rule
 
-## Fresh-Thread Guidance
+Use agent tokens for decisions and code changes, not for waiting on containers, reading successful infrastructure logs, or repeating deterministic validation that the user/CI can run.
 
-Prefer a fresh Codex thread for a materially new stage or narrow correction when the previous thread contains substantial planning/tool history that is no longer needed.
+Prefer:
 
-Typical separation:
+**detailed planning once -> compact packet -> quiet implementation -> changed-test-only agent execution -> user/CI validation -> evidence-based review -> narrow fixes**
 
-- planning: Human + ChatGPT;
-- implementation + validation: Codex thread A;
-- narrow correction/CI root-cause fix: Codex thread B when useful;
-- general review: Human + ChatGPT;
-- independent security review: separate gate.
-
-Preserve only the execution facts needed by the next stage rather than carrying the full prior conversation.
+Expand context only for a concrete dependency, contradiction, failure, architecture question, or security requirement.
