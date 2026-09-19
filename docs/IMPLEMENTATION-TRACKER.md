@@ -1296,7 +1296,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** Security
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Prove zero cross-user leakage.
 - **Build:** Execute semantic-identical User A/B corpora, inactive/deleted material and forged scope tests.
 - **How it works:** Scope filtering must happen before ranking.
@@ -1305,7 +1305,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** 0 unauthorized chunks ever returned.
 - **Definition of Done:** Gate passes.
 - **Authority:** Documents 22,25
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** P4-13 added the dedicated PostgreSQL/Testcontainers `RagIsolationReleaseIntegrationTests` release suite with wholly synthetic deterministic fixtures and explicit forbidden-ID assertions. The six integration scenarios cover a semantic-identical User A/User B corpus; a deliberately better-ranking foreign vector candidate; lexical, vector, and actual-result hybrid isolation; forged foreign-only and mixed authorized/foreign MaterialVersion scopes; foreign Topic scope; deleted Material; historical non-current MaterialVersion; inactive Chunk; inactive Topic and inactive material-topic link; owned document-node narrowing against a better sibling-node candidate; forged foreign-user document-node scope; and empty-scope fail-closed behavior. Scope construction uses `BuildRetrievalScope`; retrieval exercises the production `JdbcRetrievalScopeSourceRepository`, `JdbcLexicalSearchRepository`, and `JdbcVectorSearchRepository`; hybrid assertions use `HybridCandidateMerger`. No production retrieval behavior, schema migration, dependency, ranking, fusion weight, query expansion, reranking, provider behavior, controller, or frontend code changed, and P4-14 remains Not Started. User validation on 2026-09-19 ran `node scripts/validation/validate.mjs backend`: `mvnw.cmd -B -ntp clean verify` passed with 968 tests, 0 failures, 0 errors, and 9 skips, including all 6 P4-13 release-suite tests, 13 lexical repository integration tests, 11 vector repository integration tests, 2 retrieval-scope repository integration tests, and all 11 architecture tests; the packaged backend build succeeded. The validation wrapper's repository-root `git diff --check` also passed, producing overall `VERDICT PASS` in `.validation/summary.json`.
 - **Notes / blockers:** _None_
 
 ## P4-14 — Phase 4 retrieval gate
