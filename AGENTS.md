@@ -34,33 +34,71 @@ Code never silently overrides higher authority.
 - PostgreSQL is authoritative persistence; pgvector is the retrieval foundation.
 - Uploaded binaries belong in private object storage, not PostgreSQL blobs.
 
-## Implementation Workflow
+## Agent Workflow
 
-For normal tracker implementation:
+Normal tracker work uses three roles:
 
-1. Identify the exact tracker task.
-2. Read the task entry and only the authority documents needed for that task.
-3. Confirm phase/dependency scope and do not pull later tracker work forward.
-4. If a detailed plan was already approved externally, implement it directly; do not re-plan unless a concrete blocker or contradiction appears.
-5. Make the smallest correct, reviewable change.
-6. Run focused changed-behavior tests, then run `hippocampus-validate-implementation` as the required post-implementation validation gate.
-7. Prove the changed real artifact when runtime behavior is part of the task; a production-composed integration/E2E test may satisfy this when duplicating a live run adds no material evidence.
-8. Report concise factual evidence, including any validation limitation, and leave publication/merge decisions to external review unless explicitly requested.
+1. **Plan** — Human + ChatGPT resolve the tracker task, minimum authority, scope, decisions, validation commands, and stop conditions, then produce a compact implementation packet.
+2. **Implement** — Codex implements that packet directly with `hippocampus-implement-task`. It does not re-plan unless a concrete contradiction or blocker appears.
+3. **Review** — an independent reviewer inspects the actual diff plus user/CI evidence, performs general review, then the required independent security pass.
 
-Use `hippocampus-implement-task` for ordinary implementation execution. `hippocampus-validate-implementation` is required before the final implementation report; its verdict provides evidence but does not override tracker status rules. Use other detailed skills only when their guidance is materially relevant; do not chain all backend/frontend/security skills by default.
+Do not add a separate validation agent to the normal loop. Broad validation is user-executed or CI-executed and supplied as evidence to review.
+
+## Implementation Command Policy
+
+During ordinary implementation, Codex runs **no commands** except an eligible test created or modified by the current task.
+
+An eligible agent-run test must satisfy all of these:
+
+- the test/test method was created or modified by the current implementation;
+- the narrowest practical target is used (method first, then class/file only when method-level execution is impractical);
+- it does not require Docker, Docker Compose, Testcontainers, external infrastructure, application startup, or other expensive environment setup.
+
+Everything else is user-run unless the current user instruction explicitly authorizes the exact command.
+
+Codex must not run by default:
+
+- full/module test suites or unchanged tests;
+- build, package, verify, lint, typecheck, or validation scripts;
+- application startup;
+- Docker/Docker Compose/Testcontainers/database startup;
+- Flyway/container validation;
+- Playwright/E2E;
+- architecture suites;
+- Git inspection/hygiene commands solely for ceremony;
+- any other command not permitted above.
+
+Do not infer command authorization from "recommended", "normally required", tracker validation language, or good practice. Instead, list the exact commands the user should run in the implementation report.
+
+An implementation report must not claim `VALIDATION PASS` or `Done` from the agent-run changed test alone. Use `IMPLEMENTED — USER VALIDATION REQUIRED` until broader required evidence is supplied.
+
+## Communication Policy
+
+Implementation agents are quiet by default.
+
+Do not narrate file reads, routine reasoning, planned edits, progress, skipped commands, or obvious implementation steps. Speak only when:
+
+- a real blocker prevents implementation;
+- the approved packet conflicts with authority/repository reality;
+- a significant unresolved decision requires human input;
+- an eligible changed test fails and materially affects the implementation; or
+- implementation is finished.
+
+Keep blocker and final reports terse and factual.
 
 ## Context / Token Efficiency
 
-- Prefer targeted file reads, targeted searches, and focused tests.
+- Prefer targeted file reads and targeted searches.
 - Do not perform broad repository reconnaissance by default.
 - Do not inspect Git HEAD, commit history, branches, PR metadata, or unrelated diffs unless the current task genuinely depends on them.
 - Do not search for, enumerate, or spawn agents/subagents unless delegation solves a concrete parallelizable problem.
 - Do not enumerate skills or load broad skills “just in case.”
-- Do not install/download tools, dependencies, agents, or CLIs unless implementation cannot proceed correctly without them.
+- Do not install/download tools, dependencies, agents, or CLIs unless implementation cannot proceed correctly without them and the task authorizes it.
 - Do not repeatedly reread files or rediscover repository structure already established in the current task.
-- Expand context only for a concrete implementation blocker, ambiguity, dependency, failing test, architecture question, or security requirement.
+- Expand context only for a concrete implementation blocker, ambiguity, dependency, failing eligible test, architecture question, or security requirement.
+- Successful broad validation output should stay outside implementation context; provide only concise pass/fail evidence to review unless a failure needs investigation.
 
-Single-agent execution is the default.
+Single-agent execution is the default within each role.
 
 ## Architecture
 
@@ -87,19 +125,21 @@ Domain code must not depend on Spring MVC, JPA repositories, provider SDKs, HTTP
 - Provider DTOs stay inside provider adapters.
 - Frontend visual work follows `docs/design/DESIGN.md`; reference screenshots communicate intent, not new product requirements.
 
-Detailed Java, Spring Boot, React/TypeScript, architecture, testing, review, and security guidance remains available in the corresponding `.agents/skills/` skill and should be loaded only when relevant.
+Detailed Java, Spring Boot, React/TypeScript, architecture, testing, review, and security guidance remains available in the corresponding `.agents/skills/` skill and should be loaded only when a concrete issue requires it.
 
 ## Mandatory Security Gate
 
-Security remains a separate completion gate:
+Security remains a separate review pass before completion:
 
-1. implementation tests pass;
+1. required user/CI validation evidence is available;
 2. general implementation/code review completes;
-3. run `hippocampus-security-vulnerability-review` independently.
+3. run `hippocampus-security-vulnerability-review` independently using the diff and available evidence.
 
 Use OWASP ASVS 5.0.0 as the verification baseline with OWASP Top 10:2025 and OWASP API Security Top 10 as threat lenses.
 
 Critical/High findings block completion. Medium findings normally block unless a human explicitly accepts the risk. If a control cannot be adequately verified, return `MANUAL SECURITY REVIEW REQUIRED`.
+
+Review agents do not rerun broad validation by default. They request missing user/CI evidence when required.
 
 ## Do Not Introduce Without Approved Decision
 
@@ -109,4 +149,4 @@ If a significant unresolved decision appears, follow Document 27.
 
 ## Completion Rule
 
-`Done` requires implementation, required tests, demonstrated expected behavior, blocker-free general review, the independent security gate (or explicit manual review/risk acceptance), tracker Definition of Done/evidence, and no undocumented architectural deviation.
+`Done` requires implementation, required user/CI validation evidence, demonstrated expected behavior, blocker-free general review, the independent security gate (or explicit manual review/risk acceptance), tracker Definition of Done/evidence, and no undocumented architectural deviation.
