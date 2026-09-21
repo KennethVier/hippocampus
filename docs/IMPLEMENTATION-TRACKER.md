@@ -1358,7 +1358,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Select provider centrally.
 - **Build:** Create routing policy using task support, evaluation status, availability, quota/rate state, cost/latency config.
 - **How it works:** Learning/domain code never picks Gemini/Ollama.
@@ -1367,7 +1367,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Correct route/fallback selected deterministically.
 - **Definition of Done:** Routing tests pass.
 - **Authority:** Documents 10,19
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Centralized provider routing implemented under `backend/src/main/java/com/hippocampus/ai/application/routing/`. The implementation adds the application-owned `GEMINI` and `OLLAMA_CLOUD` provider identities, immutable route-time candidates and route targets, configurable cost/latency ordering with deterministic tie-breaks, eligibility enforcement for task support, evaluation approval, availability, quota, and rate-limit state, alternate-provider-only fallback selection, and fail-closed `ProviderRouteUnavailableException` behavior. Pure unit coverage in `ProviderRouterTests` verifies the required route matrix, both configurable provider preferences, multiple models per provider, cross-provider fallback, all current canonical task types including `STRUCTURED_OUTPUT_REPAIR`, invalid configuration rejection, defensive copying, and input-order-independent routing. Agent-run focused validation passed: `ProviderRouterTests` (14 tests, 0 failures/errors/skips). User validation passed: routing/contracts/architecture tests, backend validation, and `git diff --check`.
 - **Notes / blockers:** _None_
 
 ## P5-05 — Implement GeminiProviderAdapter
