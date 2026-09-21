@@ -1310,7 +1310,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Standardize AI tasks before providers.
 - **Build:** Create typed AiTaskRequest/ValidatedAiResult and task enums/contracts for explanation, question, evaluation, connection, application, repair.
 - **How it works:** Canonical contract contains grounding/evidence/output schema.
@@ -1319,7 +1319,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** All AI use cases speak one internal language.
 - **Definition of Done:** Contracts stable and tested.
 - **Authority:** Documents 10,12,19
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Canonical provider-independent AI task envelope, typed task input/output records and enums, repair targeting, structural invariants, defensive collection copies, and focused unit/JSON serialization coverage in `backend/src/main/java/com/hippocampus/ai/domain/` and `backend/src/test/java/com/hippocampus/ai/domain/AiTaskContractsTests.java`. Agent-run `mvn -Dtest=AiTaskContractsTests test`: 8 tests passed on 2026-09-21.
 - **Notes / blockers:** _None_
 
 ## P5-02 — Implement PromptTemplateRegistry

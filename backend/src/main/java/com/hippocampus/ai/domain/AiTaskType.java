@@ -1,0 +1,10 @@
+package com.hippocampus.ai.domain;
+
+public enum AiTaskType {
+    EXPLANATION,
+    QUESTION_GENERATION,
+    RESPONSE_EVALUATION,
+    CONCEPT_CONNECTION,
+    CONTEXTUAL_APPLICATION,
+    STRUCTURED_OUTPUT_REPAIR
+}
