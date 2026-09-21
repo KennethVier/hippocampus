@@ -1326,7 +1326,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Centralize versioned prompts.
 - **Build:** Create registry for system + task templates with prompt ID/version and authority hierarchy.
 - **How it works:** Feature code cannot embed arbitrary production prompts.
@@ -1335,15 +1335,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Prompts are traceable and centrally managed.
 - **Definition of Done:** No production prompt strings outside registry.
 - **Authority:** Documents 12
-- **Evidence / link:** Centralized provider-independent prompt registry implemented under
-  `backend/src/main/java/com/hippocampus/ai/application/prompt/` with the approved Phase 5 system,
-  task, and structured-output-repair V1 templates; explicit identity/version and authority metadata;
-  immutable registry ownership; exact task/version resolution; and fail-closed unknown, mismatched,
-  and category-invalid lookup behavior. `PromptTemplateRegistryTests` passed 11 tests, including
-  complete current `AiTaskType` coverage, authority hierarchy, immutability, and SHA-256 snapshots.
-  Focused registry/AI-contract/architecture validation passed 30 tests. Repository backend validation
-  (`node .\scripts\validation\validate.mjs backend`) passed `backend-clean-verify` and
-  `git-diff-check` on 2026-09-21.
+- **Evidence / link:** Centralized provider-independent `PromptTemplateRegistry` implemented under `backend/src/main/java/com/hippocampus/ai/application/prompt/` with explicit immutable prompt identity/version metadata, the approved system/task authority hierarchy, exact task/version resolution, fail-closed handling for unknown, mismatched, and category-invalid prompt identities, and centrally owned V1 production templates for `HIPPOCAMPUS_SYSTEM_V1`, `EXPLANATION_V1`, `QUESTION_GENERATION_V1`, `RESPONSE_EVALUATION_V1`, `CONCEPT_CONNECTION_V1`, `CONTEXTUAL_APPLICATION_V1`, and `STRUCTURED_OUTPUT_REPAIR_V1`. `PromptTemplateRegistryTests` added focused lookup, task coverage, authority hierarchy, immutability, version-integrity, and SHA-256 prompt snapshot coverage; 11 focused tests passed. User-run focused/regression/architecture validation passed, repository backend validation passed, and `git diff --check` passed. External implementation review returned `APPROVED` with no unresolved correctness, architecture, scope, tracker, or undocumented architectural-deviation findings. Independent security vulnerability review returned `SECURITY PASS` for implementation head `80ea93447e3b8f40369f9a67558e24c35dfd059c`, with 0 Critical, 0 High, 0 Medium, and 0 Low findings and no manual security review required. Exact-head GitHub Actions `quality` run #491 (ID `35559876651`) completed successfully for `80ea93447e3b8f40369f9a67558e24c35dfd059c`; `backend-quality`, `frontend-quality`, `security`, `auth-e2e`, `phase1-gate`, `phase2-gate`, `phase3-gate`, and `phase4-gate` all succeeded. Implementation PR #176 (`P5-02: Implement PromptTemplateRegistry`) was merged into `main` on 2026-09-21. Merge commit: `8d4e5e64c42e0f83dc274fc02b1e5454d1a27f54`. Expected behavior and Definition of Done are satisfied: production prompts are centrally versioned and traceable, feature code does not independently own the P5-02 production prompt bodies, and P5-03/runtime context construction plus later Phase 5 provider responsibilities remain outside this task.
 - **Notes / blockers:** _None_
 
 ## P5-03 — Implement PromptContextBuilder
