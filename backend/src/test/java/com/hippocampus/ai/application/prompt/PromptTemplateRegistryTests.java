@@ -3,6 +3,7 @@ package com.hippocampus.ai.application.prompt;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.domain.AiTaskType;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -136,6 +137,23 @@ class PromptTemplateRegistryTests {
                                 "STRUCTURED_OUTPUT_REPAIR_V1")
                         .content())
                 .contains("TASK:", "REQUIRED_SCHEMA:", "PREVIOUS_RESPONSE:");
+    }
+
+    @Test
+    void resolvesCanonicalRepairSchemaForEveryOutputContract() {
+        for (AiOutputContract outputContract : AiOutputContract.values()) {
+            AiTaskType taskType = AiTaskType.valueOf(outputContract.name());
+            PromptTemplate primaryTemplate = registry.resolveTask(taskType, taskType.name() + "_V1");
+            String repairSchema = registry.resolveRepairSchema(outputContract);
+
+            assertThat(repairSchema).startsWith("{").endsWith("}");
+            assertThat(primaryTemplate.content())
+                    .contains("Return valid structured output matching:\n\n" + repairSchema);
+        }
+
+        assertThat(registry.resolveRepairSchema(AiOutputContract.EXPLANATION))
+                .contains("\"supplementalKnowledgeUsed\": true | false")
+                .doesNotContain("\"supplementalKnowledgeUsed\":\"boolean\"");
     }
 
     @Test

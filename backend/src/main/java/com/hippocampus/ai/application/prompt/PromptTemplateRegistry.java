@@ -1,5 +1,6 @@
 package com.hippocampus.ai.application.prompt;
 
+import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.domain.AiTaskRequest;
 import com.hippocampus.ai.domain.AiTaskType;
 import java.util.EnumMap;
@@ -399,6 +400,7 @@ public final class PromptTemplateRegistry {
     private static final Map<PromptId, PromptTemplate> BY_ID = indexById();
     private static final Map<String, PromptTemplate> BY_VERSION_IDENTITY = indexByVersionIdentity();
     private static final Map<AiTaskType, PromptTemplate> BY_TASK_TYPE = indexByTaskType();
+    private static final Map<AiOutputContract, String> REPAIR_SCHEMAS = indexRepairSchemas();
 
     public PromptTemplate resolveSystemPolicy() {
         return resolveSystemPolicy(PromptId.HIPPOCAMPUS_SYSTEM_V1.name());
@@ -439,6 +441,11 @@ public final class PromptTemplateRegistry {
 
     public List<PromptTemplate> registeredTemplates() {
         return TEMPLATES;
+    }
+
+    public String resolveRepairSchema(AiOutputContract outputContract) {
+        Objects.requireNonNull(outputContract, "outputContract must not be null");
+        return REPAIR_SCHEMAS.get(outputContract);
     }
 
     private PromptTemplate resolveKnownVersion(String promptVersion) {
@@ -493,5 +500,40 @@ public final class PromptTemplateRegistry {
             throw new IllegalStateException("every supported task type must have one prompt registration");
         }
         return Map.copyOf(templates);
+    }
+
+    private static Map<AiOutputContract, String> indexRepairSchemas() {
+        EnumMap<AiOutputContract, String> schemas = new EnumMap<>(AiOutputContract.class);
+        for (AiOutputContract outputContract : AiOutputContract.values()) {
+            AiTaskType taskType = AiTaskType.valueOf(outputContract.name());
+            PromptTemplate template = BY_TASK_TYPE.get(taskType);
+            if (template == null) {
+                throw new IllegalStateException("missing prompt registration for " + outputContract);
+            }
+            schemas.put(outputContract, extractOutputSchema(template));
+        }
+        return Map.copyOf(schemas);
+    }
+
+    private static String extractOutputSchema(PromptTemplate template) {
+        String marker = "Return valid structured output matching:";
+        int markerIndex = template.content().indexOf(marker);
+        int schemaStart = markerIndex < 0
+                ? -1
+                : template.content().indexOf('{', markerIndex + marker.length());
+        if (schemaStart < 0) {
+            throw new IllegalStateException("missing output schema in " + template.promptId());
+        }
+
+        int depth = 0;
+        for (int index = schemaStart; index < template.content().length(); index++) {
+            char character = template.content().charAt(index);
+            if (character == '{') {
+                depth++;
+            } else if (character == '}' && --depth == 0) {
+                return template.content().substring(schemaStart, index + 1);
+            }
+        }
+        throw new IllegalStateException("unterminated output schema in " + template.promptId());
     }
 }
