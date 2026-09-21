@@ -1,6 +1,5 @@
 package com.hippocampus.ai.application.prompt;
 
-import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.domain.AiTaskRequest;
 import com.hippocampus.ai.domain.AiTaskType;
 import com.hippocampus.ai.domain.ConceptConnectionInput;
@@ -84,7 +83,7 @@ public final class PromptContextBuilder {
             StructuredOutputRepairInput input = (StructuredOutputRepairInput) request.taskContext();
             return new BuildState(
                     Map.of(
-                            "schema", schemaFor(request.outputContract()),
+                            "schema", registry.resolveRepairSchema(request.outputContract()),
                             "previousResponse", jsonString(input.previousResponse())),
                     List.of(),
                     0,
@@ -495,26 +494,6 @@ public final class PromptContextBuilder {
             }
         });
         return result.append('"').toString();
-    }
-
-    private static String schemaFor(AiOutputContract contract) {
-        return switch (contract) {
-            case EXPLANATION -> """
-                    {"concept":"string","explanation":"string","keyPoints":["string"],"prerequisitesUsed":["string"],"sourceReferences":["string"],"supplementalKnowledgeUsed":"boolean","limitations":["string"]}
-                    """.strip();
-            case QUESTION_GENERATION -> """
-                    {"activityType":"SHORT_ANSWER | MCQ | IDENTIFICATION | EXPLANATION","concept":"string","learningObjective":"string","question":"string","options":[{"id":"string","text":"string"}],"correctOption":"string | null","expectedAnswer":"string","explanation":"string","difficulty":"FOUNDATIONAL | INTERMEDIATE | APPLIED","sourceReferences":["string"],"limitations":["string"]}
-                    """.strip();
-            case RESPONSE_EVALUATION -> """
-                    {"evaluation":"CORRECT | PARTIAL | INCORRECT | UNCERTAIN","correctConcepts":["string"],"missingConcepts":["string"],"misconceptions":["string"],"feedback":"string","certainty":"SUFFICIENT | LIMITED","recommendedAction":"CONTINUE | RETRY | TARGETED_EXPLANATION | PREREQUISITE_SUPPORT | CONNECTION_SUPPORT | GUIDED_REASONING | MANUAL_REVIEW","sourceReferences":["string"],"limitations":["string"]}
-                    """.strip();
-            case CONCEPT_CONNECTION -> """
-                    {"fromConcept":"string","toConcept":"string","relationshipType":"string","relationship":"string","whyItMatters":"string","sourceReferences":["string"],"limitations":["string"]}
-                    """.strip();
-            case CONTEXTUAL_APPLICATION -> """
-                    {"scenario":"string","question":"string","targetConcept":"string","requiredReasoning":["string"],"expectedAnswer":"string","feedbackPoints":["string"],"difficulty":"FOUNDATIONAL_APPLIED | INTERMEDIATE_APPLIED","sourceReferences":["string"],"limitations":["string"]}
-                    """.strip();
-        };
     }
 
     private static IllegalArgumentException budgetFailure(
