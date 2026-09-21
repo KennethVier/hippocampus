@@ -1310,16 +1310,16 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Standardize AI tasks before providers.
 - **Build:** Create typed AiTaskRequest/ValidatedAiResult and task enums/contracts for explanation, question, evaluation, connection, application, repair.
 - **How it works:** Canonical contract contains grounding/evidence/output schema.
-- **Dependencies:** P4 EvidencePackage
-- **Tests / validation:** Serialization/unit tests.
+- **Dependencies:** Phase 4 evidence package
+- **Tests / validation:** Unit tests + JSON serialization tests for each task type.
 - **Expected result:** All AI use cases speak one internal language.
 - **Definition of Done:** Contracts stable and tested.
 - **Authority:** Documents 10,12,19
-- **Evidence / link:** Canonical provider-independent AI task envelope, typed task input/output records and enums, repair targeting, structural invariants, defensive collection copies, and focused unit/JSON serialization coverage in `backend/src/main/java/com/hippocampus/ai/domain/` and `backend/src/test/java/com/hippocampus/ai/domain/AiTaskContractsTests.java`. Agent-run `mvn -Dtest=AiTaskContractsTests test`: 8 tests passed on 2026-09-21.
+- **Evidence / link:** Canonical provider-independent AI task contracts implemented under `backend/src/main/java/com/hippocampus/ai/domain/`, including `AiTaskRequest`, `ValidatedAiResult`, typed task input/output contracts, supported task enums, structured-output repair targeting, grounding/evidence consistency validation, structural invariants, and defensive immutable collection ownership. Focused `AiTaskContractsTests` validation passed with 8 tests, including JSON serialization coverage. External implementation review accepted with no unresolved blockers or undocumented architecture deviation. Independent security vulnerability review returned `SECURITY PASS`: 0 Critical, 0 High, 0 Medium, and 0 Low findings; no manual security review required. Exact-head GitHub Actions `quality` run #487 (ID `35553430686`) succeeded for implementation head `38d4c8d63bd68ec4331696621b4cef774791c512`; `backend-quality`, `frontend-quality`, `security`, `auth-e2e`, and applicable existing phase-gate jobs completed successfully. PR #174 (`P5-01: Define canonical AiTask contracts`) was accepted and merged into `main` on 2026-09-21. Merge commit: `5f51a3b63df1d9762d00f4aabdb2fbb1a54d86cc`. Expected behavior and Definition of Done are satisfied: all Phase 5 AI use cases now have the canonical provider-independent internal contract required by P5-01, while provider execution and later Phase 5 responsibilities remain outside this task.
 - **Notes / blockers:** _None_
 
 ## P5-02 — Implement PromptTemplateRegistry
