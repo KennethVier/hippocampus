@@ -1326,7 +1326,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Centralize versioned prompts.
 - **Build:** Create registry for system + task templates with prompt ID/version and authority hierarchy.
 - **How it works:** Feature code cannot embed arbitrary production prompts.
@@ -1335,7 +1335,15 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Prompts are traceable and centrally managed.
 - **Definition of Done:** No production prompt strings outside registry.
 - **Authority:** Documents 12
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Centralized provider-independent prompt registry implemented under
+  `backend/src/main/java/com/hippocampus/ai/application/prompt/` with the approved Phase 5 system,
+  task, and structured-output-repair V1 templates; explicit identity/version and authority metadata;
+  immutable registry ownership; exact task/version resolution; and fail-closed unknown, mismatched,
+  and category-invalid lookup behavior. `PromptTemplateRegistryTests` passed 11 tests, including
+  complete current `AiTaskType` coverage, authority hierarchy, immutability, and SHA-256 snapshots.
+  Focused registry/AI-contract/architecture validation passed 30 tests. Repository backend validation
+  (`node .\scripts\validation\validate.mjs backend`) passed `backend-clean-verify` and
+  `git-diff-check` on 2026-09-21.
 - **Notes / blockers:** _None_
 
 ## P5-03 — Implement PromptContextBuilder
