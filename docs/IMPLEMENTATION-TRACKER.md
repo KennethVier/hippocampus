@@ -1342,7 +1342,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Control tokens and untrusted boundaries.
 - **Build:** Build minimal learner/activity/evidence context with explicit SOURCE_CONTEXT and STUDENT_RESPONSE delimiters and output budget.
 - **How it works:** Only task-relevant context is included.
@@ -1351,7 +1351,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Prompts stay bounded and preserve instruction hierarchy.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 12,22
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Centralized provider-independent prompt context construction implemented under `backend/src/main/java/com/hippocampus/ai/application/prompt/` with immutable `PromptContext`/included-source provenance, explicit caller-supplied `PromptTokenBudget`, a provider-neutral `PromptTokenCounter` seam, separate system and rendered task prompts, typed task-to-variable mapping, deterministic compact learner/activity serialization, ranked exact-deduplicated EvidencePackage source selection, whole-source budget trimming, reserved output capacity, and fail-closed mandatory-context handling. SOURCE_CONTEXT and STUDENT_RESPONSE data boundaries escape delimiter injection, trusted templates are rendered once without reparsing untrusted placeholder-like content, and structured-output repair derives its schema from the canonical output contract while treating the previous response as untrusted data. Focused pure `PromptContextBuilderTests` cover all six task types, deterministic rendered context, token budgeting, source priority/deduplication/provenance, learner/history reduction, mandatory-input overflow, minimal context, and source/student/repair prompt-injection fixtures. User-reported required validation passed: PromptContextBuilder/PromptTemplateRegistry/AiTaskContracts tests, HippocampusArchitectureTests, broad backend validation, and `git diff --check`. P5-03 is ready for independent implementation review and the mandatory security gate; it is not Done.
 - **Notes / blockers:** _None_
 
 ## P5-04 — Implement ProviderRouter
