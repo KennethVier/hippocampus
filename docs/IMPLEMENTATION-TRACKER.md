@@ -1374,7 +1374,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Connect Gemini server-side.
 - **Build:** Use Spring AI Google GenAI integration; map canonical request, multimodal input where approved, structured outputs/errors/usage.
 - **How it works:** Gemini SDK types remain internal.
@@ -1383,14 +1383,14 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Gemini executes supported typed tasks.
 - **Definition of Done:** Contract tests pass.
 - **Authority:** Documents 17,19
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Implemented the provider-neutral execution contract and Spring AI Google GenAI adapter under `backend/src/main/java/com/hippocampus/ai/`, including route-selected model overrides, canonical system/task prompt mapping, JSON response mode, reserved output-token mapping, raw untrusted output, provider-reported usage, latency, typed safe failures, and disabled-by-default server-side credential configuration. Focused agent validation passed for `AiProviderAdapterContractTests`, `GeminiProviderAdapterTests`, and `GeminiProviderConfigurationTests` as part of an 18-test provider-adapter run. User validation passed for the complete deterministic provider test set, `AiTaskContractsTests`, `HippocampusArchitectureTests`, backend repository validation, and `git diff --check`. The opt-in `GeminiProviderLiveSmokeTests` executed successfully against the configured route model with 1 test run, 0 failures, 0 errors, and 0 skipped.
 - **Notes / blockers:** _None_
 
 ## P5-06 — Implement OllamaCloudProviderAdapter
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Connect remote Ollama API.
 - **Build:** Use server-side HTTPS bearer auth and map canonical request/stream/errors.
 - **How it works:** No local Ollama assumption; provider-specific details stay internal.
@@ -1399,7 +1399,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Ollama API executes supported typed tasks.
 - **Definition of Done:** Contract tests pass.
 - **Authority:** Documents 10,17,19
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Implemented the provider-neutral execution contract and remote Ollama Cloud REST adapter under `backend/src/main/java/com/hippocampus/ai/`, including the HTTPS `/api/chat` integration, infrastructure-only bearer authentication, route-selected model and canonical system/task prompt mapping, structured JSON mode, raw untrusted output, provider-reported usage, latency, safe HTTP/network/response failure normalization, cloud-only URL validation, and disabled-by-default server-side credential configuration. Focused agent validation passed for `AiProviderAdapterContractTests`, `OllamaCloudProviderAdapterTests`, and `OllamaCloudProviderConfigurationTests` as part of an 18-test provider-adapter run. User validation passed for the complete deterministic provider test set, `AiTaskContractsTests`, `HippocampusArchitectureTests`, backend repository validation, and `git diff --check`. The opt-in `OllamaCloudProviderLiveSmokeTests` executed successfully against the configured cloud route model with 1 test run, 0 failures, 0 errors, and 0 skipped.
 - **Notes / blockers:** _None_
 
 ## P5-07 — Implement AI Request Manager
