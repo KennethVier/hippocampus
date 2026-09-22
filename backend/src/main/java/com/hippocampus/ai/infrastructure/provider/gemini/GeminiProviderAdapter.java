@@ -1,5 +1,6 @@
 package com.hippocampus.ai.infrastructure.provider.gemini;
 
+import java.math.BigInteger;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.time.Instant;
@@ -219,8 +220,10 @@ public final class GeminiProviderAdapter implements AiProviderAdapter {
         String value = headers.getFirst(HttpHeaders.RETRY_AFTER);
         if (value == null || value.isBlank()) return Optional.empty();
         try {
-            long seconds = Long.parseLong(value.trim());
-            return seconds > 0 ? Optional.of(Duration.ofSeconds(seconds)) : Optional.empty();
+            BigInteger seconds = new BigInteger(value.trim());
+            if (seconds.signum() <= 0) return Optional.empty();
+            long saturatedSeconds = seconds.min(BigInteger.valueOf(Long.MAX_VALUE)).longValue();
+            return Optional.of(Duration.ofSeconds(saturatedSeconds));
         } catch (NumberFormatException ignored) {
             try {
                 Duration duration = Duration.between(

@@ -1,11 +1,13 @@
 package com.hippocampus.ai.application.request;
 
 import java.time.Clock;
+import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -157,12 +159,20 @@ public final class AiRequestManager implements AutoCloseable {
                 return CompletableFuture.failedFuture(
                         failure(state.adapter.providerId(), ProviderFailureType.RATE_LIMITED));
             }
+            long providerCapacity = (long) state.policy.maximumConcurrency()
+                    + state.policy.maximumQueuedRequests();
+            if (state.logicalOutstanding >= providerCapacity) {
+                telemetry.rejected(state.adapter.providerId(), request.taskType(), "queue_full");
+                return CompletableFuture.failedFuture(
+                        failure(state.adapter.providerId(), ProviderFailureType.PROVIDER_UNAVAILABLE));
+            }
             boolean canStartImmediately = canStartImmediately(state, now);
             if (state.queue.size() >= state.policy.maximumQueuedRequests() && !canStartImmediately) {
                 telemetry.rejected(state.adapter.providerId(), request.taskType(), "queue_full");
                 return CompletableFuture.failedFuture(failure(state.adapter.providerId(), ProviderFailureType.PROVIDER_UNAVAILABLE));
             }
             outstandingRequestsByUser.put(userId, userOutstanding + 1);
+            state.logicalOutstanding++;
             long deadlineNanos = System.nanoTime() + state.policy.requestTimeout().toNanos();
             managed = new ManagedRequest<>(
                     state,
@@ -173,10 +183,11 @@ public final class AiRequestManager implements AutoCloseable {
                     deadlineNanos,
                     invocation,
                     retryPermission);
+            state.logicalRequests.add(managed);
             state.queue.add(managed);
             telemetry.queued(state.adapter.providerId(), request.taskType());
             managed.timeoutTask = scheduler.schedule(
-                    () -> timeout(managed), state.policy.requestTimeout().toNanos(), TimeUnit.NANOSECONDS);
+                    () -> timeout(managed), schedulerDelayNanos(state.policy.requestTimeout()), TimeUnit.NANOSECONDS);
             managed.result.whenComplete((ignored, failure) -> terminalCompletion(managed));
             dispatch(state);
         }
@@ -195,7 +206,7 @@ public final class AiRequestManager implements AutoCloseable {
             return;
         }
         while (state.running < state.policy.maximumConcurrency() && !state.queue.isEmpty()) {
-            if (state.circuitState == CircuitState.HALF_OPEN && state.probeInFlight) {
+            if (state.circuitState == CircuitState.HALF_OPEN && state.recoveryProbe != null) {
                 return;
             }
             ManagedRequest<?> request = state.queue.poll();
@@ -206,7 +217,7 @@ public final class AiRequestManager implements AutoCloseable {
             }
             state.running++;
             request.physicallyRunning = true;
-            if (state.circuitState == CircuitState.HALF_OPEN) state.probeInFlight = true;
+            if (state.circuitState == CircuitState.HALF_OPEN) state.recoveryProbe = request;
             workers.submit(() -> runAttempt(request));
         }
     }
@@ -218,8 +229,8 @@ public final class AiRequestManager implements AutoCloseable {
                 request.physicallyRunning = false;
                 request.physicalThread = null;
                 request.state.running--;
-                releaseUserAdmission(request);
-                if (request.state.circuitState == CircuitState.HALF_OPEN) request.state.probeInFlight = false;
+                releaseAdmissions(request);
+                releaseProbe(request.state, request);
                 dispatch(request.state);
                 return;
             }
@@ -245,31 +256,31 @@ public final class AiRequestManager implements AutoCloseable {
             state.running--;
 
             if (request.result.isDone()) {
-                releaseUserAdmission(request);
-                if (state.circuitState == CircuitState.HALF_OPEN) state.probeInFlight = false;
+                releaseAdmissions(request);
+                releaseProbe(state, request);
                 dispatch(state);
                 return;
             }
             if (caught == null) {
-                providerSucceeded(state);
+                providerSucceeded(state, request);
                 complete(request, value);
                 dispatch(state);
                 return;
             }
             if (!(caught instanceof ProviderExecutionException providerFailure)) {
-                if (state.circuitState == CircuitState.HALF_OPEN) state.probeInFlight = false;
+                releaseProbe(state, request);
                 completeExceptionally(request, caught, "application_failure");
                 dispatch(state);
                 return;
             }
 
             boolean retryable = isRetryable(providerFailure.failureType()) && request.retryPermission.allowed();
-            providerFailed(state, providerFailure);
+            providerFailed(state, request, providerFailure);
             if (retryable && request.attempts < state.policy.maximumAttempts() && canRetryWithinDeadline(request, providerFailure)) {
                 request.attempts++;
                 Duration delay = retryDelay(request, providerFailure);
                 telemetry.retrying(state.adapter.providerId(), request.request.taskType(), providerFailure.failureType());
-                scheduler.schedule(() -> requeue(request), delay.toNanos(), TimeUnit.NANOSECONDS);
+                scheduler.schedule(() -> requeue(request), schedulerDelayNanos(delay), TimeUnit.NANOSECONDS);
             } else {
                 completeExceptionally(request, providerFailure, providerFailure.failureType().name().toLowerCase());
             }
@@ -277,28 +288,44 @@ public final class AiRequestManager implements AutoCloseable {
         }
     }
 
-    private void providerSucceeded(ProviderState state) {
+    private void providerSucceeded(ProviderState state, ManagedRequest<?> request) {
         if (state.circuitState == CircuitState.OPEN) return;
+        if (state.circuitState == CircuitState.HALF_OPEN && state.recoveryProbe != request) return;
         state.consecutiveFailures = 0;
         state.openFailureType = ProviderFailureType.PROVIDER_UNAVAILABLE;
         if (state.circuitState == CircuitState.HALF_OPEN) {
             state.circuitState = CircuitState.CLOSED;
-            state.probeInFlight = false;
+            state.recoveryProbe = null;
             telemetry.circuitChanged(state.adapter.providerId(), "closed");
         }
     }
 
-    private void providerFailed(ProviderState state, ProviderExecutionException failure) {
+    private void providerFailed(
+            ProviderState state,
+            ManagedRequest<?> request,
+            ProviderExecutionException failure) {
+        if (state.circuitState == CircuitState.HALF_OPEN && state.recoveryProbe != request) {
+            if (failure.failureType() == ProviderFailureType.RATE_LIMITED) {
+                applyRateLimitCooldown(state, failure);
+            }
+            return;
+        }
         switch (failure.failureType()) {
             case PROVIDER_UNAVAILABLE, TIMEOUT -> availabilityFailed(state);
             case RATE_LIMITED -> {
-                Duration delay = failure.retryAfter().orElse(state.policy.initialRetryDelay());
-                state.cooldownUntil = later(state.cooldownUntil, clock.instant().plus(delay));
-                releaseProbe(state);
+                applyRateLimitCooldown(state, failure);
+                if (state.circuitState == CircuitState.HALF_OPEN) {
+                    openCircuit(state, ProviderFailureType.RATE_LIMITED);
+                }
             }
             case AUTHENTICATION_FAILURE, QUOTA_EXHAUSTED -> openCircuit(state, failure.failureType());
-            case INVALID_RESPONSE, UNSUPPORTED_TASK -> releaseProbe(state);
+            case INVALID_RESPONSE, UNSUPPORTED_TASK -> releaseProbe(state, request);
         }
+    }
+
+    private void applyRateLimitCooldown(ProviderState state, ProviderExecutionException failure) {
+        Duration delay = failure.retryAfter().orElse(state.policy.initialRetryDelay());
+        state.cooldownUntil = later(state.cooldownUntil, saturatingAdd(clock.instant(), delay));
     }
 
     private void availabilityFailed(ProviderState state) {
@@ -309,15 +336,15 @@ public final class AiRequestManager implements AutoCloseable {
         }
     }
 
-    private static void releaseProbe(ProviderState state) {
-        if (state.circuitState == CircuitState.HALF_OPEN) state.probeInFlight = false;
+    private static void releaseProbe(ProviderState state, ManagedRequest<?> request) {
+        if (state.recoveryProbe == request) state.recoveryProbe = null;
     }
 
     private void openCircuit(ProviderState state, ProviderFailureType openFailureType) {
         state.circuitState = CircuitState.OPEN;
         state.openFailureType = openFailureType;
-        state.probeInFlight = false;
-        state.circuitOpenUntil = clock.instant().plus(state.policy.circuitOpenDuration());
+        state.recoveryProbe = null;
+        state.circuitOpenUntil = saturatingAdd(clock.instant(), state.policy.circuitOpenDuration());
         telemetry.circuitChanged(state.adapter.providerId(), "open");
         List<ManagedRequest<?>> rejected = new ArrayList<>(state.queue);
         state.queue.clear();
@@ -350,6 +377,7 @@ public final class AiRequestManager implements AutoCloseable {
             if (request.providerInvocationStarted) {
                 providerFailed(
                         request.state,
+                        request,
                         failure(request.state.adapter.providerId(), ProviderFailureType.TIMEOUT));
             }
             completeTimeout(request);
@@ -361,7 +389,7 @@ public final class AiRequestManager implements AutoCloseable {
 
     private void terminalCompletion(ManagedRequest<?> request) {
         synchronized (lock) {
-            if (!request.providerInvocationStarted) releaseUserAdmission(request);
+            if (!request.providerInvocationStarted) releaseAdmissions(request);
             if (!request.result.isCancelled()) return;
             request.state.queue.remove(request);
             Thread physicalThread = request.physicalThread;
@@ -374,9 +402,11 @@ public final class AiRequestManager implements AutoCloseable {
         }
     }
 
-    private void releaseUserAdmission(ManagedRequest<?> request) {
+    private void releaseAdmissions(ManagedRequest<?> request) {
         if (request.admissionReleased) return;
         request.admissionReleased = true;
+        request.state.logicalRequests.remove(request);
+        request.state.logicalOutstanding--;
         outstandingRequestsByUser.compute(request.userId, (ignored, outstanding) -> {
             if (outstanding == null || outstanding <= 1) return null;
             return outstanding - 1;
@@ -424,7 +454,7 @@ public final class AiRequestManager implements AutoCloseable {
                 state.dispatchTask = null;
                 if (!closed) dispatch(state);
             }
-        }, delay.toNanos(), TimeUnit.NANOSECONDS);
+        }, schedulerDelayNanos(delay), TimeUnit.NANOSECONDS);
     }
 
     private void updateCircuitForTime(ProviderState state, Instant now) {
@@ -439,7 +469,7 @@ public final class AiRequestManager implements AutoCloseable {
                 && state.queue.isEmpty()
                 && !state.cooldownUntil.isAfter(now)
                 && (state.circuitState == CircuitState.CLOSED
-                        || state.circuitState == CircuitState.HALF_OPEN && !state.probeInFlight);
+                        || state.circuitState == CircuitState.HALF_OPEN && state.recoveryProbe == null);
     }
 
     private static boolean isRetryable(ProviderFailureType failureType) {
@@ -467,7 +497,7 @@ public final class AiRequestManager implements AutoCloseable {
             ProviderExecutionException failure) {
         Duration delay = retryDelay(request, failure);
         long remaining = request.deadlineNanos - System.nanoTime();
-        return remaining > delay.toNanos();
+        return remaining > 0 && delay.compareTo(Duration.ofNanos(remaining)) < 0;
     }
 
     private static boolean deadlineExpired(ManagedRequest<?> request) {
@@ -480,6 +510,22 @@ public final class AiRequestManager implements AutoCloseable {
 
     private static Instant later(Instant left, Instant right) {
         return left.isAfter(right) ? left : right;
+    }
+
+    private static Instant saturatingAdd(Instant instant, Duration duration) {
+        try {
+            return instant.plus(duration);
+        } catch (DateTimeException | ArithmeticException overflow) {
+            return Instant.MAX;
+        }
+    }
+
+    private static long schedulerDelayNanos(Duration delay) {
+        try {
+            return Math.max(0, delay.toNanos());
+        } catch (ArithmeticException overflow) {
+            return Long.MAX_VALUE;
+        }
     }
 
     private static Duration elapsed(ManagedRequest<?> request) {
@@ -496,9 +542,10 @@ public final class AiRequestManager implements AutoCloseable {
             if (closed) return;
             closed = true;
             providers.values().forEach(state -> {
-                List<ManagedRequest<?>> queued = new ArrayList<>(state.queue);
+                List<ManagedRequest<?>> admitted = new ArrayList<>(state.logicalRequests);
                 state.queue.clear();
-                queued.forEach(request -> request.result.cancel(false));
+                state.recoveryProbe = null;
+                admitted.forEach(request -> request.result.cancel(false));
             });
         }
         scheduler.shutdownNow();
@@ -529,13 +576,15 @@ public final class AiRequestManager implements AutoCloseable {
         private final AiProviderAdapter adapter;
         private final AiRequestManagerPolicy policy;
         private final PriorityQueue<ManagedRequest<?>> queue = new PriorityQueue<>(ORDERING);
+        private final HashSet<ManagedRequest<?>> logicalRequests = new HashSet<>();
         private int running;
+        private int logicalOutstanding;
         private int consecutiveFailures;
         private CircuitState circuitState = CircuitState.CLOSED;
         private Instant circuitOpenUntil = Instant.EPOCH;
         private Instant cooldownUntil = Instant.EPOCH;
         private ProviderFailureType openFailureType = ProviderFailureType.PROVIDER_UNAVAILABLE;
-        private boolean probeInFlight;
+        private ManagedRequest<?> recoveryProbe;
         private ScheduledFuture<?> dispatchTask;
 
         private ProviderState(AiProviderAdapter adapter, AiRequestManagerPolicy policy) {
