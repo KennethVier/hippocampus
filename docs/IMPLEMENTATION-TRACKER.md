@@ -1445,7 +1445,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Bound concurrency and provider pressure.
 - **Build:** Add per-provider concurrency gates, queue, timeouts, Retry-After/backoff, cancellation and circuit-breaker-like state.
 - **How it works:** Interactive tasks get higher priority than background AI.
@@ -1454,8 +1454,8 @@ responsibilities remain outside P5-06.
 - **Expected result:** Provider overload degrades predictably without flooding.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 10,19,24
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Implemented an application-owned AI Request Manager around the existing pre-routed provider-adapter execution boundary. Gemini and Ollama Cloud have isolated configurable concurrency gates, bounded priority queues with FIFO behavior inside each priority, finite request deadlines, explicit cancellation, bounded retry/backoff for normalized transient availability failures, normalized `Retry-After` propagation and provider-local cooldown, and circuit open/half-open recovery behavior without cross-provider fallback. Logical timeout or cancellation interrupts the provider work where possible but retains the concurrency slot until the physical invocation actually ends, preventing configured provider concurrency from being exceeded. Streaming uses the same managed capacity and is not retried after content delivery. Added low-cardinality Micrometer diagnostics and an in-memory provider-state snapshot without prompt, source, student-response, credential, raw-error, or user-identifier data. Focused agent validation passed: 8 `AiRequestManagerTests` plus 2 Gemini/Ollama `Retry-After` regression tests, with 0 failures and 0 errors; `git diff --check` passed. User validation passed on 2026-09-22: the full Maven test run completed 1,060 tests with 0 failures, 0 errors, and 11 skipped; `node scripts/validation/validate.mjs backend` passed `backend-clean-verify` and `git-diff-check`. The expected bounded-pressure behavior and tracker test/Definition-of-Done requirements are demonstrated. No dependency, persistence, API/controller, Learning Engine, Study Mission, frontend, fallback, output-validation, source-validation, structured-repair, or persisted-diagnostics work was introduced; P5-08+ remain unchanged. No ADR, new infrastructure, or known undocumented architecture deviation is required. External general implementation review and the mandatory independent security review remain pending before `Done`.
+- **Notes / blockers:** No current implementation blocker. External general review and the independent security gate are pending.
 
 ## P5-08 — Implement output schema validation
 

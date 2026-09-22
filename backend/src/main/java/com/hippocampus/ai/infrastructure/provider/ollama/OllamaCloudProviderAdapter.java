@@ -4,6 +4,9 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -18,6 +21,7 @@ import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.http.HttpHeaders;
 
 import com.hippocampus.ai.application.provider.AiProviderAdapter;
 import com.hippocampus.ai.application.provider.ProviderExecutionException;
@@ -82,7 +86,7 @@ public final class OllamaCloudProviderAdapter implements AiProviderAdapter {
         } catch (ProviderExecutionException exception) {
             throw exception;
         } catch (RuntimeException exception) {
-            throw failure(classify(exception));
+            throw normalizedFailure(exception);
         }
     }
 
@@ -110,7 +114,10 @@ public final class OllamaCloudProviderAdapter implements AiProviderAdapter {
                     .body(providerRequest)
                     .exchange((ignored, response) -> {
                         if (response.getStatusCode().isError()) {
-                            throw failure(classifyStatus(response.getStatusCode().value()));
+                            throw new ProviderExecutionException(
+                                    ProviderId.OLLAMA_CLOUD,
+                                    classifyStatus(response.getStatusCode().value()),
+                                    retryAfter(response.getHeaders()));
                         }
                         try (BufferedReader reader = new BufferedReader(
                                 new InputStreamReader(response.getBody(), java.nio.charset.StandardCharsets.UTF_8))) {
@@ -133,7 +140,7 @@ public final class OllamaCloudProviderAdapter implements AiProviderAdapter {
             if (consumerFailure != null) {
                 throw consumerFailure;
             }
-            throw failure(classify(exception));
+            throw normalizedFailure(exception);
         }
     }
 
@@ -206,6 +213,35 @@ public final class OllamaCloudProviderAdapter implements AiProviderAdapter {
             }
         }
         return ProviderFailureType.PROVIDER_UNAVAILABLE;
+    }
+
+    private static ProviderExecutionException normalizedFailure(Throwable failure) {
+        ProviderFailureType type = classify(failure);
+        for (Throwable current = failure; current != null; current = current.getCause()) {
+            if (current instanceof HttpStatusCodeException statusFailure) {
+                return new ProviderExecutionException(
+                        ProviderId.OLLAMA_CLOUD, type, retryAfter(statusFailure.getResponseHeaders()));
+            }
+        }
+        return failure(type);
+    }
+
+    private static Optional<Duration> retryAfter(HttpHeaders headers) {
+        if (headers == null) return Optional.empty();
+        String value = headers.getFirst(HttpHeaders.RETRY_AFTER);
+        if (value == null || value.isBlank()) return Optional.empty();
+        try {
+            long seconds = Long.parseLong(value.trim());
+            return seconds > 0 ? Optional.of(Duration.ofSeconds(seconds)) : Optional.empty();
+        } catch (NumberFormatException ignored) {
+            try {
+                Duration duration = Duration.between(
+                        Instant.now(), ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant());
+                return duration.isPositive() ? Optional.of(duration) : Optional.empty();
+            } catch (RuntimeException invalidDate) {
+                return Optional.empty();
+            }
+        }
     }
 
     private static void emit(
