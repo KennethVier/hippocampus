@@ -207,9 +207,44 @@ class AiRequestManagerTests {
     }
 
     @Test
-    void releasesUserAdmissionAfterTimeoutAndCancellation() throws Exception {
-        assertAdmissionReleasedAfterInterruptedTerminalCompletion(false);
-        assertAdmissionReleasedAfterInterruptedTerminalCompletion(true);
+    void retainsUserAdmissionAfterTimeoutAndCancellationUntilPhysicalCallStops() throws Exception {
+        assertAdmissionRetainedUntilInterruptedPhysicalCallStops(false);
+        assertAdmissionRetainedUntilInterruptedPhysicalCallStops(true);
+    }
+
+    @Test
+    void queuedCancellationReleasesUserAdmissionImmediately() throws Exception {
+        CountDownLatch blockerStarted = new CountDownLatch(1);
+        CountDownLatch releaseBlocker = new CountDownLatch(1);
+        AtomicInteger ollamaCalls = new AtomicInteger();
+        FakeAdapter gemini = new FakeAdapter(ProviderId.GEMINI, request -> {
+            blockerStarted.countDown();
+            awaitUninterruptibly(releaseBlocker);
+            return result(request);
+        });
+        FakeAdapter ollama = new FakeAdapter(ProviderId.OLLAMA_CLOUD, request -> {
+            ollamaCalls.incrementAndGet();
+            return result(request);
+        });
+        try (AiRequestManager manager = manager(List.of(gemini, ollama), policy(1, 2), 1)) {
+            CompletableFuture<?> blocker = manager.execute(
+                    submission(USER_B, ProviderId.GEMINI, "blocker"),
+                    AiRequestPriority.INTERACTIVE_GENERATION);
+            assertThat(blockerStarted.await(2, TimeUnit.SECONDS)).isTrue();
+            CompletableFuture<?> queued = manager.execute(
+                    submission(USER_A, ProviderId.GEMINI, "queued"),
+                    AiRequestPriority.INTERACTIVE_GENERATION);
+
+            assertThat(queued.cancel(true)).isTrue();
+            manager.execute(
+                            submission(USER_A, ProviderId.OLLAMA_CLOUD, "after-queued-cancellation"),
+                            AiRequestPriority.INTERACTIVE_GENERATION)
+                    .get(2, TimeUnit.SECONDS);
+            assertThat(ollamaCalls).hasValue(1);
+
+            releaseBlocker.countDown();
+            blocker.get(2, TimeUnit.SECONDS);
+        }
     }
 
     @Test
@@ -290,6 +325,63 @@ class AiRequestManagerTests {
     }
 
     @Test
+    void concurrentSuccessDoesNotClearRateLimitCooldown() throws Exception {
+        CountDownLatch rateLimitedStarted = new CountDownLatch(1);
+        CountDownLatch successfulStarted = new CountDownLatch(1);
+        CountDownLatch releaseRateLimited = new CountDownLatch(1);
+        CountDownLatch releaseSuccessful = new CountDownLatch(1);
+        AtomicInteger calls = new AtomicInteger();
+        FakeAdapter adapter = new FakeAdapter(ProviderId.GEMINI, request -> {
+            calls.incrementAndGet();
+            if (request.target().modelId().equals("rate-limited")) {
+                rateLimitedStarted.countDown();
+                awaitUninterruptibly(releaseRateLimited);
+                throw new ProviderExecutionException(
+                        ProviderId.GEMINI,
+                        ProviderFailureType.RATE_LIMITED,
+                        Optional.of(Duration.ofMillis(300)));
+            }
+            if (request.target().modelId().equals("concurrent-success")) {
+                successfulStarted.countDown();
+                awaitUninterruptibly(releaseSuccessful);
+            }
+            return result(request);
+        });
+        AiRequestManagerPolicy oneAttempt = policy(
+                2, 2, Duration.ofSeconds(2), 1, 5, Duration.ofMillis(100));
+        try (AiRequestManager manager = manager(List.of(adapter), oneAttempt, 1)) {
+            CompletableFuture<?> rateLimited = manager.execute(
+                    submission(USER_A, ProviderId.GEMINI, "rate-limited"),
+                    AiRequestPriority.INTERACTIVE_GENERATION);
+            CompletableFuture<?> successful = manager.execute(
+                    submission(USER_B, ProviderId.GEMINI, "concurrent-success"),
+                    AiRequestPriority.INTERACTIVE_GENERATION);
+            assertThat(rateLimitedStarted.await(2, TimeUnit.SECONDS)).isTrue();
+            assertThat(successfulStarted.await(2, TimeUnit.SECONDS)).isTrue();
+
+            releaseRateLimited.countDown();
+            assertFailure(rateLimited, ProviderFailureType.RATE_LIMITED);
+            releaseSuccessful.countDown();
+            successful.get(2, TimeUnit.SECONDS);
+
+            assertFailure(
+                    manager.execute(
+                            submission(USER_A, ProviderId.GEMINI, "during-cooldown"),
+                            AiRequestPriority.INTERACTIVE_GENERATION),
+                    ProviderFailureType.RATE_LIMITED);
+            assertThat(calls).hasValue(2);
+            assertThat(manager.diagnostics().providers().get(ProviderId.GEMINI).queuedRequests()).isZero();
+
+            Thread.sleep(350);
+            manager.execute(
+                            submission(USER_A, ProviderId.GEMINI, "after-cooldown"),
+                            AiRequestPriority.INTERACTIVE_GENERATION)
+                    .get(2, TimeUnit.SECONDS);
+            assertThat(calls).hasValue(3);
+        }
+    }
+
+    @Test
     void opensCircuitFailsFastAndAllowsSingleRecoveryProbe() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         FakeAdapter adapter = new FakeAdapter(ProviderId.GEMINI, request -> {
@@ -338,14 +430,17 @@ class AiRequestManagerTests {
         AtomicInteger calls = new AtomicInteger();
         FakeAdapter adapter = new FakeAdapter(ProviderId.GEMINI, request -> {
             calls.incrementAndGet();
-            throw failure(ProviderId.GEMINI, ProviderFailureType.RATE_LIMITED);
+            throw new ProviderExecutionException(
+                    ProviderId.GEMINI,
+                    ProviderFailureType.RATE_LIMITED,
+                    Optional.of(Duration.ofMillis(200)));
         });
         AiRequestManagerPolicy policy = policy(1, 2, Duration.ofSeconds(2), 1, 1, Duration.ofMillis(80));
         try (AiRequestManager manager = manager(List.of(adapter), policy)) {
             assertFailure(submit(manager, ProviderId.GEMINI, "rate-limit-1"), ProviderFailureType.RATE_LIMITED);
             assertFailure(submit(manager, ProviderId.GEMINI, "rate-limit-2"), ProviderFailureType.RATE_LIMITED);
 
-            assertThat(calls).hasValue(2);
+            assertThat(calls).hasValue(1);
             assertThat(manager.diagnostics().providers().get(ProviderId.GEMINI).circuitState()).isEqualTo("CLOSED");
         }
     }
@@ -451,15 +546,21 @@ class AiRequestManagerTests {
         return manager.execute(submission(USER_A, providerId, modelId), AiRequestPriority.INTERACTIVE_GENERATION);
     }
 
-    private static void assertAdmissionReleasedAfterInterruptedTerminalCompletion(boolean cancel) throws Exception {
+    private static void assertAdmissionRetainedUntilInterruptedPhysicalCallStops(boolean cancel) throws Exception {
         CountDownLatch blockingStarted = new CountDownLatch(1);
         CountDownLatch releaseBlocking = new CountDownLatch(1);
+        CountDownLatch blockingFinished = new CountDownLatch(1);
+        AtomicInteger ollamaCalls = new AtomicInteger();
         FakeAdapter gemini = new FakeAdapter(ProviderId.GEMINI, request -> {
             blockingStarted.countDown();
             awaitUninterruptibly(releaseBlocking);
+            blockingFinished.countDown();
             return result(request);
         });
-        FakeAdapter ollama = new FakeAdapter(ProviderId.OLLAMA_CLOUD, AiRequestManagerTests::result);
+        FakeAdapter ollama = new FakeAdapter(ProviderId.OLLAMA_CLOUD, request -> {
+            ollamaCalls.incrementAndGet();
+            return result(request);
+        });
         AiRequestManagerPolicy policy = policy(
                 1, 2, Duration.ofMillis(120), 1, 5, Duration.ofMillis(100));
         try (AiRequestManager manager = manager(List.of(gemini, ollama), policy, 1)) {
@@ -473,11 +574,25 @@ class AiRequestManagerTests {
                 assertFailure(terminal, ProviderFailureType.TIMEOUT);
             }
 
+            assertFailure(
+                    manager.execute(
+                            submission(USER_A, ProviderId.OLLAMA_CLOUD, "same-user-while-physical-call-runs"),
+                            AiRequestPriority.INTERACTIVE_GENERATION),
+                    ProviderFailureType.RATE_LIMITED);
             manager.execute(
-                            submission(USER_A, ProviderId.OLLAMA_CLOUD, "after-terminal"),
+                            submission(USER_B, ProviderId.OLLAMA_CLOUD, "different-user"),
                             AiRequestPriority.INTERACTIVE_GENERATION)
                     .get(2, TimeUnit.SECONDS);
+            assertThat(ollamaCalls).hasValue(1);
+
             releaseBlocking.countDown();
+            assertThat(blockingFinished.await(2, TimeUnit.SECONDS)).isTrue();
+            awaitNoRunningRequests(manager, ProviderId.GEMINI);
+            manager.execute(
+                            submission(USER_A, ProviderId.OLLAMA_CLOUD, "same-user-after-physical-call"),
+                            AiRequestPriority.INTERACTIVE_GENERATION)
+                    .get(2, TimeUnit.SECONDS);
+            assertThat(ollamaCalls).hasValue(2);
         }
     }
 
@@ -561,6 +676,16 @@ class AiRequestManagerTests {
             }
         }
         if (interrupted) Thread.currentThread().interrupt();
+    }
+
+    private static void awaitNoRunningRequests(AiRequestManager manager, ProviderId providerId)
+            throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+        while (manager.diagnostics().providers().get(providerId).runningRequests() != 0
+                && System.nanoTime() < deadline) {
+            Thread.sleep(5);
+        }
+        assertThat(manager.diagnostics().providers().get(providerId).runningRequests()).isZero();
     }
 
     private static class FakeAdapter implements AiProviderAdapter {
