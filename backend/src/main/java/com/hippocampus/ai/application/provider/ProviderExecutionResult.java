@@ -10,7 +10,17 @@ public record ProviderExecutionResult(
         String modelId,
         String rawContent,
         ProviderUsage usage,
-        Duration latency) {
+        Duration latency,
+        int retryCount) {
+
+    public ProviderExecutionResult(
+            ProviderId providerId,
+            String modelId,
+            String rawContent,
+            ProviderUsage usage,
+            Duration latency) {
+        this(providerId, modelId, rawContent, usage, latency, 0);
+    }
 
     public ProviderExecutionResult {
         Objects.requireNonNull(providerId, "providerId must not be null");
@@ -25,5 +35,13 @@ public record ProviderExecutionResult(
         if (latency.isNegative()) {
             throw new IllegalArgumentException("latency must not be negative");
         }
+        if (retryCount < 0) {
+            throw new IllegalArgumentException("retryCount must not be negative");
+        }
+    }
+
+    public ProviderExecutionResult withRetryCount(int retries) {
+        return new ProviderExecutionResult(
+                providerId, modelId, rawContent, usage, latency, retries);
     }
 }

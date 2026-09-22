@@ -422,7 +422,8 @@ public final class AiRequestManager implements AutoCloseable {
 
     private <T> void complete(ManagedRequest<T> request, T value) {
         cancelTimeout(request);
-        if (request.result.complete(value)) {
+        T completedValue = withRetryCount(value, request.attempts - 1);
+        if (request.result.complete(completedValue)) {
             telemetry.completed(request.state.adapter.providerId(), request.request.taskType(), "success",
                     elapsed(request), request.attempts - 1);
         }
@@ -430,10 +431,21 @@ public final class AiRequestManager implements AutoCloseable {
 
     private void completeExceptionally(ManagedRequest<?> request, Throwable failure, String outcome) {
         cancelTimeout(request);
-        if (request.result.completeExceptionally(failure)) {
+        Throwable completedFailure = failure instanceof ProviderExecutionException providerFailure
+                ? providerFailure.withRetryCount(request.attempts - 1)
+                : failure;
+        if (request.result.completeExceptionally(completedFailure)) {
             telemetry.completed(request.state.adapter.providerId(), request.request.taskType(), outcome,
                     elapsed(request), request.attempts - 1);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T withRetryCount(T value, int retryCount) {
+        if (value instanceof ProviderExecutionResult providerResult) {
+            return (T) providerResult.withRetryCount(retryCount);
+        }
+        return value;
     }
 
     private static void cancelTimeout(ManagedRequest<?> request) {

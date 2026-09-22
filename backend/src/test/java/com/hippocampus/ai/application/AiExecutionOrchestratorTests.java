@@ -26,7 +26,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import com.hippocampus.ai.application.diagnostics.AiRequestDiagnostic;
+import com.hippocampus.ai.application.diagnostics.ProviderUsageDiagnostic;
 import com.hippocampus.ai.application.prompt.PromptContextBuilder;
 import com.hippocampus.ai.application.prompt.PromptId;
 import com.hippocampus.ai.application.prompt.PromptTemplateRegistry;
@@ -97,6 +100,77 @@ class AiExecutionOrchestratorTests {
         }
     }
 
+    @Test
+    void recordsSuccessfulPrimaryRequestWithProviderUsageMetadata() {
+        try (Harness harness = harness(sequence(validExplanation(List.of())))) {
+            join(harness.execute(request(List.of())));
+
+            assertThat(harness.diagnostics.records).hasSize(1);
+            RecordedDiagnostics recorded = harness.diagnostics.records.getFirst();
+            assertThat(recorded.request())
+                    .extracting(
+                            AiRequestDiagnostic::userId,
+                            AiRequestDiagnostic::taskType,
+                            AiRequestDiagnostic::promptId,
+                            AiRequestDiagnostic::promptVersion,
+                            AiRequestDiagnostic::provider,
+                            AiRequestDiagnostic::model,
+                            AiRequestDiagnostic::status,
+                            AiRequestDiagnostic::groundingMode,
+                            AiRequestDiagnostic::inputTokenCount,
+                            AiRequestDiagnostic::outputTokenCount,
+                            AiRequestDiagnostic::retryCount,
+                            AiRequestDiagnostic::errorCode)
+                    .containsExactly(
+                            USER_ID, "EXPLANATION", "EXPLANATION_V1", "1",
+                            "GEMINI", "gemini-primary", "SUCCESS", "GENERAL_KNOWLEDGE",
+                            40, 20, 0, null);
+            assertThat(recorded.request().latencyMs()).isEqualTo(25L);
+            assertThat(recorded.request().createdAt()).isNotNull();
+            assertThat(recorded.usage().requestCount()).isEqualTo(1);
+            assertThat(recorded.usage().inputTokens()).isEqualTo(40L);
+            assertThat(recorded.usage().outputTokens()).isEqualTo(20L);
+            assertThat(recorded.usage().estimatedCost()).isNull();
+            assertThat(recorded.usage().occurredAt()).isEqualTo(recorded.request().createdAt());
+        }
+    }
+
+    @Test
+    void recordsMissingProviderUsageAsNullWithoutEstimatingTokensOrCost() {
+        try (Harness harness = harness(request -> new ProviderExecutionResult(
+                request.target().providerId(),
+                request.target().modelId(),
+                validExplanation(List.of()),
+                ProviderUsage.NONE,
+                Duration.ofMillis(7)))) {
+            join(harness.execute(request(List.of())));
+
+            RecordedDiagnostics recorded = harness.diagnostics.records.getFirst();
+            assertThat(recorded.request().inputTokenCount()).isNull();
+            assertThat(recorded.request().outputTokenCount()).isNull();
+            assertThat(recorded.usage().inputTokens()).isNull();
+            assertThat(recorded.usage().outputTokens()).isNull();
+            assertThat(recorded.usage().estimatedCost()).isNull();
+        }
+    }
+
+    @Test
+    void recordsRequestManagerRetryCountWithoutCreatingGuessedUsage() {
+        AtomicInteger attempts = new AtomicInteger();
+        try (Harness harness = harnessWithMaximumAttempts(2, request -> {
+            if (attempts.getAndIncrement() == 0) {
+                throw new ProviderExecutionException(ProviderId.GEMINI, ProviderFailureType.TIMEOUT);
+            }
+            return providerResult(request, validExplanation(List.of()));
+        })) {
+            join(harness.execute(request(List.of())));
+
+            assertThat(attempts).hasValue(2);
+            assertThat(harness.diagnostics.records).hasSize(1);
+            assertThat(harness.diagnostics.records.getFirst().request().retryCount()).isEqualTo(1);
+        }
+    }
+
     @ParameterizedTest(name = "{0} primary failure invokes approved fallback")
     @MethodSource("fallbackEligibleProviderFailures")
     void eligiblePrimaryFailureInvokesFallback(ProviderFailureType failureType) {
@@ -111,6 +185,24 @@ class AiExecutionOrchestratorTests {
             assertThat(harness.fallbackAdapter.requests.getFirst().target())
                     .isEqualTo(new com.hippocampus.ai.application.routing.ProviderRoute.Target(
                             ProviderId.OLLAMA_CLOUD, "ollama-fallback"));
+            assertThat(harness.diagnostics.records)
+                    .extracting(record -> record.request().provider())
+                    .containsExactly("GEMINI", "OLLAMA_CLOUD");
+            assertThat(harness.diagnostics.records)
+                    .extracting(record -> record.request().status())
+                    .containsExactly("FAILED", "SUCCESS");
+        }
+    }
+
+    @Test
+    void providerInvocationRunsWithoutDatabaseTransactionBeforeDiagnosticsAreRecorded() {
+        try (Harness harness = harness(request -> {
+            assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+            return providerResult(request, validExplanation(List.of()));
+        })) {
+            join(harness.execute(request(List.of())));
+
+            assertThat(harness.diagnostics.records).hasSize(1);
         }
     }
 
@@ -123,7 +215,12 @@ class AiExecutionOrchestratorTests {
         })) {
             Throwable failure = catchThrowable(() -> join(harness.execute(request(List.of()))));
 
-            assertThat(failure).isSameAs(primaryFailure);
+            assertThat(failure)
+                    .isInstanceOfSatisfying(ProviderExecutionException.class, providerFailure -> {
+                        assertThat(providerFailure.providerId()).isEqualTo(primaryFailure.providerId());
+                        assertThat(providerFailure.failureType()).isEqualTo(primaryFailure.failureType());
+                        assertThat(providerFailure.retryCount()).isZero();
+                    });
             assertThat(harness.adapter.requests).hasSize(1);
         }
     }
@@ -194,6 +291,38 @@ class AiExecutionOrchestratorTests {
             assertThat(repair.taskType()).isEqualTo(AiTaskType.STRUCTURED_OUTPUT_REPAIR);
             assertThat(repair.target()).isEqualTo(fallback.target());
             assertThat(repair.outputContract()).isSameAs(fallback.outputContract());
+            assertThat(harness.diagnostics.records)
+                    .extracting(record -> List.of(
+                            record.request().provider(),
+                            record.request().taskType(),
+                            record.request().status(),
+                            String.valueOf(record.request().errorCode())))
+                    .containsExactly(
+                            List.of("GEMINI", "EXPLANATION", "FAILED", "QUOTA_EXHAUSTED"),
+                            List.of("OLLAMA_CLOUD", "EXPLANATION", "FAILED", "AI_SCHEMA_FAILURE"),
+                            List.of("OLLAMA_CLOUD", "STRUCTURED_OUTPUT_REPAIR", "SUCCESS", "null"));
+            assertThat(harness.diagnostics.records.get(1).request().promptId())
+                    .isEqualTo("EXPLANATION_V1");
+            assertThat(harness.diagnostics.records.get(2).request().promptId())
+                    .isEqualTo("STRUCTURED_OUTPUT_REPAIR_V1");
+        }
+    }
+
+    @Test
+    void diagnosticCarriersNeverReceivePromptSourceResponseOrProviderErrorContent() {
+        String privateSource = "private-source-content";
+        String malformedResponse = "private-malformed-response";
+        EvidenceChunk source = chunk(1, CHUNK_ID, privateSource);
+        try (Harness harness = harness(sequence(
+                malformedResponse,
+                validExplanation(List.of(CHUNK_ID.toString()))))) {
+            harness.repository.authorize(source);
+
+            join(harness.execute(request(List.of(source))));
+
+            assertThat(harness.diagnostics.records).hasSize(2);
+            assertThat(harness.diagnostics.records.toString())
+                    .doesNotContain(privateSource, malformedResponse, "secret", "api-key");
         }
     }
 
@@ -288,6 +417,14 @@ class AiExecutionOrchestratorTests {
             assertThat(repair.target().modelId()).isEqualTo("gemini-primary");
             assertThat(repair.outputContract()).isSameAs(original.outputContract());
             assertThat(repair.promptContext().includedSources()).isEmpty();
+            assertThat(harness.diagnostics.records)
+                    .extracting(record -> List.of(
+                            record.request().taskType(),
+                            record.request().promptId(),
+                            record.request().status()))
+                    .containsExactly(
+                            List.of("EXPLANATION", "EXPLANATION_V1", "FAILED"),
+                            List.of("STRUCTURED_OUTPUT_REPAIR", "STRUCTURED_OUTPUT_REPAIR_V1", "SUCCESS"));
         }
     }
 
@@ -449,6 +586,12 @@ class AiExecutionOrchestratorTests {
         return new Harness(primaryBehavior, fallbackBehavior);
     }
 
+    private static Harness harnessWithMaximumAttempts(
+            int maximumAttempts,
+            Function<ProviderExecutionRequest, ProviderExecutionResult> primaryBehavior) {
+        return new Harness(primaryBehavior, null, maximumAttempts);
+    }
+
     private static Function<ProviderExecutionRequest, ProviderExecutionResult> sequence(String... outputs) {
         AtomicInteger index = new AtomicInteger();
         return request -> providerResult(request, outputs[index.getAndIncrement()]);
@@ -559,12 +702,20 @@ class AiExecutionOrchestratorTests {
         private final StubProviderAdapter adapter;
         private final StubProviderAdapter fallbackAdapter;
         private final StubSourceReferenceRepository repository = new StubSourceReferenceRepository();
+        private final RecordingDiagnostics diagnostics = new RecordingDiagnostics();
         private final AiRequestManager manager;
         private final AiExecutionOrchestrator orchestrator;
 
         private Harness(
                 Function<ProviderExecutionRequest, ProviderExecutionResult> primaryBehavior,
                 Function<ProviderExecutionRequest, ProviderExecutionResult> fallbackBehavior) {
+            this(primaryBehavior, fallbackBehavior, 1);
+        }
+
+        private Harness(
+                Function<ProviderExecutionRequest, ProviderExecutionResult> primaryBehavior,
+                Function<ProviderExecutionRequest, ProviderExecutionResult> fallbackBehavior,
+                int maximumAttempts) {
             adapter = new StubProviderAdapter(ProviderId.GEMINI, primaryBehavior);
             fallbackAdapter = fallbackBehavior == null
                     ? null
@@ -573,7 +724,7 @@ class AiExecutionOrchestratorTests {
                     1,
                     10,
                     Duration.ofSeconds(5),
-                    1,
+                    maximumAttempts,
                     Duration.ofMillis(1),
                     Duration.ofMillis(1),
                     10,
@@ -594,7 +745,8 @@ class AiExecutionOrchestratorTests {
                     new ProviderRouter(),
                     manager,
                     new AiOutputValidator(new JacksonAiStructuredOutputDecoder()),
-                    new AiSourceReferenceValidator(currentUser, repository));
+                    new AiSourceReferenceValidator(currentUser, repository),
+                    diagnostics);
         }
 
         private CompletableFuture<ValidatedAiResult<?>> execute(AiTaskRequest<?> request) {
@@ -649,6 +801,20 @@ class AiExecutionOrchestratorTests {
             manager.close();
         }
     }
+
+    private static final class RecordingDiagnostics
+            implements com.hippocampus.ai.application.diagnostics.AiDiagnosticsPersistence {
+        private final List<RecordedDiagnostics> records = new CopyOnWriteArrayList<>();
+
+        @Override
+        public void record(AiRequestDiagnostic request, ProviderUsageDiagnostic usage) {
+            records.add(new RecordedDiagnostics(request, usage));
+        }
+    }
+
+    private record RecordedDiagnostics(
+            AiRequestDiagnostic request,
+            ProviderUsageDiagnostic usage) {}
 
     private static final class StubProviderAdapter implements AiProviderAdapter {
         private final ProviderId providerId;
