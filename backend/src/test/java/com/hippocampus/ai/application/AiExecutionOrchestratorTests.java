@@ -2,9 +2,11 @@ package com.hippocampus.ai.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.AbstractList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -95,6 +97,136 @@ class AiExecutionOrchestratorTests {
         }
     }
 
+    @ParameterizedTest(name = "{0} primary failure invokes approved fallback")
+    @MethodSource("fallbackEligibleProviderFailures")
+    void eligiblePrimaryFailureInvokesFallback(ProviderFailureType failureType) {
+        try (Harness harness = harness(
+                providerFailure(ProviderId.GEMINI, failureType),
+                sequence(validExplanation(List.of())))) {
+            ValidatedAiResult<?> result = join(harness.executeWithFallback(request(List.of())));
+
+            assertThat(result.result()).isInstanceOf(ExplanationResult.class);
+            assertThat(harness.adapter.requests).hasSize(1);
+            assertThat(harness.fallbackAdapter.requests).hasSize(1);
+            assertThat(harness.fallbackAdapter.requests.getFirst().target())
+                    .isEqualTo(new com.hippocampus.ai.application.routing.ProviderRoute.Target(
+                            ProviderId.OLLAMA_CLOUD, "ollama-fallback"));
+        }
+    }
+
+    @Test
+    void eligibleFailureWithoutFallbackReturnsOriginalNormalizedFailure() {
+        ProviderExecutionException primaryFailure = new ProviderExecutionException(
+                ProviderId.GEMINI, ProviderFailureType.PROVIDER_UNAVAILABLE);
+        try (Harness harness = harness(request -> {
+            throw primaryFailure;
+        })) {
+            Throwable failure = catchThrowable(() -> join(harness.execute(request(List.of()))));
+
+            assertThat(failure).isSameAs(primaryFailure);
+            assertThat(harness.adapter.requests).hasSize(1);
+        }
+    }
+
+    @ParameterizedTest(name = "{0} primary failure does not invoke fallback")
+    @MethodSource("fallbackIneligibleProviderFailures")
+    void ineligibleProviderFailureDoesNotInvokeFallback(ProviderFailureType failureType) {
+        try (Harness harness = harness(
+                providerFailure(ProviderId.GEMINI, failureType),
+                sequence(validExplanation(List.of())))) {
+            assertThatThrownBy(() -> join(harness.executeWithFallback(request(List.of()))))
+                    .isInstanceOfSatisfying(ProviderExecutionException.class,
+                            failure -> assertThat(failure.failureType()).isEqualTo(failureType));
+            assertThat(harness.adapter.requests).hasSize(1);
+            assertThat(harness.fallbackAdapter.requests).isEmpty();
+        }
+    }
+
+    @Test
+    void fallbackReusesExactCanonicalPromptAndTrimmedSourceBoundary() {
+        EvidenceChunk included = chunk(1, CHUNK_ID, "duplicate content");
+        EvidenceChunk trimmed = chunk(2, SECOND_CHUNK_ID, "duplicate content");
+        AiTaskRequest<ExplanationInput> originalRequest = request(List.of(included, trimmed));
+        try (Harness harness = harness(
+                providerFailure(ProviderId.GEMINI, ProviderFailureType.TIMEOUT),
+                sequence(validExplanation(List.of(CHUNK_ID.toString()))))) {
+            harness.repository.authorize(included);
+
+            join(harness.executeWithFallback(originalRequest));
+
+            ProviderExecutionRequest primary = harness.adapter.requests.getFirst();
+            ProviderExecutionRequest fallback = harness.fallbackAdapter.requests.getFirst();
+            assertThat(fallback.taskType()).isEqualTo(originalRequest.taskType());
+            assertThat(fallback.outputContract()).isSameAs(originalRequest.outputContract());
+            assertThat(fallback.promptContext()).isSameAs(primary.promptContext());
+            assertThat(fallback.promptContext().includedSources())
+                    .extracting(source -> source.chunkId())
+                    .containsExactly(CHUNK_ID)
+                    .doesNotContain(SECOND_CHUNK_ID);
+        }
+    }
+
+    @Test
+    void fallbackFabricatedReferenceFailsGroundingWithoutRepairOrFurtherFallback() {
+        EvidenceChunk source = chunk(1, CHUNK_ID, "source one");
+        try (Harness harness = harness(
+                providerFailure(ProviderId.GEMINI, ProviderFailureType.RATE_LIMITED),
+                sequence(validExplanation(List.of(FABRICATED_CHUNK_ID.toString()))))) {
+            assertGroundingFailure(harness.executeWithFallback(request(List.of(source))));
+
+            assertThat(harness.adapter.requests).hasSize(1);
+            assertThat(harness.fallbackAdapter.requests).hasSize(1);
+        }
+    }
+
+    @Test
+    void malformedFallbackResponseRepairsOnceOnFallbackProviderAndModel() {
+        try (Harness harness = harness(
+                providerFailure(ProviderId.GEMINI, ProviderFailureType.QUOTA_EXHAUSTED),
+                sequence("not json", validExplanation(List.of())))) {
+            ValidatedAiResult<?> result = join(harness.executeWithFallback(request(List.of())));
+
+            assertThat(result.result()).isInstanceOf(ExplanationResult.class);
+            assertThat(harness.adapter.requests).hasSize(1);
+            assertThat(harness.fallbackAdapter.requests).hasSize(2);
+            ProviderExecutionRequest fallback = harness.fallbackAdapter.requests.get(0);
+            ProviderExecutionRequest repair = harness.fallbackAdapter.requests.get(1);
+            assertThat(repair.taskType()).isEqualTo(AiTaskType.STRUCTURED_OUTPUT_REPAIR);
+            assertThat(repair.target()).isEqualTo(fallback.target());
+            assertThat(repair.outputContract()).isSameAs(fallback.outputContract());
+        }
+    }
+
+    @Test
+    void fallbackRepairFailureIsTerminalWithoutReturningToPrimary() {
+        try (Harness harness = harness(
+                providerFailure(ProviderId.GEMINI, ProviderFailureType.PROVIDER_UNAVAILABLE),
+                sequence("not json", "still not json"))) {
+            assertThatThrownBy(() -> join(harness.executeWithFallback(request(List.of()))))
+                    .isInstanceOf(AiSchemaValidationException.class);
+
+            assertThat(harness.adapter.requests).hasSize(1);
+            assertThat(harness.fallbackAdapter.requests).hasSize(2);
+        }
+    }
+
+    @Test
+    void providerRouteIsResolvedOnceForPrimaryAndFallbackExecution() {
+        try (Harness harness = harness(
+                providerFailure(ProviderId.GEMINI, ProviderFailureType.TIMEOUT),
+                sequence(validExplanation(List.of())))) {
+            CountingCandidateList candidates = harness.fallbackCandidates(request(List.of()));
+
+            join(harness.execute(request(List.of()), candidates));
+
+            // ProviderRouter streams once for null validation and once for eligibility/ranking.
+            // A second route invocation would therefore raise this count to four.
+            assertThat(candidates.streamCalls()).isEqualTo(2);
+            assertThat(harness.adapter.requests).hasSize(1);
+            assertThat(harness.fallbackAdapter.requests).hasSize(1);
+        }
+    }
+
     @ParameterizedTest(name = "{0} provider failure does not trigger schema repair")
     @MethodSource("nonRepairProviderFailures")
     void providerFailuresDoNotRepair(ProviderFailureType failureType) {
@@ -114,6 +246,25 @@ class AiExecutionOrchestratorTests {
         try (Harness harness = harness(sequence(validExplanation(List.of(FABRICATED_CHUNK_ID.toString()))))) {
             assertGroundingFailure(harness.execute(request(List.of(source))));
             assertThat(harness.adapter.requests).hasSize(1);
+        }
+    }
+
+    @Test
+    void schemaAndGroundingFailuresDoNotInvokeConfiguredFallback() {
+        EvidenceChunk source = chunk(1, CHUNK_ID, "source one");
+        try (Harness schemaHarness = harness(sequence("not json", "still invalid"),
+                sequence(validExplanation(List.of())));
+                Harness groundingHarness = harness(
+                        sequence(validExplanation(List.of(FABRICATED_CHUNK_ID.toString()))),
+                        sequence(validExplanation(List.of())))) {
+            assertThatThrownBy(() -> join(schemaHarness.executeWithFallback(request(List.of()))))
+                    .isInstanceOf(AiSchemaValidationException.class);
+            assertGroundingFailure(groundingHarness.executeWithFallback(request(List.of(source))));
+
+            assertThat(schemaHarness.adapter.requests).hasSize(2);
+            assertThat(schemaHarness.fallbackAdapter.requests).isEmpty();
+            assertThat(groundingHarness.adapter.requests).hasSize(1);
+            assertThat(groundingHarness.fallbackAdapter.requests).isEmpty();
         }
     }
 
@@ -225,8 +376,50 @@ class AiExecutionOrchestratorTests {
         }
     }
 
+    @Test
+    void cancellationBeforeFallbackPreventsFallbackExecution() throws Exception {
+        CountDownLatch providerStarted = new CountDownLatch(1);
+        try (Harness harness = harness(request -> {
+            providerStarted.countDown();
+            try {
+                new CountDownLatch(1).await();
+                throw new AssertionError("provider wait unexpectedly completed");
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new ProviderExecutionException(
+                        ProviderId.GEMINI, ProviderFailureType.PROVIDER_UNAVAILABLE);
+            }
+        }, sequence(validExplanation(List.of())))) {
+            CompletableFuture<ValidatedAiResult<?>> result = harness.executeWithFallback(request(List.of()));
+            assertThat(providerStarted.await(2, TimeUnit.SECONDS)).isTrue();
+
+            assertThat(result.cancel(true)).isTrue();
+
+            assertThat(result).isCancelled();
+            assertThat(harness.adapter.requests).hasSize(1);
+            assertThat(harness.fallbackAdapter.requests).isEmpty();
+        }
+    }
+
     private static Stream<Arguments> nonRepairProviderFailures() {
         return Stream.of(ProviderFailureType.values()).map(Arguments::of);
+    }
+
+    private static Stream<Arguments> fallbackEligibleProviderFailures() {
+        return Stream.of(
+                        ProviderFailureType.PROVIDER_UNAVAILABLE,
+                        ProviderFailureType.RATE_LIMITED,
+                        ProviderFailureType.QUOTA_EXHAUSTED,
+                        ProviderFailureType.TIMEOUT)
+                .map(Arguments::of);
+    }
+
+    private static Stream<Arguments> fallbackIneligibleProviderFailures() {
+        return Stream.of(
+                        ProviderFailureType.AUTHENTICATION_FAILURE,
+                        ProviderFailureType.UNSUPPORTED_TASK,
+                        ProviderFailureType.INVALID_RESPONSE)
+                .map(Arguments::of);
     }
 
     private static void assertGroundingFailure(CompletableFuture<ValidatedAiResult<?>> result) {
@@ -247,12 +440,25 @@ class AiExecutionOrchestratorTests {
     }
 
     private static Harness harness(Function<ProviderExecutionRequest, ProviderExecutionResult> behavior) {
-        return new Harness(behavior);
+        return new Harness(behavior, null);
+    }
+
+    private static Harness harness(
+            Function<ProviderExecutionRequest, ProviderExecutionResult> primaryBehavior,
+            Function<ProviderExecutionRequest, ProviderExecutionResult> fallbackBehavior) {
+        return new Harness(primaryBehavior, fallbackBehavior);
     }
 
     private static Function<ProviderExecutionRequest, ProviderExecutionResult> sequence(String... outputs) {
         AtomicInteger index = new AtomicInteger();
         return request -> providerResult(request, outputs[index.getAndIncrement()]);
+    }
+
+    private static Function<ProviderExecutionRequest, ProviderExecutionResult> providerFailure(
+            ProviderId providerId, ProviderFailureType failureType) {
+        return request -> {
+            throw new ProviderExecutionException(providerId, failureType);
+        };
     }
 
     private static AiTaskRequest<ExplanationInput> request(List<EvidenceChunk> chunks) {
@@ -351,12 +557,18 @@ class AiExecutionOrchestratorTests {
 
     private static final class Harness implements AutoCloseable {
         private final StubProviderAdapter adapter;
+        private final StubProviderAdapter fallbackAdapter;
         private final StubSourceReferenceRepository repository = new StubSourceReferenceRepository();
         private final AiRequestManager manager;
         private final AiExecutionOrchestrator orchestrator;
 
-        private Harness(Function<ProviderExecutionRequest, ProviderExecutionResult> behavior) {
-            adapter = new StubProviderAdapter(behavior);
+        private Harness(
+                Function<ProviderExecutionRequest, ProviderExecutionResult> primaryBehavior,
+                Function<ProviderExecutionRequest, ProviderExecutionResult> fallbackBehavior) {
+            adapter = new StubProviderAdapter(ProviderId.GEMINI, primaryBehavior);
+            fallbackAdapter = fallbackBehavior == null
+                    ? null
+                    : new StubProviderAdapter(ProviderId.OLLAMA_CLOUD, fallbackBehavior);
             AiRequestManagerPolicy policy = new AiRequestManagerPolicy(
                     1,
                     10,
@@ -368,7 +580,14 @@ class AiExecutionOrchestratorTests {
                     Duration.ofSeconds(1));
             Map<ProviderId, AiRequestManagerPolicy> policies = new EnumMap<>(ProviderId.class);
             policies.put(ProviderId.GEMINI, policy);
-            manager = new AiRequestManager(List.of(adapter), policies, 10, AiRequestTelemetry.NONE);
+            List<AiProviderAdapter> adapters;
+            if (fallbackAdapter == null) {
+                adapters = List.of(adapter);
+            } else {
+                adapters = List.of(adapter, fallbackAdapter);
+                policies.put(ProviderId.OLLAMA_CLOUD, policy);
+            }
+            manager = new AiRequestManager(adapters, policies, 10, AiRequestTelemetry.NONE);
             CurrentUser currentUser = () -> new AuthenticatedUser(USER_ID);
             orchestrator = new AiExecutionOrchestrator(
                     new PromptContextBuilder(new PromptTemplateRegistry(), String::length),
@@ -379,27 +598,50 @@ class AiExecutionOrchestratorTests {
         }
 
         private CompletableFuture<ValidatedAiResult<?>> execute(AiTaskRequest<?> request) {
-            Set<AiTaskType> supported = request.taskType() == AiTaskType.STRUCTURED_OUTPUT_REPAIR
-                    ? Set.of(AiTaskType.STRUCTURED_OUTPUT_REPAIR)
-                    : Set.of(request.taskType(), AiTaskType.STRUCTURED_OUTPUT_REPAIR);
-            ProviderRoutingCandidate candidate = new ProviderRoutingCandidate(
-                    ProviderId.GEMINI,
-                    "gemini-primary",
-                    supported,
-                    supported,
-                    true,
-                    true,
-                    true,
-                    1,
-                    1,
-                    1);
+            return execute(request, List.of(candidate(
+                    request, ProviderId.GEMINI, "gemini-primary", 1)));
+        }
+
+        private CompletableFuture<ValidatedAiResult<?>> executeWithFallback(AiTaskRequest<?> request) {
+            return execute(request, fallbackCandidates(request));
+        }
+
+        private CountingCandidateList fallbackCandidates(AiTaskRequest<?> request) {
+            return new CountingCandidateList(List.of(
+                    candidate(request, ProviderId.GEMINI, "gemini-primary", 1),
+                    candidate(request, ProviderId.OLLAMA_CLOUD, "ollama-fallback", 2)));
+        }
+
+        private CompletableFuture<ValidatedAiResult<?>> execute(
+                AiTaskRequest<?> request, List<ProviderRoutingCandidate> candidates) {
             return orchestrator.execute(
                     request,
                     USER_ID,
                     AiRequestPriority.INTERACTIVE_EXPLANATION,
                     TOKEN_BUDGET,
-                    List.of(candidate),
+                    candidates,
                     ProviderRoutingPreference.LATENCY_THEN_COST);
+        }
+
+        private static ProviderRoutingCandidate candidate(
+                AiTaskRequest<?> request,
+                ProviderId providerId,
+                String modelId,
+                int rank) {
+            Set<AiTaskType> supported = request.taskType() == AiTaskType.STRUCTURED_OUTPUT_REPAIR
+                    ? Set.of(AiTaskType.STRUCTURED_OUTPUT_REPAIR)
+                    : Set.of(request.taskType(), AiTaskType.STRUCTURED_OUTPUT_REPAIR);
+            return new ProviderRoutingCandidate(
+                    providerId,
+                    modelId,
+                    supported,
+                    supported,
+                    true,
+                    true,
+                    true,
+                    rank,
+                    rank,
+                    rank);
         }
 
         @Override
@@ -409,16 +651,20 @@ class AiExecutionOrchestratorTests {
     }
 
     private static final class StubProviderAdapter implements AiProviderAdapter {
+        private final ProviderId providerId;
         private final Function<ProviderExecutionRequest, ProviderExecutionResult> behavior;
         private final List<ProviderExecutionRequest> requests = new CopyOnWriteArrayList<>();
 
-        private StubProviderAdapter(Function<ProviderExecutionRequest, ProviderExecutionResult> behavior) {
+        private StubProviderAdapter(
+                ProviderId providerId,
+                Function<ProviderExecutionRequest, ProviderExecutionResult> behavior) {
+            this.providerId = providerId;
             this.behavior = behavior;
         }
 
         @Override
         public ProviderId providerId() {
-            return ProviderId.GEMINI;
+            return providerId;
         }
 
         @Override
@@ -435,6 +681,35 @@ class AiExecutionOrchestratorTests {
         @Override
         public ProviderEventStream stream(ProviderExecutionRequest request) {
             throw new UnsupportedOperationException("streaming is outside P5-10");
+        }
+    }
+
+    private static final class CountingCandidateList extends AbstractList<ProviderRoutingCandidate> {
+        private final List<ProviderRoutingCandidate> delegate;
+        private final AtomicInteger streamCalls = new AtomicInteger();
+
+        private CountingCandidateList(List<ProviderRoutingCandidate> delegate) {
+            this.delegate = List.copyOf(delegate);
+        }
+
+        @Override
+        public ProviderRoutingCandidate get(int index) {
+            return delegate.get(index);
+        }
+
+        @Override
+        public int size() {
+            return delegate.size();
+        }
+
+        @Override
+        public Stream<ProviderRoutingCandidate> stream() {
+            streamCalls.incrementAndGet();
+            return delegate.stream();
+        }
+
+        private int streamCalls() {
+            return streamCalls.get();
         }
     }
 

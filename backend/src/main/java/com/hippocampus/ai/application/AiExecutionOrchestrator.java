@@ -2,6 +2,7 @@ package com.hippocampus.ai.application;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -12,8 +13,10 @@ import com.hippocampus.ai.application.prompt.PromptContext;
 import com.hippocampus.ai.application.prompt.PromptContextBuilder;
 import com.hippocampus.ai.application.prompt.PromptId;
 import com.hippocampus.ai.application.prompt.PromptTokenBudget;
+import com.hippocampus.ai.application.provider.ProviderExecutionException;
 import com.hippocampus.ai.application.provider.ProviderExecutionRequest;
 import com.hippocampus.ai.application.provider.ProviderExecutionResult;
+import com.hippocampus.ai.application.provider.ProviderFailureType;
 import com.hippocampus.ai.application.request.AiRequestManager;
 import com.hippocampus.ai.application.request.AiRequestPriority;
 import com.hippocampus.ai.application.request.AiRequestSubmission;
@@ -71,10 +74,7 @@ public final class AiExecutionOrchestrator {
         Objects.requireNonNull(routingPreference, "routingPreference must not be null");
 
         PromptContext originalPrompt = promptContextBuilder.build(request, tokenBudget);
-        ProviderRoute.Target primary = providerRouter
-                .route(request, routingCandidates, routingPreference)
-                .primary();
-        ProviderExecutionRequest providerRequest = providerRequest(request, originalPrompt, primary);
+        ProviderRoute route = providerRouter.route(request, routingCandidates, routingPreference);
 
         CompletableFuture<ValidatedAiResult<?>> outcome = new CompletableFuture<>();
         AtomicReference<CompletableFuture<?>> activeExecution = new AtomicReference<>();
@@ -87,12 +87,56 @@ public final class AiExecutionOrchestrator {
             }
         });
 
-        CompletableFuture<ProviderExecutionResult> initial = requestManager.execute(
+        startGeneration(
+                request,
+                originalPrompt,
+                route.primary(),
+                route.fallback(),
+                authenticatedUserId,
+                priority,
+                tokenBudget,
+                activeExecution,
+                outcome);
+        return outcome;
+    }
+
+    private void startGeneration(
+            AiTaskRequest<?> request,
+            PromptContext originalPrompt,
+            ProviderRoute.Target target,
+            Optional<ProviderRoute.Target> fallback,
+            UUID authenticatedUserId,
+            AiRequestPriority priority,
+            PromptTokenBudget tokenBudget,
+            AtomicReference<CompletableFuture<?>> activeExecution,
+            CompletableFuture<ValidatedAiResult<?>> outcome) {
+        if (outcome.isCancelled()) {
+            return;
+        }
+
+        ProviderExecutionRequest providerRequest = providerRequest(request, originalPrompt, target);
+        CompletableFuture<ProviderExecutionResult> generation = requestManager.execute(
                 new AiRequestSubmission(authenticatedUserId, providerRequest), priority);
-        track(activeExecution, outcome, initial);
-        initial.whenComplete((providerResult, failure) -> {
+        track(activeExecution, outcome, generation);
+        generation.whenComplete((providerResult, failure) -> {
             if (failure != null) {
-                completeFailure(outcome, failure);
+                Throwable normalized = normalize(failure);
+                if (!outcome.isCancelled()
+                        && fallback.isPresent()
+                        && isFallbackEligible(normalized)) {
+                    startGeneration(
+                            request,
+                            originalPrompt,
+                            fallback.orElseThrow(),
+                            Optional.empty(),
+                            authenticatedUserId,
+                            priority,
+                            tokenBudget,
+                            activeExecution,
+                            outcome);
+                } else {
+                    completeFailure(outcome, normalized);
+                }
                 return;
             }
             if (outcome.isCancelled()) {
@@ -109,7 +153,7 @@ public final class AiExecutionOrchestrator {
                     startRepair(
                             request,
                             originalPrompt,
-                            primary,
+                            target,
                             providerResult.rawContent(),
                             authenticatedUserId,
                             priority,
@@ -123,7 +167,6 @@ public final class AiExecutionOrchestrator {
                 outcome.completeExceptionally(validationFailure);
             }
         });
-        return outcome;
     }
 
     private void startRepair(
@@ -204,13 +247,27 @@ public final class AiExecutionOrchestrator {
 
     private static void completeFailure(
             CompletableFuture<ValidatedAiResult<?>> outcome, Throwable failure) {
-        Throwable normalized = failure instanceof CompletionException completion
-                ? completion.getCause()
-                : failure;
+        Throwable normalized = normalize(failure);
         if (normalized instanceof CancellationException) {
             outcome.cancel(false);
         } else {
             outcome.completeExceptionally(normalized);
         }
+    }
+
+    private static boolean isFallbackEligible(Throwable failure) {
+        if (!(failure instanceof ProviderExecutionException providerFailure)) {
+            return false;
+        }
+        return switch (providerFailure.failureType()) {
+            case PROVIDER_UNAVAILABLE, RATE_LIMITED, QUOTA_EXHAUSTED, TIMEOUT -> true;
+            case INVALID_RESPONSE, AUTHENTICATION_FAILURE, UNSUPPORTED_TASK -> false;
+        };
+    }
+
+    private static Throwable normalize(Throwable failure) {
+        return failure instanceof CompletionException completion && completion.getCause() != null
+                ? completion.getCause()
+                : failure;
     }
 }
