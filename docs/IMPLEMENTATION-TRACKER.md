@@ -1445,7 +1445,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Bound concurrency and provider pressure.
 - **Build:** Add per-provider concurrency gates, queue, timeouts, Retry-After/backoff, cancellation and circuit-breaker-like state.
 - **How it works:** Interactive tasks get higher priority than background AI.
@@ -1454,8 +1454,8 @@ responsibilities remain outside P5-06.
 - **Expected result:** Provider overload degrades predictably without flooding.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 10,19,24
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Implemented an application-owned AI Request Manager around the existing pre-routed provider-adapter execution boundary. Gemini and Ollama Cloud have isolated configurable concurrency gates, bounded priority queues with FIFO behavior inside each priority, finite request deadlines, explicit cancellation, bounded retry/backoff for normalized transient availability failures, normalized `Retry-After` propagation and provider-local cooldown, and circuit open/half-open recovery behavior without cross-provider fallback. Logical timeout or cancellation interrupts provider work where possible but retains both physical capacity and provider-global logical admission until the invocation actually ends. Provider logical outstanding work is bounded by maximum concurrency plus maximum queued requests across running, queued, retry-waiting, and still-physical logically completed requests; internal retries reuse the original admission. HALF_OPEN recovery is owned by the exact designated probe request, so stale executions cannot close or reopen the recovery circuit. Externally influenced `Retry-After` parsing, cooldown calculation, deadline comparison, and scheduling use overflow-safe saturating behavior. Streaming uses the same managed capacity and is not retried after content delivery. Added low-cardinality Micrometer diagnostics and an in-memory provider-state snapshot without prompt, source, student-response, credential, raw-error, or user-identifier data. The SEC-001, SEC-002, and SEC-003 findings from the first independent security review were remediated. Focused agent validation passed on 2026-09-22: 24 `AiRequestManagerTests`, 11 `GeminiProviderAdapterTests`, and 14 `OllamaCloudProviderAdapterTests` completed successfully, for 49 tests with 0 failures, 0 errors, and 0 skipped; `git diff --check` passed. Refreshed user validation passed on 2026-09-22: the full Maven test run completed 1,080 tests with 0 failures, 0 errors, and 13 skipped; `node scripts/validation/validate.mjs backend` passed `backend-clean-verify` and `git-diff-check`. The expected bounded-pressure behavior and tracker test/Definition-of-Done requirements are demonstrated. No dependency, persistence, API/controller, Learning Engine, Study Mission, frontend, fallback, output-validation, source-validation, structured-repair, or persisted-diagnostics work was introduced; P5-08+ remain unchanged. No ADR, new infrastructure, or known undocumented architecture deviation is required. External general implementation review and a fresh mandatory independent security review remain pending before `Done`.
+- **Notes / blockers:** No current implementation blocker. External general review and a fresh independent security gate are pending.
 
 ## P5-08 — Implement output schema validation
 

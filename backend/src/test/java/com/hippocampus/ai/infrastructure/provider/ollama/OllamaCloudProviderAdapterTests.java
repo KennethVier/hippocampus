@@ -12,6 +12,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -122,6 +123,64 @@ class OllamaCloudProviderAdapterTests {
         assertHttpFailure(403, ProviderFailureType.AUTHENTICATION_FAILURE);
         assertHttpFailure(429, ProviderFailureType.RATE_LIMITED);
         assertHttpFailure(503, ProviderFailureType.PROVIDER_UNAVAILABLE);
+    }
+
+    @Test
+    void preservesNormalizedRetryAfterWithoutLeakingProviderDetails() {
+        Fixture fixture = fixture();
+        fixture.server().expect(requestTo("https://ollama.com/api/chat"))
+                .andRespond(withRawStatus(429)
+                        .header(HttpHeaders.RETRY_AFTER, "9")
+                        .body("raw-provider-body " + SECRET)
+                        .contentType(MediaType.TEXT_PLAIN));
+
+        assertThatThrownBy(() -> fixture.adapter().execute(request(ProviderId.OLLAMA_CLOUD, "cloud-selected")))
+                .isInstanceOfSatisfying(ProviderExecutionException.class, failure -> {
+                    assertThat(failure.failureType()).isEqualTo(ProviderFailureType.RATE_LIMITED);
+                    assertThat(failure.retryAfter()).contains(Duration.ofSeconds(9));
+                    assertThat(failure).hasNoCause();
+                    assertThat(failure.getMessage()).doesNotContain(SECRET, "raw-provider-body");
+                });
+        fixture.server().verify();
+    }
+
+    @Test
+    void saturatesExtremelyLargeRetryAfterDeltaWithoutLeakingProviderDetails() {
+        Fixture fixture = fixture();
+        fixture.server().expect(requestTo("https://ollama.com/api/chat"))
+                .andRespond(withRawStatus(429)
+                        .header(HttpHeaders.RETRY_AFTER, "999999999999999999999999999999999999999")
+                        .body("raw-provider-body " + SECRET)
+                        .contentType(MediaType.TEXT_PLAIN));
+
+        assertThatThrownBy(() -> fixture.adapter().execute(request(ProviderId.OLLAMA_CLOUD, "cloud-selected")))
+                .isInstanceOfSatisfying(ProviderExecutionException.class, failure -> {
+                    assertThat(failure.failureType()).isEqualTo(ProviderFailureType.RATE_LIMITED);
+                    assertThat(failure.retryAfter()).contains(Duration.ofSeconds(Long.MAX_VALUE));
+                    assertThat(failure).hasNoCause();
+                    assertThat(failure.getMessage()).doesNotContain(SECRET, "raw-provider-body");
+                });
+        fixture.server().verify();
+    }
+
+    @Test
+    void normalizesFarFutureRetryAfterDateWithoutLeakingProviderDetails() {
+        Fixture fixture = fixture();
+        fixture.server().expect(requestTo("https://ollama.com/api/chat"))
+                .andRespond(withRawStatus(429)
+                        .header(HttpHeaders.RETRY_AFTER, "Fri, 31 Dec 9999 23:59:59 GMT")
+                        .body("raw-provider-body " + SECRET)
+                        .contentType(MediaType.TEXT_PLAIN));
+
+        assertThatThrownBy(() -> fixture.adapter().execute(request(ProviderId.OLLAMA_CLOUD, "cloud-selected")))
+                .isInstanceOfSatisfying(ProviderExecutionException.class, failure -> {
+                    assertThat(failure.failureType()).isEqualTo(ProviderFailureType.RATE_LIMITED);
+                    assertThat(failure.retryAfter()).hasValueSatisfying(
+                            duration -> assertThat(duration).isGreaterThan(Duration.ofDays(365_000)));
+                    assertThat(failure).hasNoCause();
+                    assertThat(failure.getMessage()).doesNotContain(SECRET, "raw-provider-body");
+                });
+        fixture.server().verify();
     }
 
     @Test

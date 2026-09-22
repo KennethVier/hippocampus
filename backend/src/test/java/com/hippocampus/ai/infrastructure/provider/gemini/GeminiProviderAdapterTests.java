@@ -10,6 +10,8 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 
 import com.google.genai.errors.ClientException;
@@ -27,6 +29,9 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.google.genai.GoogleGenAiChatOptions;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpClientErrorException;
 
 import com.hippocampus.ai.application.provider.ProviderExecutionException;
 import com.hippocampus.ai.application.provider.ProviderExecutionResult;
@@ -172,6 +177,73 @@ class GeminiProviderAdapterTests {
                 ProviderFailureType.PROVIDER_UNAVAILABLE);
         assertSdkFailure(new IllegalStateException("wrapper", new SocketTimeoutException("student-task-secret-marker")),
                 ProviderFailureType.TIMEOUT);
+    }
+
+    @Test
+    void preservesNormalizedRetryAfterWithoutLeakingProviderDetails() {
+        ChatModel chatModel = mock(ChatModel.class);
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.RETRY_AFTER, "7");
+        when(chatModel.call(any(Prompt.class))).thenThrow(HttpClientErrorException.create(
+                HttpStatus.TOO_MANY_REQUESTS,
+                "raw-provider-status",
+                headers,
+                "api-key-secret raw-provider-body".getBytes(StandardCharsets.UTF_8),
+                StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> new GeminiProviderAdapter(chatModel)
+                        .execute(request(ProviderId.GEMINI, "gemini-selected")))
+                .isInstanceOfSatisfying(ProviderExecutionException.class, failure -> {
+                    assertThat(failure.failureType()).isEqualTo(ProviderFailureType.RATE_LIMITED);
+                    assertThat(failure.retryAfter()).contains(Duration.ofSeconds(7));
+                    assertThat(failure).hasNoCause();
+                    assertThat(failure.getMessage()).doesNotContain("api-key-secret", "raw-provider-body");
+                });
+    }
+
+    @Test
+    void saturatesExtremelyLargeRetryAfterDeltaWithoutLeakingProviderDetails() {
+        ChatModel chatModel = mock(ChatModel.class);
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.RETRY_AFTER, "999999999999999999999999999999999999999");
+        when(chatModel.call(any(Prompt.class))).thenThrow(HttpClientErrorException.create(
+                HttpStatus.TOO_MANY_REQUESTS,
+                "raw-provider-status",
+                headers,
+                "api-key-secret raw-provider-body".getBytes(StandardCharsets.UTF_8),
+                StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> new GeminiProviderAdapter(chatModel)
+                        .execute(request(ProviderId.GEMINI, "gemini-selected")))
+                .isInstanceOfSatisfying(ProviderExecutionException.class, failure -> {
+                    assertThat(failure.failureType()).isEqualTo(ProviderFailureType.RATE_LIMITED);
+                    assertThat(failure.retryAfter()).contains(Duration.ofSeconds(Long.MAX_VALUE));
+                    assertThat(failure).hasNoCause();
+                    assertThat(failure.getMessage()).doesNotContain("api-key-secret", "raw-provider-body");
+                });
+    }
+
+    @Test
+    void normalizesFarFutureRetryAfterDateWithoutLeakingProviderDetails() {
+        ChatModel chatModel = mock(ChatModel.class);
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.RETRY_AFTER, "Fri, 31 Dec 9999 23:59:59 GMT");
+        when(chatModel.call(any(Prompt.class))).thenThrow(HttpClientErrorException.create(
+                HttpStatus.TOO_MANY_REQUESTS,
+                "raw-provider-status",
+                headers,
+                "api-key-secret raw-provider-body".getBytes(StandardCharsets.UTF_8),
+                StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> new GeminiProviderAdapter(chatModel)
+                        .execute(request(ProviderId.GEMINI, "gemini-selected")))
+                .isInstanceOfSatisfying(ProviderExecutionException.class, failure -> {
+                    assertThat(failure.failureType()).isEqualTo(ProviderFailureType.RATE_LIMITED);
+                    assertThat(failure.retryAfter()).hasValueSatisfying(
+                            duration -> assertThat(duration).isGreaterThan(Duration.ofDays(365_000)));
+                    assertThat(failure).hasNoCause();
+                    assertThat(failure.getMessage()).doesNotContain("api-key-secret", "raw-provider-body");
+                });
     }
 
     @Test

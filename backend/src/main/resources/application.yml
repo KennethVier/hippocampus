@@ -15,6 +15,26 @@ spring:
 
 hippocampus:
   ai:
+    request-manager:
+      maximum-outstanding-requests-per-user: ${HIPPOCAMPUS_AI_MAXIMUM_OUTSTANDING_REQUESTS_PER_USER:4}
+      gemini:
+        maximum-concurrency: ${HIPPOCAMPUS_GEMINI_MAXIMUM_CONCURRENCY:2}
+        maximum-queued-requests: ${HIPPOCAMPUS_GEMINI_MAXIMUM_QUEUED_REQUESTS:32}
+        request-timeout: ${HIPPOCAMPUS_GEMINI_REQUEST_TIMEOUT:PT45S}
+        maximum-attempts: ${HIPPOCAMPUS_GEMINI_MAXIMUM_ATTEMPTS:3}
+        initial-retry-delay: ${HIPPOCAMPUS_GEMINI_INITIAL_RETRY_DELAY:PT0.25S}
+        maximum-retry-delay: ${HIPPOCAMPUS_GEMINI_MAXIMUM_RETRY_DELAY:PT2S}
+        circuit-failure-threshold: ${HIPPOCAMPUS_GEMINI_CIRCUIT_FAILURE_THRESHOLD:3}
+        circuit-open-duration: ${HIPPOCAMPUS_GEMINI_CIRCUIT_OPEN_DURATION:PT15S}
+      ollama-cloud:
+        maximum-concurrency: ${HIPPOCAMPUS_OLLAMA_CLOUD_MAXIMUM_CONCURRENCY:2}
+        maximum-queued-requests: ${HIPPOCAMPUS_OLLAMA_CLOUD_MAXIMUM_QUEUED_REQUESTS:32}
+        request-timeout: ${HIPPOCAMPUS_OLLAMA_CLOUD_REQUEST_TIMEOUT:PT45S}
+        maximum-attempts: ${HIPPOCAMPUS_OLLAMA_CLOUD_MAXIMUM_ATTEMPTS:3}
+        initial-retry-delay: ${HIPPOCAMPUS_OLLAMA_CLOUD_INITIAL_RETRY_DELAY:PT0.25S}
+        maximum-retry-delay: ${HIPPOCAMPUS_OLLAMA_CLOUD_MAXIMUM_RETRY_DELAY:PT2S}
+        circuit-failure-threshold: ${HIPPOCAMPUS_OLLAMA_CLOUD_CIRCUIT_FAILURE_THRESHOLD:3}
+        circuit-open-duration: ${HIPPOCAMPUS_OLLAMA_CLOUD_CIRCUIT_OPEN_DURATION:PT15S}
     providers:
       gemini:
         enabled: ${HIPPOCAMPUS_GEMINI_AI_ENABLED:false}
