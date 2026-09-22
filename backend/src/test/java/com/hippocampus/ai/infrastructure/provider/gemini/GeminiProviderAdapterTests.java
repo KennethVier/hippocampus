@@ -169,6 +169,8 @@ class GeminiProviderAdapterTests {
                 ProviderFailureType.AUTHENTICATION_FAILURE);
         assertSdkFailure(new ClientException(403, "PERMISSION_DENIED", "student-task-secret-marker"),
                 ProviderFailureType.AUTHENTICATION_FAILURE);
+        assertSdkFailure(new ClientException(402, "PAYMENT_REQUIRED", "quota exhausted raw-provider-body"),
+                ProviderFailureType.QUOTA_EXHAUSTED);
         assertSdkFailure(new ClientException(429, "RESOURCE_EXHAUSTED", "raw-provider-body"),
                 ProviderFailureType.RATE_LIMITED);
         assertSdkFailure(new ClientException(400, "INVALID_ARGUMENT", "system-policy-secret-marker"),
