@@ -4,8 +4,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import com.hippocampus.ai.application.validation.AiOutputValidator;
+import com.hippocampus.ai.application.validation.AiSourceReferenceValidator;
 import com.hippocampus.ai.infrastructure.validation.JacksonAiStructuredOutputDecoder;
 import com.hippocampus.ai.port.AiStructuredOutputDecoder;
+import com.hippocampus.identity.port.CurrentUser;
+import com.hippocampus.materials.port.SourceReferenceRepository;
 
 @Configuration(proxyBeanMethods = false)
 public class AiOutputValidationConfiguration {
@@ -18,5 +21,11 @@ public class AiOutputValidationConfiguration {
     @Bean
     AiOutputValidator aiOutputValidator(AiStructuredOutputDecoder decoder) {
         return new AiOutputValidator(decoder);
+    }
+
+    @Bean
+    AiSourceReferenceValidator aiSourceReferenceValidator(
+            CurrentUser currentUser, SourceReferenceRepository sourceReferences) {
+        return new AiSourceReferenceValidator(currentUser, sourceReferences);
     }
 }
