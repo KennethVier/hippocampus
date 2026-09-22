@@ -8,10 +8,14 @@ import com.hippocampus.ai.application.request.AiRequestManagerPolicy;
 
 @ConfigurationProperties("hippocampus.ai.request-manager")
 public record AiRequestManagerProperties(
+        int maximumOutstandingRequestsPerUser,
         ProviderPolicy gemini,
         ProviderPolicy ollamaCloud) {
 
     public AiRequestManagerProperties {
+        if (maximumOutstandingRequestsPerUser < 1) {
+            throw new IllegalArgumentException("maximumOutstandingRequestsPerUser must be positive");
+        }
         if (gemini == null) throw new IllegalArgumentException("Gemini request-manager policy is required");
         if (ollamaCloud == null) throw new IllegalArgumentException("Ollama Cloud request-manager policy is required");
     }

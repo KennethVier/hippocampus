@@ -10,6 +10,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -34,6 +35,8 @@ import com.hippocampus.ai.application.routing.ProviderId;
 import com.hippocampus.ai.domain.AiTaskType;
 
 class AiRequestManagerTests {
+    private static final UUID USER_A = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID USER_B = UUID.fromString("00000000-0000-0000-0000-000000000002");
 
     @Test
     void boundsEachProviderIndependently() throws Exception {
@@ -75,16 +78,16 @@ class AiRequestManagerTests {
             return result(request);
         });
         try (AiRequestManager manager = manager(List.of(adapter), policy(1, 5))) {
-            CompletableFuture<?> blocker = manager.execute(request(ProviderId.GEMINI, "blocker"), AiRequestPriority.BACKGROUND_AI);
+            CompletableFuture<?> blocker = manager.execute(submission(USER_A, ProviderId.GEMINI, "blocker"), AiRequestPriority.BACKGROUND_AI);
             assertThat(firstStarted.await(2, TimeUnit.SECONDS)).isTrue();
-            CompletableFuture<?> background = manager.execute(request(ProviderId.GEMINI, "background"), AiRequestPriority.BACKGROUND_AI);
-            CompletableFuture<?> generation = manager.execute(request(ProviderId.GEMINI, "generation"), AiRequestPriority.INTERACTIVE_GENERATION);
-            CompletableFuture<?> explanationOne = manager.execute(request(ProviderId.GEMINI, "explanation-1"), AiRequestPriority.INTERACTIVE_EXPLANATION);
-            CompletableFuture<?> explanationTwo = manager.execute(request(ProviderId.GEMINI, "explanation-2"), AiRequestPriority.INTERACTIVE_EXPLANATION);
-            CompletableFuture<?> evaluation = manager.execute(request(ProviderId.GEMINI, "evaluation"), AiRequestPriority.INTERACTIVE_EVALUATION);
+            CompletableFuture<?> background = manager.execute(submission(USER_A, ProviderId.GEMINI, "background"), AiRequestPriority.BACKGROUND_AI);
+            CompletableFuture<?> generation = manager.execute(submission(USER_A, ProviderId.GEMINI, "generation"), AiRequestPriority.INTERACTIVE_GENERATION);
+            CompletableFuture<?> explanationOne = manager.execute(submission(USER_A, ProviderId.GEMINI, "explanation-1"), AiRequestPriority.INTERACTIVE_EXPLANATION);
+            CompletableFuture<?> explanationTwo = manager.execute(submission(USER_A, ProviderId.GEMINI, "explanation-2"), AiRequestPriority.INTERACTIVE_EXPLANATION);
+            CompletableFuture<?> evaluation = manager.execute(submission(USER_A, ProviderId.GEMINI, "evaluation"), AiRequestPriority.INTERACTIVE_EVALUATION);
 
             CompletableFuture<?> rejected = manager.execute(
-                    request(ProviderId.GEMINI, "queue-overflow"), AiRequestPriority.MISSION_PREPARATION);
+                    submission(USER_A, ProviderId.GEMINI, "queue-overflow"), AiRequestPriority.MISSION_PREPARATION);
             assertFailure(rejected, ProviderFailureType.PROVIDER_UNAVAILABLE);
 
             releaseFirst.countDown();
@@ -103,11 +106,11 @@ class AiRequestManagerTests {
         FakeAdapter adapter = blockingFirstAdapter(firstStarted, releaseFirst, secondStarted);
         AiRequestManagerPolicy timeoutPolicy = policy(1, 2, Duration.ofMillis(150), 1, 5, Duration.ofMillis(50));
         try (AiRequestManager manager = manager(List.of(adapter), timeoutPolicy)) {
-            CompletableFuture<?> first = manager.execute(request(ProviderId.GEMINI, "first"), AiRequestPriority.INTERACTIVE_GENERATION);
+            CompletableFuture<?> first = manager.execute(submission(USER_A, ProviderId.GEMINI, "first"), AiRequestPriority.INTERACTIVE_GENERATION);
             assertThat(firstStarted.await(2, TimeUnit.SECONDS)).isTrue();
             assertFailure(first, ProviderFailureType.TIMEOUT);
 
-            CompletableFuture<?> second = manager.execute(request(ProviderId.GEMINI, "second"), AiRequestPriority.INTERACTIVE_GENERATION);
+            CompletableFuture<?> second = manager.execute(submission(USER_A, ProviderId.GEMINI, "second"), AiRequestPriority.INTERACTIVE_GENERATION);
             assertThat(secondStarted.await(60, TimeUnit.MILLISECONDS)).isFalse();
             assertThat(manager.diagnostics().providers().get(ProviderId.GEMINI).runningRequests()).isEqualTo(1);
 
@@ -123,16 +126,118 @@ class AiRequestManagerTests {
         CountDownLatch secondStarted = new CountDownLatch(1);
         FakeAdapter adapter = blockingFirstAdapter(firstStarted, releaseFirst, secondStarted);
         try (AiRequestManager manager = manager(List.of(adapter), policy(1, 2))) {
-            CompletableFuture<?> first = manager.execute(request(ProviderId.GEMINI, "first"), AiRequestPriority.INTERACTIVE_GENERATION);
+            CompletableFuture<?> first = manager.execute(submission(USER_A, ProviderId.GEMINI, "first"), AiRequestPriority.INTERACTIVE_GENERATION);
             assertThat(firstStarted.await(2, TimeUnit.SECONDS)).isTrue();
             assertThat(first.cancel(true)).isTrue();
 
-            CompletableFuture<?> second = manager.execute(request(ProviderId.GEMINI, "second"), AiRequestPriority.INTERACTIVE_GENERATION);
+            CompletableFuture<?> second = manager.execute(submission(USER_A, ProviderId.GEMINI, "second"), AiRequestPriority.INTERACTIVE_GENERATION);
             assertThat(secondStarted.await(120, TimeUnit.MILLISECONDS)).isFalse();
             assertThat(manager.diagnostics().providers().get(ProviderId.GEMINI).runningRequests()).isEqualTo(1);
 
             releaseFirst.countDown();
             second.get(2, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    void rejectsWhenSameUserOutstandingLimitIsExhaustedWithoutContactingProvider() throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger calls = new AtomicInteger();
+        FakeAdapter adapter = new FakeAdapter(ProviderId.GEMINI, request -> {
+            calls.incrementAndGet();
+            started.countDown();
+            awaitUninterruptibly(release);
+            return result(request);
+        });
+        try (AiRequestManager manager = manager(List.of(adapter), policy(1, 2), 1)) {
+            CompletableFuture<?> first = manager.execute(
+                    submission(USER_A, ProviderId.GEMINI, "first"), AiRequestPriority.INTERACTIVE_GENERATION);
+            assertThat(started.await(2, TimeUnit.SECONDS)).isTrue();
+
+            assertFailure(
+                    manager.execute(
+                            submission(USER_A, ProviderId.GEMINI, "rejected"),
+                            AiRequestPriority.INTERACTIVE_GENERATION),
+                    ProviderFailureType.RATE_LIMITED);
+            assertThat(calls).hasValue(1);
+
+            release.countDown();
+            first.get(2, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    void keepsDifferentUsersAdmissionIndependent() throws Exception {
+        BlockingAdapter adapter = new BlockingAdapter(ProviderId.GEMINI, 2);
+        try (AiRequestManager manager = manager(List.of(adapter), policy(2, 2), 1)) {
+            CompletableFuture<?> first = manager.execute(
+                    submission(USER_A, ProviderId.GEMINI, "user-a"), AiRequestPriority.INTERACTIVE_GENERATION);
+            CompletableFuture<?> second = manager.execute(
+                    submission(USER_B, ProviderId.GEMINI, "user-b"), AiRequestPriority.INTERACTIVE_GENERATION);
+
+            assertThat(adapter.started.await(2, TimeUnit.SECONDS)).isTrue();
+            assertThat(adapter.maximumActive).hasValue(2);
+            adapter.release.countDown();
+            CompletableFuture.allOf(first, second).get(2, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    void releasesUserAdmissionAfterSuccessAndTerminalFailure() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        FakeAdapter adapter = new FakeAdapter(ProviderId.GEMINI, request -> {
+            int call = calls.incrementAndGet();
+            if (call == 2) throw failure(ProviderId.GEMINI, ProviderFailureType.INVALID_RESPONSE);
+            return result(request);
+        });
+        AiRequestManagerPolicy oneAttempt = policy(1, 2, Duration.ofSeconds(2), 1, 5, Duration.ofMillis(100));
+        try (AiRequestManager manager = manager(List.of(adapter), oneAttempt, 1)) {
+            manager.execute(submission(USER_A, ProviderId.GEMINI, "success"), AiRequestPriority.INTERACTIVE_GENERATION)
+                    .get(2, TimeUnit.SECONDS);
+            assertFailure(
+                    manager.execute(
+                            submission(USER_A, ProviderId.GEMINI, "failure"),
+                            AiRequestPriority.INTERACTIVE_GENERATION),
+                    ProviderFailureType.INVALID_RESPONSE);
+            manager.execute(submission(USER_A, ProviderId.GEMINI, "after"), AiRequestPriority.INTERACTIVE_GENERATION)
+                    .get(2, TimeUnit.SECONDS);
+            assertThat(calls).hasValue(3);
+        }
+    }
+
+    @Test
+    void releasesUserAdmissionAfterTimeoutAndCancellation() throws Exception {
+        assertAdmissionReleasedAfterInterruptedTerminalCompletion(false);
+        assertAdmissionReleasedAfterInterruptedTerminalCompletion(true);
+    }
+
+    @Test
+    void retryRetainsOneUserAdmissionSlot() throws Exception {
+        CountDownLatch firstAttempt = new CountDownLatch(1);
+        AtomicInteger calls = new AtomicInteger();
+        FakeAdapter adapter = new FakeAdapter(ProviderId.GEMINI, request -> {
+            if (calls.incrementAndGet() == 1) {
+                firstAttempt.countDown();
+                throw failure(ProviderId.GEMINI, ProviderFailureType.PROVIDER_UNAVAILABLE);
+            }
+            return result(request);
+        });
+        AiRequestManagerPolicy retryPolicy = new AiRequestManagerPolicy(
+                1, 2, Duration.ofSeconds(2), 2,
+                Duration.ofMillis(200), Duration.ofMillis(200), 5, Duration.ofMillis(100));
+        try (AiRequestManager manager = manager(List.of(adapter), retryPolicy, 1)) {
+            CompletableFuture<?> retrying = manager.execute(
+                    submission(USER_A, ProviderId.GEMINI, "retrying"), AiRequestPriority.INTERACTIVE_GENERATION);
+            assertThat(firstAttempt.await(2, TimeUnit.SECONDS)).isTrue();
+            assertFailure(
+                    manager.execute(
+                            submission(USER_A, ProviderId.GEMINI, "second-logical-request"),
+                            AiRequestPriority.INTERACTIVE_GENERATION),
+                    ProviderFailureType.RATE_LIMITED);
+
+            retrying.get(2, TimeUnit.SECONDS);
+            assertThat(calls).hasValue(2);
         }
     }
 
@@ -146,7 +251,7 @@ class AiRequestManagerTests {
             return result(request);
         });
         try (AiRequestManager manager = manager(List.of(transientAdapter), policy(1, 2))) {
-            manager.execute(request(ProviderId.GEMINI, "retry"), AiRequestPriority.INTERACTIVE_GENERATION)
+            manager.execute(submission(USER_A, ProviderId.GEMINI, "retry"), AiRequestPriority.INTERACTIVE_GENERATION)
                     .get(2, TimeUnit.SECONDS);
             assertThat(transientCalls).hasValue(3);
         }
@@ -157,7 +262,7 @@ class AiRequestManagerTests {
             throw failure(ProviderId.GEMINI, ProviderFailureType.AUTHENTICATION_FAILURE);
         });
         try (AiRequestManager manager = manager(List.of(authenticationAdapter), policy(1, 2))) {
-            assertFailure(manager.execute(request(ProviderId.GEMINI, "no-retry"), AiRequestPriority.INTERACTIVE_GENERATION),
+            assertFailure(manager.execute(submission(USER_A, ProviderId.GEMINI, "no-retry"), AiRequestPriority.INTERACTIVE_GENERATION),
                     ProviderFailureType.AUTHENTICATION_FAILURE);
             assertThat(authenticationCalls).hasValue(1);
         }
@@ -178,7 +283,7 @@ class AiRequestManagerTests {
             return result(request);
         });
         try (AiRequestManager manager = manager(List.of(adapter), policy(1, 2))) {
-            manager.execute(request(ProviderId.GEMINI, "rate-limited"), AiRequestPriority.INTERACTIVE_GENERATION)
+            manager.execute(submission(USER_A, ProviderId.GEMINI, "rate-limited"), AiRequestPriority.INTERACTIVE_GENERATION)
                     .get(2, TimeUnit.SECONDS);
             assertThat(Duration.ofNanos(starts.get(1) - starts.get(0))).isGreaterThanOrEqualTo(Duration.ofMillis(120));
         }
@@ -188,15 +293,15 @@ class AiRequestManagerTests {
     void opensCircuitFailsFastAndAllowsSingleRecoveryProbe() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         FakeAdapter adapter = new FakeAdapter(ProviderId.GEMINI, request -> {
-            if (calls.incrementAndGet() <= 2) {
-                throw failure(ProviderId.GEMINI, ProviderFailureType.PROVIDER_UNAVAILABLE);
-            }
+            int call = calls.incrementAndGet();
+            if (call == 1) throw failure(ProviderId.GEMINI, ProviderFailureType.PROVIDER_UNAVAILABLE);
+            if (call == 2) throw failure(ProviderId.GEMINI, ProviderFailureType.TIMEOUT);
             return result(request);
         });
         AiRequestManagerPolicy policy = policy(1, 4, Duration.ofSeconds(2), 1, 2, Duration.ofMillis(100));
         try (AiRequestManager manager = manager(List.of(adapter), policy)) {
             assertFailure(submit(manager, ProviderId.GEMINI, "failure-1"), ProviderFailureType.PROVIDER_UNAVAILABLE);
-            assertFailure(submit(manager, ProviderId.GEMINI, "failure-2"), ProviderFailureType.PROVIDER_UNAVAILABLE);
+            assertFailure(submit(manager, ProviderId.GEMINI, "failure-2"), ProviderFailureType.TIMEOUT);
             assertThat(manager.diagnostics().providers().get(ProviderId.GEMINI).circuitState()).isEqualTo("OPEN");
 
             assertFailure(submit(manager, ProviderId.GEMINI, "fast-fail"), ProviderFailureType.PROVIDER_UNAVAILABLE);
@@ -206,6 +311,86 @@ class AiRequestManagerTests {
             submit(manager, ProviderId.GEMINI, "probe").get(2, TimeUnit.SECONDS);
             assertThat(calls).hasValue(3);
             assertThat(manager.diagnostics().providers().get(ProviderId.GEMINI).circuitState()).isEqualTo("CLOSED");
+        }
+    }
+
+    @Test
+    void failedHalfOpenProbeReopensCircuit() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        FakeAdapter adapter = new FakeAdapter(ProviderId.GEMINI, request -> {
+            calls.incrementAndGet();
+            throw failure(ProviderId.GEMINI, ProviderFailureType.TIMEOUT);
+        });
+        AiRequestManagerPolicy policy = policy(1, 2, Duration.ofSeconds(2), 1, 1, Duration.ofMillis(80));
+        try (AiRequestManager manager = manager(List.of(adapter), policy)) {
+            assertFailure(submit(manager, ProviderId.GEMINI, "open"), ProviderFailureType.TIMEOUT);
+            Thread.sleep(100);
+            assertFailure(submit(manager, ProviderId.GEMINI, "failed-probe"), ProviderFailureType.TIMEOUT);
+
+            assertThat(manager.diagnostics().providers().get(ProviderId.GEMINI).circuitState()).isEqualTo("OPEN");
+            assertFailure(submit(manager, ProviderId.GEMINI, "fail-fast"), ProviderFailureType.PROVIDER_UNAVAILABLE);
+            assertThat(calls).hasValue(2);
+        }
+    }
+
+    @Test
+    void repeatedRateLimitsPreserveClassificationWithoutOpeningAvailabilityCircuit() {
+        AtomicInteger calls = new AtomicInteger();
+        FakeAdapter adapter = new FakeAdapter(ProviderId.GEMINI, request -> {
+            calls.incrementAndGet();
+            throw failure(ProviderId.GEMINI, ProviderFailureType.RATE_LIMITED);
+        });
+        AiRequestManagerPolicy policy = policy(1, 2, Duration.ofSeconds(2), 1, 1, Duration.ofMillis(80));
+        try (AiRequestManager manager = manager(List.of(adapter), policy)) {
+            assertFailure(submit(manager, ProviderId.GEMINI, "rate-limit-1"), ProviderFailureType.RATE_LIMITED);
+            assertFailure(submit(manager, ProviderId.GEMINI, "rate-limit-2"), ProviderFailureType.RATE_LIMITED);
+
+            assertThat(calls).hasValue(2);
+            assertThat(manager.diagnostics().providers().get(ProviderId.GEMINI).circuitState()).isEqualTo("CLOSED");
+        }
+    }
+
+    @Test
+    void authenticationAndQuotaFailuresEnterProtectiveFailFastState() {
+        for (ProviderFailureType type : List.of(
+                ProviderFailureType.AUTHENTICATION_FAILURE,
+                ProviderFailureType.QUOTA_EXHAUSTED)) {
+            AtomicInteger calls = new AtomicInteger();
+            FakeAdapter adapter = new FakeAdapter(ProviderId.GEMINI, request -> {
+                calls.incrementAndGet();
+                throw failure(ProviderId.GEMINI, type);
+            });
+            try (AiRequestManager manager = manager(
+                    List.of(adapter),
+                    policy(1, 2, Duration.ofSeconds(2), 3, 5, Duration.ofMillis(100)))) {
+                assertFailure(submit(manager, ProviderId.GEMINI, "protect"), type);
+                assertFailure(submit(manager, ProviderId.GEMINI, "fail-fast"), type);
+                assertThat(calls).hasValue(1);
+                assertThat(manager.diagnostics().providers().get(ProviderId.GEMINI).circuitState())
+                        .isEqualTo("OPEN");
+            }
+        }
+    }
+
+    @Test
+    void invalidResponseAndUnsupportedTaskDoNotAffectAvailabilityCircuit() {
+        for (ProviderFailureType type : List.of(
+                ProviderFailureType.INVALID_RESPONSE,
+                ProviderFailureType.UNSUPPORTED_TASK)) {
+            AtomicInteger calls = new AtomicInteger();
+            FakeAdapter adapter = new FakeAdapter(ProviderId.GEMINI, request -> {
+                calls.incrementAndGet();
+                throw failure(ProviderId.GEMINI, type);
+            });
+            try (AiRequestManager manager = manager(
+                    List.of(adapter),
+                    policy(1, 2, Duration.ofSeconds(2), 1, 1, Duration.ofMillis(100)))) {
+                assertFailure(submit(manager, ProviderId.GEMINI, "failure-1"), type);
+                assertFailure(submit(manager, ProviderId.GEMINI, "failure-2"), type);
+                assertThat(calls).hasValue(2);
+                assertThat(manager.diagnostics().providers().get(ProviderId.GEMINI).circuitState())
+                        .isEqualTo("CLOSED");
+            }
         }
     }
 
@@ -227,7 +412,7 @@ class AiRequestManagerTests {
         });
         try (AiRequestManager manager = manager(List.of(adapter), policy(1, 2))) {
             CompletableFuture<Void> stream = manager.stream(
-                    request(ProviderId.GEMINI, "stream"), AiRequestPriority.INTERACTIVE_EXPLANATION, ignored -> {});
+                    submission(USER_A, ProviderId.GEMINI, "stream"), AiRequestPriority.INTERACTIVE_EXPLANATION, ignored -> {});
             assertThat(streamStarted.await(2, TimeUnit.SECONDS)).isTrue();
             CompletableFuture<?> execute = submit(manager, ProviderId.GEMINI, "execute");
             assertThat(executeStarted.await(120, TimeUnit.MILLISECONDS)).isFalse();
@@ -239,15 +424,81 @@ class AiRequestManagerTests {
         }
     }
 
+    @Test
+    void streamingFailureAfterContentStillUpdatesProviderHealthWithoutRetry() {
+        AtomicInteger streamCalls = new AtomicInteger();
+        FakeAdapter adapter = new FakeAdapter(ProviderId.GEMINI, AiRequestManagerTests::result, consumer -> {
+            streamCalls.incrementAndGet();
+            consumer.accept(new ProviderTextDelta("untrusted"));
+            throw failure(ProviderId.GEMINI, ProviderFailureType.PROVIDER_UNAVAILABLE);
+        });
+        AiRequestManagerPolicy policy = policy(1, 2, Duration.ofSeconds(2), 3, 1, Duration.ofMillis(100));
+        try (AiRequestManager manager = manager(List.of(adapter), policy)) {
+            assertFailure(
+                    manager.stream(
+                            submission(USER_A, ProviderId.GEMINI, "stream"),
+                            AiRequestPriority.INTERACTIVE_EXPLANATION,
+                            ignored -> {}),
+                    ProviderFailureType.PROVIDER_UNAVAILABLE);
+
+            assertThat(streamCalls).hasValue(1);
+            assertThat(manager.diagnostics().providers().get(ProviderId.GEMINI).circuitState()).isEqualTo("OPEN");
+        }
+    }
+
     private static CompletableFuture<ProviderExecutionResult> submit(
             AiRequestManager manager, ProviderId providerId, String modelId) {
-        return manager.execute(request(providerId, modelId), AiRequestPriority.INTERACTIVE_GENERATION);
+        return manager.execute(submission(USER_A, providerId, modelId), AiRequestPriority.INTERACTIVE_GENERATION);
+    }
+
+    private static void assertAdmissionReleasedAfterInterruptedTerminalCompletion(boolean cancel) throws Exception {
+        CountDownLatch blockingStarted = new CountDownLatch(1);
+        CountDownLatch releaseBlocking = new CountDownLatch(1);
+        FakeAdapter gemini = new FakeAdapter(ProviderId.GEMINI, request -> {
+            blockingStarted.countDown();
+            awaitUninterruptibly(releaseBlocking);
+            return result(request);
+        });
+        FakeAdapter ollama = new FakeAdapter(ProviderId.OLLAMA_CLOUD, AiRequestManagerTests::result);
+        AiRequestManagerPolicy policy = policy(
+                1, 2, Duration.ofMillis(120), 1, 5, Duration.ofMillis(100));
+        try (AiRequestManager manager = manager(List.of(gemini, ollama), policy, 1)) {
+            CompletableFuture<?> terminal = manager.execute(
+                    submission(USER_A, ProviderId.GEMINI, cancel ? "cancel" : "timeout"),
+                    AiRequestPriority.INTERACTIVE_GENERATION);
+            assertThat(blockingStarted.await(2, TimeUnit.SECONDS)).isTrue();
+            if (cancel) {
+                assertThat(terminal.cancel(true)).isTrue();
+            } else {
+                assertFailure(terminal, ProviderFailureType.TIMEOUT);
+            }
+
+            manager.execute(
+                            submission(USER_A, ProviderId.OLLAMA_CLOUD, "after-terminal"),
+                            AiRequestPriority.INTERACTIVE_GENERATION)
+                    .get(2, TimeUnit.SECONDS);
+            releaseBlocking.countDown();
+        }
+    }
+
+    private static AiRequestSubmission submission(UUID userId, ProviderId providerId, String modelId) {
+        return new AiRequestSubmission(userId, request(providerId, modelId));
     }
 
     private static AiRequestManager manager(List<AiProviderAdapter> adapters, AiRequestManagerPolicy policy) {
         Map<ProviderId, AiRequestManagerPolicy> policies = new EnumMap<>(ProviderId.class);
         adapters.forEach(adapter -> policies.put(adapter.providerId(), policy));
-        return new AiRequestManager(adapters, policies, AiRequestTelemetry.NONE);
+        return new AiRequestManager(adapters, policies, 10, AiRequestTelemetry.NONE);
+    }
+
+    private static AiRequestManager manager(
+            List<AiProviderAdapter> adapters,
+            AiRequestManagerPolicy policy,
+            int maximumOutstandingRequestsPerUser) {
+        Map<ProviderId, AiRequestManagerPolicy> policies = new EnumMap<>(ProviderId.class);
+        adapters.forEach(adapter -> policies.put(adapter.providerId(), policy));
+        return new AiRequestManager(
+                adapters, policies, maximumOutstandingRequestsPerUser, AiRequestTelemetry.NONE);
     }
 
     private static AiRequestManagerPolicy policy(int concurrency, int queue) {

@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.PriorityQueue;
+import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -38,15 +39,18 @@ public final class AiRequestManager implements AutoCloseable {
     private final AiRequestTelemetry telemetry;
     private final ExecutorService workers;
     private final ScheduledExecutorService scheduler;
+    private final int maximumOutstandingRequestsPerUser;
     private final EnumMap<ProviderId, ProviderState> providers = new EnumMap<>(ProviderId.class);
+    private final Map<UUID, Integer> outstandingRequestsByUser = new java.util.HashMap<>();
     private long sequence;
     private boolean closed;
 
     public AiRequestManager(
             List<AiProviderAdapter> adapters,
             Map<ProviderId, AiRequestManagerPolicy> policies,
+            int maximumOutstandingRequestsPerUser,
             AiRequestTelemetry telemetry) {
-        this(adapters, policies, telemetry, Clock.systemUTC(),
+        this(adapters, policies, maximumOutstandingRequestsPerUser, telemetry, Clock.systemUTC(),
                 Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("ai-provider-", 0).factory()),
                 Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().name("ai-request-scheduler").factory()));
     }
@@ -54,12 +58,17 @@ public final class AiRequestManager implements AutoCloseable {
     AiRequestManager(
             List<AiProviderAdapter> adapters,
             Map<ProviderId, AiRequestManagerPolicy> policies,
+            int maximumOutstandingRequestsPerUser,
             AiRequestTelemetry telemetry,
             Clock clock,
             ExecutorService workers,
             ScheduledExecutorService scheduler) {
         Objects.requireNonNull(adapters, "adapters must not be null");
         Objects.requireNonNull(policies, "policies must not be null");
+        if (maximumOutstandingRequestsPerUser < 1) {
+            throw new IllegalArgumentException("maximumOutstandingRequestsPerUser must be positive");
+        }
+        this.maximumOutstandingRequestsPerUser = maximumOutstandingRequestsPerUser;
         this.telemetry = Objects.requireNonNull(telemetry, "telemetry must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.workers = Objects.requireNonNull(workers, "workers must not be null");
@@ -75,20 +84,22 @@ public final class AiRequestManager implements AutoCloseable {
     }
 
     public CompletableFuture<ProviderExecutionResult> execute(
-            ProviderExecutionRequest request,
+            AiRequestSubmission submission,
             AiRequestPriority priority) {
-        Objects.requireNonNull(request, "request must not be null");
-        return submit(request, priority, adapter -> adapter.execute(request), () -> true);
+        Objects.requireNonNull(submission, "submission must not be null");
+        ProviderExecutionRequest request = submission.providerRequest();
+        return submit(submission.userId(), request, priority, adapter -> adapter.execute(request), () -> true);
     }
 
     public CompletableFuture<Void> stream(
-            ProviderExecutionRequest request,
+            AiRequestSubmission submission,
             AiRequestPriority priority,
             Consumer<? super ProviderStreamEvent> consumer) {
-        Objects.requireNonNull(request, "request must not be null");
+        Objects.requireNonNull(submission, "submission must not be null");
+        ProviderExecutionRequest request = submission.providerRequest();
         Objects.requireNonNull(consumer, "consumer must not be null");
         StreamAttempt streamAttempt = new StreamAttempt();
-        return submit(request, priority, adapter -> {
+        return submit(submission.userId(), request, priority, adapter -> {
             adapter.stream(request).consume(event -> {
                 streamAttempt.eventDelivered = true;
                 consumer.accept(event);
@@ -113,6 +124,7 @@ public final class AiRequestManager implements AutoCloseable {
     }
 
     private <T> CompletableFuture<T> submit(
+            UUID userId,
             ProviderExecutionRequest request,
             AiRequestPriority priority,
             ProviderInvocation<T> invocation,
@@ -126,20 +138,28 @@ public final class AiRequestManager implements AutoCloseable {
             if (state == null) {
                 return CompletableFuture.failedFuture(failure(request.target().providerId(), ProviderFailureType.UNSUPPORTED_TASK));
             }
+            int userOutstanding = outstandingRequestsByUser.getOrDefault(userId, 0);
+            if (userOutstanding >= maximumOutstandingRequestsPerUser) {
+                telemetry.rejected(state.adapter.providerId(), request.taskType(), "user_limit");
+                return CompletableFuture.failedFuture(
+                        failure(state.adapter.providerId(), ProviderFailureType.RATE_LIMITED));
+            }
             Instant now = clock.instant();
             updateCircuitForTime(state, now);
             if (state.circuitState == CircuitState.OPEN) {
                 telemetry.rejected(state.adapter.providerId(), request.taskType(), "circuit_open");
-                return CompletableFuture.failedFuture(failure(state.adapter.providerId(), ProviderFailureType.PROVIDER_UNAVAILABLE));
+                return CompletableFuture.failedFuture(failure(state.adapter.providerId(), state.openFailureType));
             }
             boolean canStartImmediately = canStartImmediately(state, now);
             if (state.queue.size() >= state.policy.maximumQueuedRequests() && !canStartImmediately) {
                 telemetry.rejected(state.adapter.providerId(), request.taskType(), "queue_full");
                 return CompletableFuture.failedFuture(failure(state.adapter.providerId(), ProviderFailureType.PROVIDER_UNAVAILABLE));
             }
+            outstandingRequestsByUser.put(userId, userOutstanding + 1);
             long deadlineNanos = System.nanoTime() + state.policy.requestTimeout().toNanos();
             managed = new ManagedRequest<>(
                     state,
+                    userId,
                     request,
                     priority,
                     sequence++,
@@ -150,7 +170,7 @@ public final class AiRequestManager implements AutoCloseable {
             telemetry.queued(state.adapter.providerId(), request.taskType());
             managed.timeoutTask = scheduler.schedule(
                     () -> timeout(managed), state.policy.requestTimeout().toNanos(), TimeUnit.NANOSECONDS);
-            managed.result.whenComplete((ignored, failure) -> cancellationCheck(managed));
+            managed.result.whenComplete((ignored, failure) -> terminalCompletion(managed));
             dispatch(state);
         }
         return managed.result;
@@ -235,7 +255,7 @@ public final class AiRequestManager implements AutoCloseable {
             }
 
             boolean retryable = isRetryable(providerFailure.failureType()) && request.retryPermission.allowed();
-            providerFailed(state, providerFailure, retryable);
+            providerFailed(state, providerFailure);
             if (retryable && request.attempts < state.policy.maximumAttempts() && canRetryWithinDeadline(request, providerFailure)) {
                 request.attempts++;
                 Duration delay = retryDelay(request, providerFailure);
@@ -249,36 +269,45 @@ public final class AiRequestManager implements AutoCloseable {
     }
 
     private void providerSucceeded(ProviderState state) {
+        if (state.circuitState == CircuitState.OPEN) return;
         state.consecutiveFailures = 0;
         state.cooldownUntil = Instant.EPOCH;
-        if (state.circuitState != CircuitState.CLOSED) {
+        state.openFailureType = ProviderFailureType.PROVIDER_UNAVAILABLE;
+        if (state.circuitState == CircuitState.HALF_OPEN) {
             state.circuitState = CircuitState.CLOSED;
             state.probeInFlight = false;
             telemetry.circuitChanged(state.adapter.providerId(), "closed");
         }
     }
 
-    private void providerFailed(
-            ProviderState state,
-            ProviderExecutionException failure,
-            boolean relevant) {
-        if (failure.failureType() == ProviderFailureType.RATE_LIMITED) {
-            Duration delay = failure.retryAfter().orElse(state.policy.initialRetryDelay());
-            state.cooldownUntil = later(state.cooldownUntil, clock.instant().plus(delay));
-        }
-        if (!relevant) {
-            if (state.circuitState == CircuitState.HALF_OPEN) state.probeInFlight = false;
-            return;
-        }
-        state.consecutiveFailures++;
-        if (state.circuitState == CircuitState.HALF_OPEN
-                || state.consecutiveFailures >= state.policy.circuitFailureThreshold()) {
-            openCircuit(state);
+    private void providerFailed(ProviderState state, ProviderExecutionException failure) {
+        switch (failure.failureType()) {
+            case PROVIDER_UNAVAILABLE, TIMEOUT -> availabilityFailed(state);
+            case RATE_LIMITED -> {
+                Duration delay = failure.retryAfter().orElse(state.policy.initialRetryDelay());
+                state.cooldownUntil = later(state.cooldownUntil, clock.instant().plus(delay));
+                releaseProbe(state);
+            }
+            case AUTHENTICATION_FAILURE, QUOTA_EXHAUSTED -> openCircuit(state, failure.failureType());
+            case INVALID_RESPONSE, UNSUPPORTED_TASK -> releaseProbe(state);
         }
     }
 
-    private void openCircuit(ProviderState state) {
+    private void availabilityFailed(ProviderState state) {
+        state.consecutiveFailures++;
+        if (state.circuitState == CircuitState.HALF_OPEN
+                || state.consecutiveFailures >= state.policy.circuitFailureThreshold()) {
+            openCircuit(state, ProviderFailureType.PROVIDER_UNAVAILABLE);
+        }
+    }
+
+    private static void releaseProbe(ProviderState state) {
+        if (state.circuitState == CircuitState.HALF_OPEN) state.probeInFlight = false;
+    }
+
+    private void openCircuit(ProviderState state, ProviderFailureType openFailureType) {
         state.circuitState = CircuitState.OPEN;
+        state.openFailureType = openFailureType;
         state.probeInFlight = false;
         state.circuitOpenUntil = clock.instant().plus(state.policy.circuitOpenDuration());
         telemetry.circuitChanged(state.adapter.providerId(), "open");
@@ -286,7 +315,7 @@ public final class AiRequestManager implements AutoCloseable {
         state.queue.clear();
         rejected.forEach(request -> completeExceptionally(
                 request,
-                failure(state.adapter.providerId(), ProviderFailureType.PROVIDER_UNAVAILABLE),
+                failure(state.adapter.providerId(), openFailureType),
                 "circuit_open"));
         scheduleDispatch(state, state.policy.circuitOpenDuration());
     }
@@ -298,7 +327,7 @@ public final class AiRequestManager implements AutoCloseable {
             updateCircuitForTime(state, clock.instant());
             if (state.circuitState == CircuitState.OPEN) {
                 completeExceptionally(request,
-                        failure(state.adapter.providerId(), ProviderFailureType.PROVIDER_UNAVAILABLE), "circuit_open");
+                        failure(state.adapter.providerId(), state.openFailureType), "circuit_open");
                 return;
             }
             state.queue.add(request);
@@ -313,8 +342,7 @@ public final class AiRequestManager implements AutoCloseable {
             if (request.providerInvocationStarted) {
                 providerFailed(
                         request.state,
-                        failure(request.state.adapter.providerId(), ProviderFailureType.TIMEOUT),
-                        true);
+                        failure(request.state.adapter.providerId(), ProviderFailureType.TIMEOUT));
             }
             completeTimeout(request);
             Thread physicalThread = request.physicalThread;
@@ -323,9 +351,10 @@ public final class AiRequestManager implements AutoCloseable {
         }
     }
 
-    private void cancellationCheck(ManagedRequest<?> request) {
-        if (!request.result.isCancelled()) return;
+    private void terminalCompletion(ManagedRequest<?> request) {
         synchronized (lock) {
+            releaseUserAdmission(request);
+            if (!request.result.isCancelled()) return;
             request.state.queue.remove(request);
             Thread physicalThread = request.physicalThread;
             if (physicalThread != null) physicalThread.interrupt();
@@ -335,6 +364,15 @@ public final class AiRequestManager implements AutoCloseable {
                     elapsed(request), request.attempts - 1);
             dispatch(request.state);
         }
+    }
+
+    private void releaseUserAdmission(ManagedRequest<?> request) {
+        if (request.admissionReleased) return;
+        request.admissionReleased = true;
+        outstandingRequestsByUser.compute(request.userId, (ignored, outstanding) -> {
+            if (outstanding == null || outstanding <= 1) return null;
+            return outstanding - 1;
+        });
     }
 
     private void completeTimeout(ManagedRequest<?> request) {
@@ -488,6 +526,7 @@ public final class AiRequestManager implements AutoCloseable {
         private CircuitState circuitState = CircuitState.CLOSED;
         private Instant circuitOpenUntil = Instant.EPOCH;
         private Instant cooldownUntil = Instant.EPOCH;
+        private ProviderFailureType openFailureType = ProviderFailureType.PROVIDER_UNAVAILABLE;
         private boolean probeInFlight;
         private ScheduledFuture<?> dispatchTask;
 
@@ -499,6 +538,7 @@ public final class AiRequestManager implements AutoCloseable {
 
     private static final class ManagedRequest<T> {
         private final ProviderState state;
+        private final UUID userId;
         private final ProviderExecutionRequest request;
         private final AiRequestPriority priority;
         private final long sequence;
@@ -512,9 +552,11 @@ public final class AiRequestManager implements AutoCloseable {
         private boolean providerInvocationStarted;
         private Thread physicalThread;
         private ScheduledFuture<?> timeoutTask;
+        private boolean admissionReleased;
 
         private ManagedRequest(
                 ProviderState state,
+                UUID userId,
                 ProviderExecutionRequest request,
                 AiRequestPriority priority,
                 long sequence,
@@ -522,6 +564,7 @@ public final class AiRequestManager implements AutoCloseable {
                 ProviderInvocation<T> invocation,
                 RetryPermission retryPermission) {
             this.state = state;
+            this.userId = userId;
             this.request = request;
             this.priority = priority;
             this.sequence = sequence;

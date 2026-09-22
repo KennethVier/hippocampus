@@ -16,6 +16,7 @@ spring:
 hippocampus:
   ai:
     request-manager:
+      maximum-outstanding-requests-per-user: ${HIPPOCAMPUS_AI_MAXIMUM_OUTSTANDING_REQUESTS_PER_USER:4}
       gemini:
         maximum-concurrency: ${HIPPOCAMPUS_GEMINI_MAXIMUM_CONCURRENCY:2}
         maximum-queued-requests: ${HIPPOCAMPUS_GEMINI_MAXIMUM_QUEUED_REQUESTS:32}

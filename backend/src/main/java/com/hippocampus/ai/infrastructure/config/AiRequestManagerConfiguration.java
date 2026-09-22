@@ -37,6 +37,10 @@ public class AiRequestManagerConfiguration {
         Map<ProviderId, AiRequestManagerPolicy> policies = new EnumMap<>(ProviderId.class);
         policies.put(ProviderId.GEMINI, properties.gemini().toPolicy());
         policies.put(ProviderId.OLLAMA_CLOUD, properties.ollamaCloud().toPolicy());
-        return new AiRequestManager(adapters, policies, telemetry);
+        return new AiRequestManager(
+                adapters,
+                policies,
+                properties.maximumOutstandingRequestsPerUser(),
+                telemetry);
     }
 }
