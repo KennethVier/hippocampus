@@ -185,9 +185,9 @@ class OllamaCloudProviderAdapterTests {
                         }
                         """))
                 .andRespond(withSuccess("""
-                        {"model":"cloud-actual","message":{"role":"assistant","content":"{\\\"answer\\\":"},"done":false}
-                        {"model":"cloud-actual","message":{"role":"assistant","content":"\\\"untrusted\\\"}"},"done":false}
-                        {"model":"cloud-actual","message":{"role":"assistant","content":""},"done":true,"done_reason":"stop","prompt_eval_count":12,"eval_count":5}
+                        {"model":"cloud-actual","created_at":"2026-09-22T10:15:30.000Z","message":{"role":"assistant","content":"{\\\"answer\\\":","thinking":"provider-only reasoning"},"done":false}
+                        {"model":"cloud-actual","created_at":"2026-09-22T10:15:30.100Z","message":{"role":"assistant","content":"\\\"untrusted\\\"}","tool_calls":[]},"done":false}
+                        {"model":"cloud-actual","created_at":"2026-09-22T10:15:30.200Z","message":{"role":"assistant","content":""},"done":true,"done_reason":"stop","total_duration":1800000000,"load_duration":120000000,"prompt_eval_count":12,"prompt_eval_duration":480000000,"eval_count":5,"eval_duration":1200000000}
                         """, MediaType.APPLICATION_NDJSON));
         List<ProviderStreamEvent> events = new ArrayList<>();
 
@@ -203,6 +203,24 @@ class OllamaCloudProviderAdapterTests {
             assertThat(completed.usage().outputTokens()).contains(5);
             assertThat(completed.finishReason()).contains("stop");
         });
+        fixture.server().verify();
+    }
+
+    @Test
+    void malformedRequiredStreamingContentFailsClosedDespiteProviderMetadata() {
+        Fixture fixture = fixture();
+        fixture.server().expect(requestTo("https://ollama.com/api/chat"))
+                .andRespond(withSuccess("""
+                        {"model":"cloud-actual","created_at":"2026-09-22T10:15:30.000Z","message":{"role":"assistant","content":{"unexpected":"object"},"thinking":"provider-only reasoning"},"done":false}
+                        """, MediaType.APPLICATION_NDJSON));
+
+        assertThatThrownBy(() -> fixture.adapter()
+                        .stream(request(ProviderId.OLLAMA_CLOUD, "cloud-selected"))
+                        .consume(ignored -> {}))
+                .isInstanceOfSatisfying(ProviderExecutionException.class, failure -> {
+                    assertThat(failure.failureType()).isEqualTo(ProviderFailureType.INVALID_RESPONSE);
+                    assertThat(failure).hasNoCause();
+                });
         fixture.server().verify();
     }
 

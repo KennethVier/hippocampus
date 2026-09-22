@@ -10,6 +10,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -250,8 +251,10 @@ public final class OllamaCloudProviderAdapter implements AiProviderAdapter {
             String format,
             Map<String, Integer> options) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     record OllamaMessage(String role, String content) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     record OllamaChatResponse(
             String model,
             OllamaMessage message,
