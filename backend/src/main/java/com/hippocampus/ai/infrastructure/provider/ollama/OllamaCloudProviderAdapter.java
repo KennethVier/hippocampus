@@ -128,6 +128,10 @@ public final class OllamaCloudProviderAdapter implements AiProviderAdapter {
         } catch (ProviderExecutionException exception) {
             throw exception;
         } catch (RuntimeException exception) {
+            RuntimeException consumerFailure = consumerFailure(exception);
+            if (consumerFailure != null) {
+                throw consumerFailure;
+            }
             throw failure(classify(exception));
         }
     }
@@ -150,14 +154,14 @@ public final class OllamaCloudProviderAdapter implements AiProviderAdapter {
                 && response.message().content() != null
                 && !response.message().content().isEmpty()) {
             state.textReceived = true;
-            consumer.accept(new ProviderTextDelta(response.message().content()));
+            emit(consumer, new ProviderTextDelta(response.message().content()));
         }
         if (Boolean.TRUE.equals(response.done())) {
             if (!state.textReceived || state.completed) {
                 throw failure(ProviderFailureType.INVALID_RESPONSE);
             }
             state.completed = true;
-            consumer.accept(new ProviderStreamCompleted(
+            emit(consumer, new ProviderStreamCompleted(
                     providerId(),
                     state.modelId,
                     ProviderUsage.of(response.promptEvalCount(), response.evalCount(), null),
@@ -185,10 +189,13 @@ public final class OllamaCloudProviderAdapter implements AiProviderAdapter {
 
     private static ProviderFailureType classify(Throwable failure) {
         for (Throwable current = failure; current != null; current = current.getCause()) {
-            if (current instanceof HttpTimeoutException
-                    || current instanceof java.net.SocketTimeoutException
-                    || current instanceof ResourceAccessException) {
+            if (current instanceof HttpTimeoutException || current instanceof java.net.SocketTimeoutException) {
                 return ProviderFailureType.TIMEOUT;
+            }
+        }
+        for (Throwable current = failure; current != null; current = current.getCause()) {
+            if (current instanceof ResourceAccessException) {
+                return ProviderFailureType.PROVIDER_UNAVAILABLE;
             }
             if (current instanceof HttpStatusCodeException statusFailure) {
                 return classifyStatus(statusFailure.getStatusCode().value());
@@ -198,6 +205,25 @@ public final class OllamaCloudProviderAdapter implements AiProviderAdapter {
             }
         }
         return ProviderFailureType.PROVIDER_UNAVAILABLE;
+    }
+
+    private static void emit(
+            Consumer<? super ProviderStreamEvent> consumer,
+            ProviderStreamEvent event) {
+        try {
+            consumer.accept(event);
+        } catch (RuntimeException exception) {
+            throw new ConsumerDeliveryException(exception);
+        }
+    }
+
+    private static RuntimeException consumerFailure(Throwable failure) {
+        for (Throwable current = failure; current != null; current = current.getCause()) {
+            if (current instanceof ConsumerDeliveryException deliveryFailure) {
+                return deliveryFailure.consumerFailure;
+            }
+        }
+        return null;
     }
 
     private static ProviderFailureType classifyStatus(int status) {
@@ -241,6 +267,15 @@ public final class OllamaCloudProviderAdapter implements AiProviderAdapter {
 
         private StreamState(String modelId) {
             this.modelId = modelId;
+        }
+    }
+
+    private static final class ConsumerDeliveryException extends RuntimeException {
+        private final RuntimeException consumerFailure;
+
+        private ConsumerDeliveryException(RuntimeException consumerFailure) {
+            super(consumerFailure);
+            this.consumerFailure = consumerFailure;
         }
     }
 }

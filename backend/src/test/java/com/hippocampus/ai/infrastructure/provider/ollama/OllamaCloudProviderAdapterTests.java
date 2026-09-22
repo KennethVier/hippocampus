@@ -10,6 +10,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withRawStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.List;
@@ -144,6 +145,29 @@ class OllamaCloudProviderAdapterTests {
     }
 
     @Test
+    void classifiesNonTimeoutResourceAccessFailureAsProviderUnavailable() {
+        ClientHttpRequestFactory requestFactory = (uri, method) -> {
+            throw new ResourceAccessException(
+                    "secret transport body",
+                    new ConnectException("api-key-secret connection refused"));
+        };
+        RestClient restClient = RestClient.builder()
+                .baseUrl("https://ollama.com/api")
+                .requestFactory(requestFactory)
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + SECRET)
+                .build();
+
+        assertThatThrownBy(() -> new OllamaCloudProviderAdapter(restClient)
+                        .execute(request(ProviderId.OLLAMA_CLOUD, "cloud-selected")))
+                .isInstanceOfSatisfying(ProviderExecutionException.class, failure -> {
+                    assertThat(failure.failureType()).isEqualTo(ProviderFailureType.PROVIDER_UNAVAILABLE);
+                    assertThat(failure).hasNoCause();
+                    assertThat(failure.getMessage()).doesNotContain(
+                            SECRET, "secret transport body", "api-key-secret", "connection refused");
+                });
+    }
+
+    @Test
     void requestsAndConsumesRealStreamingDeltasWithTerminalMetadata() {
         Fixture fixture = fixture();
         fixture.server().expect(requestTo("https://ollama.com/api/chat"))
@@ -179,6 +203,26 @@ class OllamaCloudProviderAdapterTests {
             assertThat(completed.usage().outputTokens()).contains(5);
             assertThat(completed.finishReason()).contains("stop");
         });
+        fixture.server().verify();
+    }
+
+    @Test
+    void preservesApplicationFailureThrownByStreamConsumer() {
+        Fixture fixture = fixture();
+        fixture.server().expect(requestTo("https://ollama.com/api/chat"))
+                .andRespond(withSuccess("""
+                        {"model":"cloud-actual","message":{"role":"assistant","content":"valid text delta"},"done":false}
+                        {"model":"cloud-actual","message":{"role":"assistant","content":""},"done":true,"done_reason":"stop"}
+                        """, MediaType.APPLICATION_NDJSON));
+        RuntimeException marker = new RuntimeException("consumer-marker");
+
+        assertThatThrownBy(() -> fixture.adapter()
+                        .stream(request(ProviderId.OLLAMA_CLOUD, "cloud-selected"))
+                        .consume(ignored -> {
+                            throw marker;
+                        }))
+                .isSameAs(marker)
+                .isNotInstanceOf(ProviderExecutionException.class);
         fixture.server().verify();
     }
 

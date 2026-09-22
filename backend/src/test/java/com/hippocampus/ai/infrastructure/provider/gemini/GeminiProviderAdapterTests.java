@@ -143,6 +143,22 @@ class GeminiProviderAdapterTests {
     }
 
     @Test
+    void preservesApplicationFailureThrownByStreamConsumer() {
+        ChatModel chatModel = mock(ChatModel.class);
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(
+                new ChatResponse(List.of(new Generation(new AssistantMessage("valid text delta"))))));
+        RuntimeException marker = new RuntimeException("consumer-marker");
+
+        assertThatThrownBy(() -> new GeminiProviderAdapter(chatModel)
+                        .stream(request(ProviderId.GEMINI, "gemini-selected"))
+                        .consume(ignored -> {
+                            throw marker;
+                        }))
+                .isSameAs(marker)
+                .isNotInstanceOf(ProviderExecutionException.class);
+    }
+
+    @Test
     void classifiesGenAiSdkStatusAndTimeoutFailuresWithoutLeakingDetails() {
         assertSdkFailure(new ClientException(401, "UNAUTHENTICATED", "api-key-secret raw-provider-body"),
                 ProviderFailureType.AUTHENTICATION_FAILURE);

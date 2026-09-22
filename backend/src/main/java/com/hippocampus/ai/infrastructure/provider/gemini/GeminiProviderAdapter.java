@@ -103,7 +103,7 @@ public final class GeminiProviderAdapter implements AiProviderAdapter {
             if (!state.textReceived) {
                 throw failure(ProviderFailureType.INVALID_RESPONSE);
             }
-            consumer.accept(new ProviderStreamCompleted(
+            emit(consumer, new ProviderStreamCompleted(
                     providerId(),
                     state.modelId,
                     state.usage,
@@ -112,6 +112,10 @@ public final class GeminiProviderAdapter implements AiProviderAdapter {
         } catch (ProviderExecutionException exception) {
             throw exception;
         } catch (RuntimeException exception) {
+            RuntimeException consumerFailure = consumerFailure(exception);
+            if (consumerFailure != null) {
+                throw consumerFailure;
+            }
             throw failure(classify(exception));
         }
     }
@@ -134,7 +138,7 @@ public final class GeminiProviderAdapter implements AiProviderAdapter {
         String text = response.getResult().getOutput().getText();
         if (text != null && !text.isEmpty()) {
             state.textReceived = true;
-            consumer.accept(new ProviderTextDelta(text));
+            emit(consumer, new ProviderTextDelta(text));
         }
         if (response.getResult().getMetadata() != null) {
             state.finishReason = response.getResult().getMetadata().getFinishReason();
@@ -195,6 +199,25 @@ public final class GeminiProviderAdapter implements AiProviderAdapter {
         return ProviderFailureType.PROVIDER_UNAVAILABLE;
     }
 
+    private static void emit(
+            Consumer<? super ProviderStreamEvent> consumer,
+            ProviderStreamEvent event) {
+        try {
+            consumer.accept(event);
+        } catch (RuntimeException exception) {
+            throw new ConsumerDeliveryException(exception);
+        }
+    }
+
+    private static RuntimeException consumerFailure(Throwable failure) {
+        for (Throwable current = failure; current != null; current = current.getCause()) {
+            if (current instanceof ConsumerDeliveryException deliveryFailure) {
+                return deliveryFailure.consumerFailure;
+            }
+        }
+        return null;
+    }
+
     private static ProviderFailureType classifyStatus(int status) {
         if (status == 401 || status == 403) {
             return ProviderFailureType.AUTHENTICATION_FAILURE;
@@ -223,6 +246,15 @@ public final class GeminiProviderAdapter implements AiProviderAdapter {
 
         private StreamState(String modelId) {
             this.modelId = modelId;
+        }
+    }
+
+    private static final class ConsumerDeliveryException extends RuntimeException {
+        private final RuntimeException consumerFailure;
+
+        private ConsumerDeliveryException(RuntimeException consumerFailure) {
+            super(consumerFailure);
+            this.consumerFailure = consumerFailure;
         }
     }
 }
