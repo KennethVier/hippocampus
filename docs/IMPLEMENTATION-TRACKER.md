@@ -1374,7 +1374,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Connect Gemini server-side.
 - **Build:** Use Spring AI Google GenAI integration; map canonical request, multimodal input where approved, structured outputs/errors/usage.
 - **How it works:** Gemini SDK types remain internal.
@@ -1383,14 +1383,14 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Gemini executes supported typed tasks.
 - **Definition of Done:** Contract tests pass.
 - **Authority:** Documents 17,19
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Implemented the provider-neutral execution and streaming contracts and Spring AI Google GenAI adapter under `backend/src/main/java/com/hippocampus/ai/`, including route-selected model overrides, canonical system/task prompt mapping, JSON response mode, reserved output-token mapping, raw untrusted text-delta and terminal stream events, provider-reported usage, latency, typed safe failures, and disabled-by-default server-side credential configuration. PR #183 corrections add Spring AI streaming behind a provider-neutral callback contract (no Reactor or provider DTO leakage), explicitly configure one provider attempt with no application-level retry, classify Google GenAI SDK `ApiException` status codes safely from the cause chain, remove the divergent properties-level model default so model selection remains configuration/evaluation driven, and preserve downstream stream-consumer failures as non-provider failures instead of normalizing them to `ProviderExecutionException`. Second-correction focused agent validation passed: 4 `AiProviderAdapterContractTests` and 8 `GeminiProviderAdapterTests`, with 0 failures and 0 errors. User revalidation of the focused three-class command and the updated combined Gemini/Ollama live-smoke command both passed after the second correction.
 - **Notes / blockers:** _None_
 
 ## P5-06 — Implement OllamaCloudProviderAdapter
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Connect remote Ollama API.
 - **Build:** Use server-side HTTPS bearer auth and map canonical request/stream/errors.
 - **How it works:** No local Ollama assumption; provider-specific details stay internal.
@@ -1399,7 +1399,10 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Ollama API executes supported typed tasks.
 - **Definition of Done:** Contract tests pass.
 - **Authority:** Documents 10,17,19
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Implemented the provider-neutral execution and streaming contracts and remote Ollama Cloud REST adapter under `backend/src/main/java/com/hippocampus/ai/`, including the HTTPS `/api/chat` integration, infrastructure-only bearer authentication, route-selected model and canonical system/task prompt mapping, structured JSON mode, raw untrusted output, provider-reported usage, latency, safe HTTP/network/response failure normalization, cloud-only URL validation, and disabled-by-default server-side credential configuration. PR #183 corrections add real Ollama NDJSON streaming with `stream=true`, incrementally normalize provider text deltas and terminal model/usage/finish metadata, keep provider DTOs and transport details inside infrastructure while exposing no Reactor type, preserve downstream stream-consumer failures as non-provider failures, and classify non-timeout `ResourceAccessException` transport failures as `PROVIDER_UNAVAILABLE` while retaining timeout classification for actual socket/HTTP timeouts. Second-correction focused agent validation passed: 4 `AiProviderAdapterContractTests` and 10 `OllamaCloudProviderAdapterTests`, with 0 failures and 0 errors. User revalidation of the focused three-class command and the updated combined Gemini/Ollama live-smoke command both passed after the second correction. Third-correction provider DTOs ignore documented unconsumed response and message metadata without exposing it through the application contract; realistic streaming fixtures cover `created_at`, message metadata, terminal duration metadata, preserved canonical deltas/completion metadata, and fail-closed malformed required content. Focused agent validation passed: 11 `OllamaCloudProviderAdapterTests`, with 0 failures and 0 errors. User Ollama Cloud live-smoke revalidation passed after the third correction:
+OllamaCloudProviderLiveSmokeTests — 2 tests run, 0 failures, 0 errors,
+0 skipped, BUILD SUCCESS, validating both synchronous execution and the
+real streaming path against Ollama Cloud.
 - **Notes / blockers:** _None_
 
 ## P5-07 — Implement AI Request Manager
