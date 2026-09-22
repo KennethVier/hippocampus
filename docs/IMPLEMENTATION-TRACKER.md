@@ -1374,7 +1374,7 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Connect Gemini server-side.
 - **Build:** Use Spring AI Google GenAI integration; map canonical request, multimodal input where approved, structured outputs/errors/usage.
 - **How it works:** Gemini SDK types remain internal.
@@ -1383,14 +1383,30 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Expected result:** Gemini executes supported typed tasks.
 - **Definition of Done:** Contract tests pass.
 - **Authority:** Documents 17,19
-- **Evidence / link:** Implemented the provider-neutral execution and streaming contracts and Spring AI Google GenAI adapter under `backend/src/main/java/com/hippocampus/ai/`, including route-selected model overrides, canonical system/task prompt mapping, JSON response mode, reserved output-token mapping, raw untrusted text-delta and terminal stream events, provider-reported usage, latency, typed safe failures, and disabled-by-default server-side credential configuration. PR #183 corrections add Spring AI streaming behind a provider-neutral callback contract (no Reactor or provider DTO leakage), explicitly configure one provider attempt with no application-level retry, classify Google GenAI SDK `ApiException` status codes safely from the cause chain, remove the divergent properties-level model default so model selection remains configuration/evaluation driven, and preserve downstream stream-consumer failures as non-provider failures instead of normalizing them to `ProviderExecutionException`. Second-correction focused agent validation passed: 4 `AiProviderAdapterContractTests` and 8 `GeminiProviderAdapterTests`, with 0 failures and 0 errors. User revalidation of the focused three-class command and the updated combined Gemini/Ollama live-smoke command both passed after the second correction.
+- **Evidence / link:** Implemented the provider-neutral execution and streaming contracts and Spring AI Google GenAI adapter under `backend/src/main/java/com/hippocampus/ai/`, including route-selected model overrides, canonical system/task prompt mapping, JSON response mode, reserved output-token mapping, raw untrusted text-delta and terminal stream events, provider-reported usage, latency, typed safe failures, and disabled-by-default server-side credential configuration. PR #183 corrections add Spring AI streaming behind a provider-neutral callback contract (no Reactor or provider DTO leakage), explicitly configure one provider attempt with no application-level retry, classify Google GenAI SDK `ApiException` status codes safely from the cause chain, remove the divergent properties-level model default so model selection remains configuration/evaluation driven, and preserve downstream stream-consumer failures as non-provider failures instead of normalizing them to `ProviderExecutionException`. Second-correction focused agent validation passed: 4 `AiProviderAdapterContractTests` and 8 `GeminiProviderAdapterTests`, with 0 failures and 0 errors. User revalidation of the focused three-class command and the updated combined Gemini/Ollama live-smoke command both passed after the second correction. Final completion: External implementation review returned APPROVED with no
+unresolved correctness, architecture, or scope findings. Independent
+hippocampus-security-vulnerability-review returned SECURITY PASS with
+0 Critical, 0 High, 0 Medium, and 0 Low findings and no manual security
+review required. Final PR-head GitHub Actions quality run #510
+(ID 35678940099) succeeded at
+b4d13af0cbc9d67ed88625f4467e1b6a00059f30, including backend-quality,
+frontend-quality, security, auth-e2e, phase1-gate, phase2-gate,
+phase3-gate, and phase4-gate. PR #183
+(P5-05/P5-06: Implement Gemini and Ollama Cloud provider adapters)
+was merged into main on 2026-09-22. Merge commit:
+61fed35e0e64c3d484f3f7b140b8d3797e1025f9.
+Expected behavior and Definition of Done are satisfied. Gemini provider
+execution and streaming remain behind the provider-neutral adapter boundary;
+provider credentials remain server-side; provider output remains untrusted
+for later P5-08 validation; and retry/backoff/fallback/request-management
+behavior remains outside P5-05.
 - **Notes / blockers:** _None_
 
 ## P5-06 — Implement OllamaCloudProviderAdapter
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Connect remote Ollama API.
 - **Build:** Use server-side HTTPS bearer auth and map canonical request/stream/errors.
 - **How it works:** No local Ollama assumption; provider-specific details stay internal.
@@ -1402,7 +1418,27 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 - **Evidence / link:** Implemented the provider-neutral execution and streaming contracts and remote Ollama Cloud REST adapter under `backend/src/main/java/com/hippocampus/ai/`, including the HTTPS `/api/chat` integration, infrastructure-only bearer authentication, route-selected model and canonical system/task prompt mapping, structured JSON mode, raw untrusted output, provider-reported usage, latency, safe HTTP/network/response failure normalization, cloud-only URL validation, and disabled-by-default server-side credential configuration. PR #183 corrections add real Ollama NDJSON streaming with `stream=true`, incrementally normalize provider text deltas and terminal model/usage/finish metadata, keep provider DTOs and transport details inside infrastructure while exposing no Reactor type, preserve downstream stream-consumer failures as non-provider failures, and classify non-timeout `ResourceAccessException` transport failures as `PROVIDER_UNAVAILABLE` while retaining timeout classification for actual socket/HTTP timeouts. Second-correction focused agent validation passed: 4 `AiProviderAdapterContractTests` and 10 `OllamaCloudProviderAdapterTests`, with 0 failures and 0 errors. User revalidation of the focused three-class command and the updated combined Gemini/Ollama live-smoke command both passed after the second correction. Third-correction provider DTOs ignore documented unconsumed response and message metadata without exposing it through the application contract; realistic streaming fixtures cover `created_at`, message metadata, terminal duration metadata, preserved canonical deltas/completion metadata, and fail-closed malformed required content. Focused agent validation passed: 11 `OllamaCloudProviderAdapterTests`, with 0 failures and 0 errors. User Ollama Cloud live-smoke revalidation passed after the third correction:
 OllamaCloudProviderLiveSmokeTests — 2 tests run, 0 failures, 0 errors,
 0 skipped, BUILD SUCCESS, validating both synchronous execution and the
-real streaming path against Ollama Cloud.
+real streaming path against Ollama Cloud. Final completion: External implementation review returned APPROVED with no
+unresolved correctness, architecture, or scope findings. Independent
+hippocampus-security-vulnerability-review returned SECURITY PASS with
+0 Critical, 0 High, 0 Medium, and 0 Low findings and no manual security
+review required. Final Ollama Cloud live-smoke validation passed after the
+final implementation correction: OllamaCloudProviderLiveSmokeTests —
+2 tests, 0 failures, 0 errors, 0 skipped, BUILD SUCCESS, covering synchronous
+execution and the real streaming path. Final PR-head GitHub Actions quality
+run #510 (ID 35678940099) succeeded at
+b4d13af0cbc9d67ed88625f4467e1b6a00059f30, including backend-quality,
+frontend-quality, security, auth-e2e, phase1-gate, phase2-gate,
+phase3-gate, and phase4-gate. PR #183
+(P5-05/P5-06: Implement Gemini and Ollama Cloud provider adapters)
+was merged into main on 2026-09-22. Merge commit:
+61fed35e0e64c3d484f3f7b140b8d3797e1025f9.
+Expected behavior and Definition of Done are satisfied. Ollama Cloud
+synchronous and streaming execution remain behind the provider-neutral
+adapter boundary; bearer credentials and provider DTOs remain
+infrastructure-only; provider output remains untrusted; and P5-07+
+request-management, retry/backoff, validation, repair, and fallback
+responsibilities remain outside P5-06.
 - **Notes / blockers:** _None_
 
 ## P5-07 — Implement AI Request Manager
