@@ -4,6 +4,11 @@ import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
+
+import com.google.genai.errors.ApiException;
 
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -19,7 +24,11 @@ import com.hippocampus.ai.application.provider.AiProviderAdapter;
 import com.hippocampus.ai.application.provider.ProviderExecutionException;
 import com.hippocampus.ai.application.provider.ProviderExecutionRequest;
 import com.hippocampus.ai.application.provider.ProviderExecutionResult;
+import com.hippocampus.ai.application.provider.ProviderEventStream;
 import com.hippocampus.ai.application.provider.ProviderFailureType;
+import com.hippocampus.ai.application.provider.ProviderStreamCompleted;
+import com.hippocampus.ai.application.provider.ProviderStreamEvent;
+import com.hippocampus.ai.application.provider.ProviderTextDelta;
 import com.hippocampus.ai.application.provider.ProviderUsage;
 import com.hippocampus.ai.application.routing.ProviderId;
 import com.hippocampus.ai.domain.AiTaskType;
@@ -48,14 +57,7 @@ public final class GeminiProviderAdapter implements AiProviderAdapter {
         Objects.requireNonNull(request, "request must not be null");
         validateRequest(request);
 
-        GoogleGenAiChatOptions options = GoogleGenAiChatOptions.builder()
-                .model(request.target().modelId())
-                .maxOutputTokens(request.promptContext().reservedOutputTokens())
-                .responseMimeType(JSON_MIME_TYPE)
-                .build();
-        Prompt prompt = new Prompt(List.of(
-                new SystemMessage(request.promptContext().systemPrompt()),
-                new UserMessage(request.promptContext().taskPrompt())), options);
+        Prompt prompt = prompt(request);
 
         long startedAt = System.nanoTime();
         try {
@@ -79,6 +81,75 @@ public final class GeminiProviderAdapter implements AiProviderAdapter {
         } catch (RuntimeException exception) {
             throw failure(classify(exception));
         }
+    }
+
+    @Override
+    public ProviderEventStream stream(ProviderExecutionRequest request) {
+        Objects.requireNonNull(request, "request must not be null");
+        validateRequest(request);
+        Prompt prompt = prompt(request);
+
+        return consumer -> consumeStream(request, prompt, Objects.requireNonNull(consumer, "consumer must not be null"));
+    }
+
+    private void consumeStream(
+            ProviderExecutionRequest request,
+            Prompt prompt,
+            Consumer<? super ProviderStreamEvent> consumer) {
+        long startedAt = System.nanoTime();
+        StreamState state = new StreamState(request.target().modelId());
+        try {
+            chatModel.stream(prompt).doOnNext(response -> mapStreamResponse(response, state, consumer)).blockLast();
+            if (!state.textReceived) {
+                throw failure(ProviderFailureType.INVALID_RESPONSE);
+            }
+            consumer.accept(new ProviderStreamCompleted(
+                    providerId(),
+                    state.modelId,
+                    state.usage,
+                    Duration.ofNanos(System.nanoTime() - startedAt),
+                    Optional.ofNullable(state.finishReason)));
+        } catch (ProviderExecutionException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw failure(classify(exception));
+        }
+    }
+
+    private static void mapStreamResponse(
+            ChatResponse response,
+            StreamState state,
+            Consumer<? super ProviderStreamEvent> consumer) {
+        if (response == null) {
+            throw failure(ProviderFailureType.INVALID_RESPONSE);
+        }
+        state.modelId = responseModelId(response, state.modelId);
+        ProviderUsage usage = mapUsage(response);
+        if (!usage.equals(ProviderUsage.NONE)) {
+            state.usage = usage;
+        }
+        if (response.getResult() == null || response.getResult().getOutput() == null) {
+            return;
+        }
+        String text = response.getResult().getOutput().getText();
+        if (text != null && !text.isEmpty()) {
+            state.textReceived = true;
+            consumer.accept(new ProviderTextDelta(text));
+        }
+        if (response.getResult().getMetadata() != null) {
+            state.finishReason = response.getResult().getMetadata().getFinishReason();
+        }
+    }
+
+    private static Prompt prompt(ProviderExecutionRequest request) {
+        GoogleGenAiChatOptions options = GoogleGenAiChatOptions.builder()
+                .model(request.target().modelId())
+                .maxOutputTokens(request.promptContext().reservedOutputTokens())
+                .responseMimeType(JSON_MIME_TYPE)
+                .build();
+        return new Prompt(List.of(
+                new SystemMessage(request.promptContext().systemPrompt()),
+                new UserMessage(request.promptContext().taskPrompt())), options);
     }
 
     private void validateRequest(ProviderExecutionRequest request) {
@@ -111,23 +182,47 @@ public final class GeminiProviderAdapter implements AiProviderAdapter {
             if (current instanceof HttpTimeoutException || current instanceof java.net.SocketTimeoutException) {
                 return ProviderFailureType.TIMEOUT;
             }
-            if (current instanceof HttpStatusCodeException statusFailure) {
-                int status = statusFailure.getStatusCode().value();
-                if (status == 401 || status == 403) {
-                    return ProviderFailureType.AUTHENTICATION_FAILURE;
-                }
-                if (status == 429) {
-                    return ProviderFailureType.RATE_LIMITED;
-                }
-                if (status >= 500) {
-                    return ProviderFailureType.PROVIDER_UNAVAILABLE;
-                }
+            if (current instanceof TimeoutException) {
+                return ProviderFailureType.TIMEOUT;
             }
+            if (current instanceof ApiException apiFailure) {
+                return classifyStatus(apiFailure.code());
+            }
+            if (current instanceof HttpStatusCodeException statusFailure) {
+                return classifyStatus(statusFailure.getStatusCode().value());
+            }
+        }
+        return ProviderFailureType.PROVIDER_UNAVAILABLE;
+    }
+
+    private static ProviderFailureType classifyStatus(int status) {
+        if (status == 401 || status == 403) {
+            return ProviderFailureType.AUTHENTICATION_FAILURE;
+        }
+        if (status == 429) {
+            return ProviderFailureType.RATE_LIMITED;
+        }
+        if (status >= 500) {
+            return ProviderFailureType.PROVIDER_UNAVAILABLE;
+        }
+        if (status >= 400) {
+            return ProviderFailureType.INVALID_RESPONSE;
         }
         return ProviderFailureType.PROVIDER_UNAVAILABLE;
     }
 
     private static ProviderExecutionException failure(ProviderFailureType type) {
         return new ProviderExecutionException(ProviderId.GEMINI, type);
+    }
+
+    private static final class StreamState {
+        private String modelId;
+        private ProviderUsage usage = ProviderUsage.NONE;
+        private String finishReason;
+        private boolean textReceived;
+
+        private StreamState(String modelId) {
+            this.modelId = modelId;
+        }
     }
 }

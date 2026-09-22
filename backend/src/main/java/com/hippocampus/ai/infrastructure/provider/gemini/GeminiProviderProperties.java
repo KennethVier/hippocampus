@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public final class GeminiProviderProperties {
     private boolean enabled;
     private String apiKey;
-    private String defaultModel = "gemini-2.5-flash";
+    private String defaultModel;
 
     public boolean isEnabled() {
         return enabled;

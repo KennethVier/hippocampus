@@ -9,4 +9,6 @@ public interface AiProviderAdapter {
     boolean supports(AiTaskType taskType);
 
     ProviderExecutionResult execute(ProviderExecutionRequest request);
+
+    ProviderEventStream stream(ProviderExecutionRequest request);
 }

@@ -11,6 +11,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import java.net.SocketTimeoutException;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -25,6 +27,9 @@ import org.springframework.web.client.RestClient;
 import com.hippocampus.ai.application.provider.ProviderExecutionException;
 import com.hippocampus.ai.application.provider.ProviderExecutionResult;
 import com.hippocampus.ai.application.provider.ProviderFailureType;
+import com.hippocampus.ai.application.provider.ProviderStreamCompleted;
+import com.hippocampus.ai.application.provider.ProviderStreamEvent;
+import com.hippocampus.ai.application.provider.ProviderTextDelta;
 import com.hippocampus.ai.application.routing.ProviderId;
 
 class OllamaCloudProviderAdapterTests {
@@ -136,6 +141,64 @@ class OllamaCloudProviderAdapterTests {
                     assertThat(failure).hasNoCause();
                     assertThat(failure.getMessage()).doesNotContain(SECRET, "secret timeout body");
                 });
+    }
+
+    @Test
+    void requestsAndConsumesRealStreamingDeltasWithTerminalMetadata() {
+        Fixture fixture = fixture();
+        fixture.server().expect(requestTo("https://ollama.com/api/chat"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().json("""
+                        {
+                          "model":"cloud-selected",
+                          "messages":[
+                            {"role":"system","content":"system-policy-secret-marker"},
+                            {"role":"user","content":"student-task-secret-marker"}
+                          ],
+                          "stream":true,
+                          "format":"json",
+                          "options":{"num_predict":64}
+                        }
+                        """))
+                .andRespond(withSuccess("""
+                        {"model":"cloud-actual","message":{"role":"assistant","content":"{\\\"answer\\\":"},"done":false}
+                        {"model":"cloud-actual","message":{"role":"assistant","content":"\\\"untrusted\\\"}"},"done":false}
+                        {"model":"cloud-actual","message":{"role":"assistant","content":""},"done":true,"done_reason":"stop","prompt_eval_count":12,"eval_count":5}
+                        """, MediaType.APPLICATION_NDJSON));
+        List<ProviderStreamEvent> events = new ArrayList<>();
+
+        fixture.adapter().stream(request(ProviderId.OLLAMA_CLOUD, "cloud-selected")).consume(events::add);
+
+        assertThat(events.subList(0, 2)).containsExactly(
+                new ProviderTextDelta("{\"answer\":"),
+                new ProviderTextDelta("\"untrusted\"}"));
+        assertThat(events.get(2)).isInstanceOfSatisfying(ProviderStreamCompleted.class, completed -> {
+            assertThat(completed.providerId()).isEqualTo(ProviderId.OLLAMA_CLOUD);
+            assertThat(completed.modelId()).isEqualTo("cloud-actual");
+            assertThat(completed.usage().inputTokens()).contains(12);
+            assertThat(completed.usage().outputTokens()).contains(5);
+            assertThat(completed.finishReason()).contains("stop");
+        });
+        fixture.server().verify();
+    }
+
+    @Test
+    void normalizesStreamingHttpFailureWithoutLeakingSecretOrRawBody() {
+        Fixture fixture = fixture();
+        fixture.server().expect(requestTo("https://ollama.com/api/chat"))
+                .andRespond(withRawStatus(503)
+                        .body("raw-provider-body " + SECRET)
+                        .contentType(MediaType.TEXT_PLAIN));
+
+        assertThatThrownBy(() -> fixture.adapter()
+                        .stream(request(ProviderId.OLLAMA_CLOUD, "cloud-selected"))
+                        .consume(ignored -> {}))
+                .isInstanceOfSatisfying(ProviderExecutionException.class, failure -> {
+                    assertThat(failure.failureType()).isEqualTo(ProviderFailureType.PROVIDER_UNAVAILABLE);
+                    assertThat(failure).hasNoCause();
+                    assertThat(failure.getMessage()).doesNotContain(SECRET, "raw-provider-body");
+                });
+        fixture.server().verify();
     }
 
     private static void assertHttpFailure(int status, ProviderFailureType expected) {

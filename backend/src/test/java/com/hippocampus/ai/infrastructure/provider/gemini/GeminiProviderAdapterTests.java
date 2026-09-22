@@ -9,6 +9,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
+import java.net.SocketTimeoutException;
+import java.util.ArrayList;
+
+import com.google.genai.errors.ClientException;
+import com.google.genai.errors.ServerException;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -26,7 +31,11 @@ import org.springframework.ai.google.genai.GoogleGenAiChatOptions;
 import com.hippocampus.ai.application.provider.ProviderExecutionException;
 import com.hippocampus.ai.application.provider.ProviderExecutionResult;
 import com.hippocampus.ai.application.provider.ProviderFailureType;
+import com.hippocampus.ai.application.provider.ProviderStreamCompleted;
+import com.hippocampus.ai.application.provider.ProviderStreamEvent;
+import com.hippocampus.ai.application.provider.ProviderTextDelta;
 import com.hippocampus.ai.application.routing.ProviderId;
+import reactor.core.publisher.Flux;
 
 class GeminiProviderAdapterTests {
 
@@ -101,6 +110,78 @@ class GeminiProviderAdapterTests {
                         .execute(request(ProviderId.GEMINI, "gemini-selected")))
                 .isInstanceOfSatisfying(ProviderExecutionException.class, failure -> {
                     assertThat(failure.failureType()).isEqualTo(ProviderFailureType.PROVIDER_UNAVAILABLE);
+                    assertThat(failure).hasNoCause();
+                    assertThat(failure.getMessage()).doesNotContain(
+                            "api-key-secret", "system-policy-secret-marker", "student-task-secret-marker", "raw-provider-body");
+                });
+    }
+
+    @Test
+    void streamsProviderNeutralTextDeltasAndTerminalMetadata() {
+        ChatModel chatModel = mock(ChatModel.class);
+        ChatResponseMetadata terminalMetadata = ChatResponseMetadata.builder()
+                .model("gemini-actual")
+                .usage(new DefaultUsage(8, 3, 11))
+                .build();
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(
+                new ChatResponse(List.of(new Generation(new AssistantMessage("{\"answer\":")))),
+                new ChatResponse(List.of(new Generation(new AssistantMessage("\"untrusted\"}"))), terminalMetadata)));
+        List<ProviderStreamEvent> events = new ArrayList<>();
+
+        new GeminiProviderAdapter(chatModel)
+                .stream(request(ProviderId.GEMINI, "gemini-selected"))
+                .consume(events::add);
+
+        assertThat(events.subList(0, 2)).containsExactly(
+                new ProviderTextDelta("{\"answer\":"),
+                new ProviderTextDelta("\"untrusted\"}"));
+        assertThat(events.get(2)).isInstanceOfSatisfying(ProviderStreamCompleted.class, completed -> {
+            assertThat(completed.providerId()).isEqualTo(ProviderId.GEMINI);
+            assertThat(completed.modelId()).isEqualTo("gemini-actual");
+            assertThat(completed.usage().totalTokens()).contains(11);
+        });
+    }
+
+    @Test
+    void classifiesGenAiSdkStatusAndTimeoutFailuresWithoutLeakingDetails() {
+        assertSdkFailure(new ClientException(401, "UNAUTHENTICATED", "api-key-secret raw-provider-body"),
+                ProviderFailureType.AUTHENTICATION_FAILURE);
+        assertSdkFailure(new ClientException(403, "PERMISSION_DENIED", "student-task-secret-marker"),
+                ProviderFailureType.AUTHENTICATION_FAILURE);
+        assertSdkFailure(new ClientException(429, "RESOURCE_EXHAUSTED", "raw-provider-body"),
+                ProviderFailureType.RATE_LIMITED);
+        assertSdkFailure(new ClientException(400, "INVALID_ARGUMENT", "system-policy-secret-marker"),
+                ProviderFailureType.INVALID_RESPONSE);
+        assertSdkFailure(new ServerException(503, "UNAVAILABLE", "api-key-secret"),
+                ProviderFailureType.PROVIDER_UNAVAILABLE);
+        assertSdkFailure(new IllegalStateException("wrapper", new SocketTimeoutException("student-task-secret-marker")),
+                ProviderFailureType.TIMEOUT);
+    }
+
+    @Test
+    void normalizesStreamingSdkFailureWithoutLeakingDetails() {
+        ChatModel chatModel = mock(ChatModel.class);
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.error(
+                new ClientException(429, "RESOURCE_EXHAUSTED", "api-key-secret student-task-secret-marker")));
+
+        assertThatThrownBy(() -> new GeminiProviderAdapter(chatModel)
+                        .stream(request(ProviderId.GEMINI, "gemini-selected"))
+                        .consume(ignored -> {}))
+                .isInstanceOfSatisfying(ProviderExecutionException.class, failure -> {
+                    assertThat(failure.failureType()).isEqualTo(ProviderFailureType.RATE_LIMITED);
+                    assertThat(failure).hasNoCause();
+                    assertThat(failure.getMessage()).doesNotContain("api-key-secret", "student-task-secret-marker");
+                });
+    }
+
+    private static void assertSdkFailure(RuntimeException sdkFailure, ProviderFailureType expected) {
+        ChatModel chatModel = mock(ChatModel.class);
+        when(chatModel.call(any(Prompt.class))).thenThrow(new IllegalStateException("wrapper raw-provider-body", sdkFailure));
+
+        assertThatThrownBy(() -> new GeminiProviderAdapter(chatModel)
+                        .execute(request(ProviderId.GEMINI, "gemini-selected")))
+                .isInstanceOfSatisfying(ProviderExecutionException.class, failure -> {
+                    assertThat(failure.failureType()).isEqualTo(expected);
                     assertThat(failure).hasNoCause();
                     assertThat(failure.getMessage()).doesNotContain(
                             "api-key-secret", "system-policy-secret-marker", "student-task-secret-marker", "raw-provider-body");
