@@ -27,7 +27,7 @@ import com.hippocampus.rag.domain.EvidenceChunk;
 import com.hippocampus.rag.domain.EvidenceReferenceKind;
 import com.hippocampus.rag.domain.EvidenceSourceReference;
 
-public final class AiSourceReferenceValidator {
+public class AiSourceReferenceValidator {
 
     private final CurrentUser currentUser;
     private final SourceReferenceRepository sourceReferences;

@@ -28,6 +28,17 @@ class AiDiagnosticsPersistenceIntegrationTests extends PostgresIntegrationTestSu
     }
 
     @Test
+    void applicationContextExposesExactlyOneProductionDiagnosticsPersistenceBean() {
+        try (var context = startApplicationWithFlyway()) {
+            var beans = context.getBeansOfType(AiDiagnosticsPersistence.class);
+
+            assertThat(beans).hasSize(1);
+            assertThat(beans.values()).singleElement()
+                    .isInstanceOf(JdbcAiDiagnosticsPersistence.class);
+        }
+    }
+
+    @Test
     void persistsRequestAndUsageMetadataAtomicallyWithoutPrivateContentColumns() {
         try (var context = startApplicationWithFlyway()) {
             JdbcClient jdbc = context.getBean(JdbcClient.class);

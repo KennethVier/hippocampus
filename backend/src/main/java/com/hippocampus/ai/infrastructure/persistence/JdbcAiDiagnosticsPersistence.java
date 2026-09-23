@@ -1,6 +1,7 @@
 package com.hippocampus.ai.infrastructure.persistence;
 
 import java.sql.Types;
+import java.time.ZoneOffset;
 import java.util.Objects;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -60,7 +61,8 @@ public final class JdbcAiDiagnosticsPersistence implements AiDiagnosticsPersiste
                 .param("latencyMs", diagnostic.latencyMs(), Types.BIGINT)
                 .param("retryCount", diagnostic.retryCount())
                 .param("errorCode", diagnostic.errorCode(), Types.VARCHAR)
-                .param("createdAt", diagnostic.createdAt())
+                .param("createdAt", diagnostic.createdAt().atOffset(ZoneOffset.UTC),
+                        Types.TIMESTAMP_WITH_TIMEZONE)
                 .update();
     }
 
@@ -83,7 +85,8 @@ public final class JdbcAiDiagnosticsPersistence implements AiDiagnosticsPersiste
                 .param("inputTokens", diagnostic.inputTokens(), Types.BIGINT)
                 .param("outputTokens", diagnostic.outputTokens(), Types.BIGINT)
                 .param("estimatedCost", diagnostic.estimatedCost(), Types.NUMERIC)
-                .param("occurredAt", diagnostic.occurredAt())
+                .param("occurredAt", diagnostic.occurredAt().atOffset(ZoneOffset.UTC),
+                        Types.TIMESTAMP_WITH_TIMEZONE)
                 .update();
     }
 }

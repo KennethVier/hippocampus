@@ -9,7 +9,10 @@ import org.springframework.transaction.PlatformTransactionManager;
 import com.hippocampus.ai.application.diagnostics.AiDiagnosticsPersistence;
 import com.hippocampus.ai.infrastructure.persistence.JdbcAiDiagnosticsPersistence;
 
-@AutoConfiguration(afterName = "org.springframework.boot.jdbc.autoconfigure.JdbcClientAutoConfiguration")
+@AutoConfiguration(afterName = {
+        "org.springframework.boot.jdbc.autoconfigure.JdbcClientAutoConfiguration",
+        "org.springframework.boot.transaction.autoconfigure.TransactionAutoConfiguration"
+})
 @ConditionalOnBean({JdbcClient.class, PlatformTransactionManager.class})
 public class AiDiagnosticsPersistenceConfiguration {
 
