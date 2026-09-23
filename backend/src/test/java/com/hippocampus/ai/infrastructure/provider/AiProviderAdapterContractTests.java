@@ -18,6 +18,7 @@ import java.util.stream.Stream;
 
 import com.google.genai.errors.ClientException;
 import com.google.genai.errors.ServerException;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -50,6 +51,26 @@ import reactor.core.publisher.Flux;
 class AiProviderAdapterContractTests {
 
     private static final String RAW_PROVIDER_DETAIL = "raw-provider-body api-key-secret";
+
+    @Test
+    void liveExplanationFixtureReservesExpandedOutputBudget() {
+        assertThat(ProviderTestFixtures.liveExplanationRequest(ProviderId.GEMINI, "gemini-live")
+                        .promptContext().reservedOutputTokens())
+                .isEqualTo(1024);
+        assertThat(ProviderTestFixtures.liveExplanationRequest(ProviderId.OLLAMA_CLOUD, "ollama-live")
+                        .promptContext().reservedOutputTokens())
+                .isEqualTo(1024);
+    }
+
+    @Test
+    void ordinaryProviderFixturesKeepTheirExistingOutputBudget() {
+        assertThat(ProviderTestFixtures.request(ProviderId.GEMINI, "gemini-selected")
+                        .promptContext().reservedOutputTokens())
+                .isEqualTo(64);
+        assertThat(ProviderTestFixtures.request(ProviderId.OLLAMA_CLOUD, "ollama-selected")
+                        .promptContext().reservedOutputTokens())
+                .isEqualTo(64);
+    }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("adapters")

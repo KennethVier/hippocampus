@@ -114,6 +114,7 @@ class GeminiProviderAdapterTests {
         ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
         verify(chatModel).call(promptCaptor.capture());
         GoogleGenAiChatOptions options = (GoogleGenAiChatOptions) promptCaptor.getValue().getOptions();
+        assertThat(options.getMaxOutputTokens()).isEqualTo(1024);
         assertThat(options.getResponseSchema())
                 .isEqualTo(ProviderStructuredOutputSchema.geminiSchema(AiOutputContract.EXPLANATION));
     }

@@ -55,7 +55,7 @@ public final class ProviderTestFixtures {
                                 }
                                 """,
                         100,
-                        256,
+                        1024,
                         List.of()),
                 new ProviderRoute.Target(providerId, modelId));
     }

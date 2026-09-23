@@ -103,6 +103,7 @@ class OllamaCloudProviderAdapterTests {
                 .andExpect(jsonPath("$.format.type").value("object"))
                 .andExpect(jsonPath("$.format.required.length()").value(7))
                 .andExpect(jsonPath("$.format.additionalProperties").value(false))
+                .andExpect(jsonPath("$.options.num_predict").value(1024))
                 .andRespond(withSuccess("""
                         {
                           "model":"cloud-live",
