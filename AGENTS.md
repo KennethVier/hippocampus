@@ -34,29 +34,74 @@ Code never silently overrides higher authority.
 - PostgreSQL is authoritative persistence; pgvector is the retrieval foundation.
 - Uploaded binaries belong in private object storage, not PostgreSQL blobs.
 
-## Agent Workflow
+## Agent Tooling Map
 
-Normal tracker work uses three roles:
+Hippocampus uses roles, not model-specific authority. The repository workflow must remain valid if a tool changes.
 
-1. **Plan** — Human + ChatGPT resolve the tracker task, minimum authority, scope, decisions, validation commands, and stop conditions, then produce a compact implementation packet.
-2. **Implement** — Codex implements that packet directly with `hippocampus-implement-task`. It does not re-plan unless a concrete contradiction or blocker appears.
-3. **Review** — an independent reviewer inspects the actual diff plus user/CI evidence, performs general review, then the required independent security pass.
+Default tool assignment:
 
-Do not add a separate validation agent to the normal loop. Broad validation is user-executed or CI-executed and supplied as evidence to review.
+1. **Plan** — Human + Gemini resolve the tracker task and produce the approved implementation packet.
+2. **Implement (local)** — Google Antigravity is the default local implementation executor and uses `hippocampus-implement-task`.
+3. **Implement (cloud, optional)** — Google Jules may execute an approved packet when explicitly selected. Jules is an alternate executor, not an additional mandatory stage.
+4. **Review** — an independent reviewer inspects the actual diff plus user/CI evidence using `hippocampus-review-implementation`.
+5. **Security review** — after general review is clean, run `hippocampus-security-vulnerability-review` independently.
+
+Do not use Antigravity and Jules redundantly on the same task unless a concrete reason justifies separate execution. Do not let an implementation executor self-approve its own work.
+
+Antigravity discovers workspace skills under `.agents/skills/`. Jules reads this root `AGENTS.md`; when Jules executes a task, the prompt/plan must also direct it to the exact relevant skill file when the skill contains task-critical behavior.
+
+For a fresh agent/session, use `hippocampus-onboard-agent` once before task work when repository context is not already established. The onboarding skill is orientation only; it does not replace tracker-task planning.
+
+## Tracker-First Workflow
+
+Normal tracker work follows:
+
+```text
+Human + Gemini planning
+        ↓
+approved implementation packet
+        ↓
+Antigravity local OR Jules cloud
+        ↓
+IMPLEMENTED — USER VALIDATION REQUIRED
+        ↓
+user / GitHub Actions validation
+        ↓
+independent implementation review
+        ↓
+independent security review
+        ↓
+publication / merge
+        ↓
+tracker completion evidence
+```
+
+Rules:
+
+- Identify the exact tracker task before changing code.
+- Read only the minimum authoritative documents needed for that task.
+- Confirm dependencies, current phase scope, and exclusions.
+- If a detailed implementation packet is already approved, execute it directly; do not re-plan unless a concrete contradiction, blocker, or significant unresolved decision appears.
+- Do not implement later tracker tasks early.
+- Keep changes minimal and reviewable.
+- Do not introduce speculative abstractions, dependencies, infrastructure, or features.
+- Leave completion/merge decisions to independent review and factual evidence.
+
+`docs/agent-orchestration-workflow.md` contains the full role/tool workflow. `docs/agent-context-and-bootstrap.md` contains the durable repository orientation and reusable Antigravity/Jules bootstrap prompts.
 
 ## Implementation Command Policy
 
-During ordinary implementation, Codex runs **no commands** except an eligible test created or modified by the current task.
+During ordinary implementation, the implementation executor runs **no commands** except an eligible test created or modified by the current task.
 
 An eligible agent-run test must satisfy all of these:
 
 - the test/test method was created or modified by the current implementation;
 - the narrowest practical target is used (method first, then class/file only when method-level execution is impractical);
-- it does not require Docker, Docker Compose, Testcontainers, external infrastructure, application startup, or other expensive environment setup.
+- it does not require Docker, Docker Compose, Testcontainers, external infrastructure, application startup, browser startup, or other expensive environment setup.
 
-Everything else is user-run unless the current user instruction explicitly authorizes the exact command.
+Everything else is user-run or CI-run unless the current user instruction explicitly authorizes the exact command.
 
-Codex must not run by default:
+Implementation executors must not run by default:
 
 - full/module test suites or unchanged tests;
 - build, package, verify, lint, typecheck, or validation scripts;
@@ -68,9 +113,9 @@ Codex must not run by default:
 - Git inspection/hygiene commands solely for ceremony;
 - any other command not permitted above.
 
-Do not infer command authorization from "recommended", "normally required", tracker validation language, or good practice. Instead, list the exact commands the user should run in the implementation report.
+Do not infer command authorization from "recommended", tracker validation language, or general engineering practice. Instead, list the exact commands the user should run in the implementation report.
 
-An implementation report must not claim `VALIDATION PASS` or `Done` from the agent-run changed test alone. Use `IMPLEMENTED — USER VALIDATION REQUIRED` until broader required evidence is supplied.
+An implementation report must not claim `VALIDATION PASS`, `Ready for Review`, or `Done` from an agent-run changed test alone. Use `IMPLEMENTED — USER VALIDATION REQUIRED` until broader required evidence is supplied.
 
 ## Communication Policy
 
@@ -81,7 +126,7 @@ Do not narrate file reads, routine reasoning, planned edits, progress, skipped c
 - a real blocker prevents implementation;
 - the approved packet conflicts with authority/repository reality;
 - a significant unresolved decision requires human input;
-- an eligible changed test fails and materially affects the implementation; or
+- an eligible changed test fails and materially affects implementation; or
 - implementation is finished.
 
 Keep blocker and final reports terse and factual.
