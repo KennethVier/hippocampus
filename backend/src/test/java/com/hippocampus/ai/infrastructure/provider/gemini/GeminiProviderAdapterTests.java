@@ -1,6 +1,8 @@
 package com.hippocampus.ai.infrastructure.provider.gemini;
 
+import static com.hippocampus.ai.infrastructure.provider.ProviderTestFixtures.liveExplanationRequest;
 import static com.hippocampus.ai.infrastructure.provider.ProviderTestFixtures.request;
+import static com.hippocampus.ai.infrastructure.provider.ProviderTestFixtures.validateLiveExplanation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -40,6 +42,10 @@ import com.hippocampus.ai.application.provider.ProviderStreamCompleted;
 import com.hippocampus.ai.application.provider.ProviderStreamEvent;
 import com.hippocampus.ai.application.provider.ProviderTextDelta;
 import com.hippocampus.ai.application.routing.ProviderId;
+import com.hippocampus.ai.domain.AiOutputContract;
+import com.hippocampus.ai.domain.ExplanationResult;
+import com.hippocampus.ai.domain.ValidatedAiResult;
+import com.hippocampus.ai.infrastructure.provider.ProviderStructuredOutputSchema;
 import reactor.core.publisher.Flux;
 
 class GeminiProviderAdapterTests {
@@ -78,6 +84,38 @@ class GeminiProviderAdapterTests {
         assertThat(options.getModel()).isEqualTo("gemini-selected");
         assertThat(options.getMaxOutputTokens()).isEqualTo(64);
         assertThat(options.getResponseMimeType()).isEqualTo("application/json");
+        assertThat(options.getResponseSchema())
+                .isEqualTo(ProviderStructuredOutputSchema.geminiSchema(AiOutputContract.EXPLANATION))
+                .contains("\"concept\"", "\"supplementalKnowledgeUsed\"", "\"required\"")
+                .doesNotContain("additionalProperties");
+    }
+
+    @Test
+    void liveSmokeFixtureUsesStructuredOutputAndPassesStrictValidation() {
+        ChatModel chatModel = mock(ChatModel.class);
+        when(chatModel.call(any(Prompt.class))).thenReturn(new ChatResponse(List.of(new Generation(
+                new AssistantMessage("""
+                        {
+                          "concept": "atrioventricular nodal delay",
+                          "explanation": "Slow conduction allows the atria to empty before ventricular contraction.",
+                          "keyPoints": ["The delay supports sequential chamber contraction"],
+                          "prerequisitesUsed": ["cardiac conduction"],
+                          "sourceReferences": [],
+                          "supplementalKnowledgeUsed": true,
+                          "limitations": []
+                        }
+                        """)))));
+        GeminiProviderAdapter adapter = new GeminiProviderAdapter(chatModel);
+
+        ProviderExecutionResult result = adapter.execute(liveExplanationRequest(ProviderId.GEMINI, "gemini-live"));
+        ValidatedAiResult<?> validated = validateLiveExplanation(result);
+
+        assertThat(validated.result()).isInstanceOf(ExplanationResult.class);
+        ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(promptCaptor.capture());
+        GoogleGenAiChatOptions options = (GoogleGenAiChatOptions) promptCaptor.getValue().getOptions();
+        assertThat(options.getResponseSchema())
+                .isEqualTo(ProviderStructuredOutputSchema.geminiSchema(AiOutputContract.EXPLANATION));
     }
 
     @Test

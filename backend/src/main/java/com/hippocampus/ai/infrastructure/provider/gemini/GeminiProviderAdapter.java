@@ -37,6 +37,7 @@ import com.hippocampus.ai.application.provider.ProviderTextDelta;
 import com.hippocampus.ai.application.provider.ProviderUsage;
 import com.hippocampus.ai.application.routing.ProviderId;
 import com.hippocampus.ai.domain.AiTaskType;
+import com.hippocampus.ai.infrastructure.provider.ProviderStructuredOutputSchema;
 
 public final class GeminiProviderAdapter implements AiProviderAdapter {
     private static final String JSON_MIME_TYPE = "application/json";
@@ -155,6 +156,7 @@ public final class GeminiProviderAdapter implements AiProviderAdapter {
                 .model(request.target().modelId())
                 .maxOutputTokens(request.promptContext().reservedOutputTokens())
                 .responseMimeType(JSON_MIME_TYPE)
+                .responseSchema(ProviderStructuredOutputSchema.geminiSchema(request.outputContract()))
                 .build();
         return new Prompt(List.of(
                 new SystemMessage(request.promptContext().systemPrompt()),

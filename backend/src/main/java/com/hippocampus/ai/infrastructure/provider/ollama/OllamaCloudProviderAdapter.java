@@ -36,6 +36,7 @@ import com.hippocampus.ai.application.provider.ProviderTextDelta;
 import com.hippocampus.ai.application.provider.ProviderUsage;
 import com.hippocampus.ai.application.routing.ProviderId;
 import com.hippocampus.ai.domain.AiTaskType;
+import com.hippocampus.ai.infrastructure.provider.ProviderStructuredOutputSchema;
 
 public final class OllamaCloudProviderAdapter implements AiProviderAdapter {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -186,7 +187,7 @@ public final class OllamaCloudProviderAdapter implements AiProviderAdapter {
                         new OllamaMessage("system", request.promptContext().systemPrompt()),
                         new OllamaMessage("user", request.promptContext().taskPrompt())),
                 stream,
-                "json",
+                ProviderStructuredOutputSchema.ollamaFormat(request.outputContract()),
                 Map.of("num_predict", request.promptContext().reservedOutputTokens()));
     }
 
@@ -290,7 +291,7 @@ public final class OllamaCloudProviderAdapter implements AiProviderAdapter {
             String model,
             List<OllamaMessage> messages,
             boolean stream,
-            String format,
+            Object format,
             Map<String, Integer> options) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)

@@ -1,5 +1,6 @@
 package com.hippocampus.ai.infrastructure.provider;
 
+import static com.hippocampus.ai.infrastructure.provider.ProviderTestFixtures.validateLiveExplanation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -39,6 +40,7 @@ import com.hippocampus.ai.application.provider.ProviderFailureType;
 import com.hippocampus.ai.application.provider.ProviderStreamCompleted;
 import com.hippocampus.ai.application.provider.ProviderStreamEvent;
 import com.hippocampus.ai.application.provider.ProviderTextDelta;
+import com.hippocampus.ai.application.provider.ProviderUsage;
 import com.hippocampus.ai.application.routing.ProviderId;
 import com.hippocampus.ai.domain.AiTaskType;
 import com.hippocampus.ai.infrastructure.provider.gemini.GeminiProviderAdapter;
@@ -76,6 +78,21 @@ class AiProviderAdapterContractTests {
     void adaptersExposeTheSameTaskCapabilityContract(AdapterCase adapterCase) {
         assertThat(Stream.of(AiTaskType.values()).allMatch(adapterCase.adapter()::supports)).isTrue();
         assertThat(adapterCase.adapter().supports(null)).isFalse();
+    }
+
+    @ParameterizedTest(name = "safe diagnostic {index}")
+    @MethodSource("liveSmokeValidationFailures")
+    void liveSmokeValidationFailureReportsOnlySafeSchemaMetadata(ProviderExecutionResult result) {
+        assertThatThrownBy(() -> validateLiveExplanation(result))
+                .isInstanceOf(AssertionError.class)
+                .hasMessage("""
+                        provider: %s
+                        model: %s
+                        output contract: EXPLANATION
+                        schema failure reason: CONTRACT_MISMATCH
+                        """.formatted(result.providerId(), result.modelId()).strip())
+                .hasNoCause()
+                .hasMessageNotContaining(RAW_PROVIDER_DETAIL);
     }
 
     @ParameterizedTest(name = "{0}")
@@ -217,6 +234,22 @@ class AiProviderAdapterContractTests {
                 ollamaHttpFailure("Ollama rate limit", 429, ProviderFailureType.RATE_LIMITED),
                 ollamaTimeoutFailure(),
                 ollamaHttpFailure("Ollama unavailable", 503, ProviderFailureType.PROVIDER_UNAVAILABLE));
+    }
+
+    static Stream<ProviderExecutionResult> liveSmokeValidationFailures() {
+        return Stream.of(
+                new ProviderExecutionResult(
+                        ProviderId.GEMINI,
+                        "gemini-live",
+                        "{\"unexpected\":\"" + RAW_PROVIDER_DETAIL + "\"}",
+                        ProviderUsage.NONE,
+                        Duration.ZERO),
+                new ProviderExecutionResult(
+                        ProviderId.OLLAMA_CLOUD,
+                        "ollama-live",
+                        "{\"unexpected\":\"" + RAW_PROVIDER_DETAIL + "\"}",
+                        ProviderUsage.NONE,
+                        Duration.ZERO));
     }
 
     static Stream<FailureCase> unsupportedRoutes() {

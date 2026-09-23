@@ -5,10 +5,15 @@ import java.util.List;
 import com.hippocampus.ai.application.prompt.PromptContext;
 import com.hippocampus.ai.application.prompt.PromptId;
 import com.hippocampus.ai.application.provider.ProviderExecutionRequest;
+import com.hippocampus.ai.application.provider.ProviderExecutionResult;
 import com.hippocampus.ai.application.routing.ProviderId;
 import com.hippocampus.ai.application.routing.ProviderRoute;
+import com.hippocampus.ai.application.validation.AiOutputValidator;
+import com.hippocampus.ai.application.validation.AiSchemaValidationException;
 import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.domain.AiTaskType;
+import com.hippocampus.ai.domain.ValidatedAiResult;
+import com.hippocampus.ai.infrastructure.validation.JacksonAiStructuredOutputDecoder;
 
 public final class ProviderTestFixtures {
     private ProviderTestFixtures() {}
@@ -53,5 +58,23 @@ public final class ProviderTestFixtures {
                         256,
                         List.of()),
                 new ProviderRoute.Target(providerId, modelId));
+    }
+
+    public static ValidatedAiResult<?> validateLiveExplanation(ProviderExecutionResult result) {
+        try {
+            return new AiOutputValidator(new JacksonAiStructuredOutputDecoder())
+                    .validate(result, AiOutputContract.EXPLANATION);
+        } catch (AiSchemaValidationException failure) {
+            throw new AssertionError("""
+                    provider: %s
+                    model: %s
+                    output contract: %s
+                    schema failure reason: %s
+                    """.formatted(
+                            result.providerId(),
+                            result.modelId(),
+                            failure.outputContract(),
+                            failure.reason()).strip());
+        }
     }
 }
