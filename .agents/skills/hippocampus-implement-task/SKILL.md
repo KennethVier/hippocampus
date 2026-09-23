@@ -1,6 +1,6 @@
 ---
 name: hippocampus-implement-task
-description: Default Codex execution workflow for an approved Hippocampus implementation packet. Implement directly with minimal context, no re-planning, no broad command execution, changed-test-only execution when eligible, and a terse user-validation handoff.
+description: Default Hippocampus execution workflow for an approved implementation packet. Antigravity is the default local executor; Jules may be used as an optional cloud executor. Implement directly with minimal context, no re-planning, no broad command execution, changed-test-only execution when eligible, and a terse user-validation handoff.
 ---
 
 # Implement a Hippocampus Tracker Task
@@ -9,19 +9,39 @@ description: Default Codex execution workflow for an approved Hippocampus implem
 
 Implement the approved task correctly with the smallest sufficient context, change set, command usage, and response output.
 
-If an external detailed plan/execution packet exists, treat it as the working plan and start implementation. Do not reproduce or re-derive that plan unless implementation exposes a real contradiction or blocker.
+If an externally approved implementation packet exists, treat it as the working plan and start implementation. Do not reproduce or re-derive that plan unless implementation exposes a real contradiction, blocker, or significant unresolved decision.
+
+This skill is executor-neutral. It is normally used by Antigravity locally. Jules may follow the same contract when selected for cloud execution.
 
 ## Execution
 
-1. Read the implementation packet and exact tracker task.
-2. Read only authority/files required by that packet or a concrete implementation blocker.
-3. Inspect only the affected implementation/tests needed to make the change safely.
-4. Implement the smallest complete change within current tracker scope.
-5. Add/update behavior-oriented tests where required.
-6. Run only an eligible test created or modified by this implementation, following the command policy below.
-7. Return a concise implementation report containing exact user-run validation commands.
+1. Read root `AGENTS.md` if not already established in the current session.
+2. Read the approved implementation packet and exact tracker task.
+3. Read only authority/files required by that packet or a concrete implementation blocker.
+4. Inspect only the affected implementation/tests needed to make the change safely.
+5. Implement the smallest complete change within current tracker scope.
+6. Add/update behavior-oriented tests where required.
+7. Run only an eligible test created or modified by this implementation, following the command policy below.
+8. Return a concise implementation report containing exact user/CI validation commands.
 
 Do not run a separate validation skill during ordinary implementation.
+
+## Approved Packet Is Controlling
+
+The implementation executor must not silently change:
+
+- tracker task scope;
+- Source-of-Truth behavior;
+- accepted ADR decisions;
+- architecture/module ownership;
+- authentication/security model;
+- runtime AI/provider architecture;
+- dependencies/infrastructure;
+- later-task sequencing.
+
+If repository reality contradicts the approved packet, stop and report the contradiction instead of improvising a new plan.
+
+For Jules specifically: a Jules-generated plan is an execution restatement only. It does not override the externally approved Hippocampus packet.
 
 ## Lean Implementation Rules
 
@@ -85,25 +105,29 @@ Do not run:
 - Git diff/status/check/stat/history commands solely for routine validation;
 - any other command not explicitly permitted.
 
-Do not infer permission from tracker phrases such as “required validation”, “recommended”, “normally run”, or general engineering practice. Those requirements become user-run commands in the final report unless the user explicitly authorizes agent execution.
+Do not infer permission from tracker phrases such as “required validation”, “recommended”, “normally run”, or general engineering practice. Those requirements become user/CI-run commands in the final report unless the user explicitly authorizes agent execution.
 
 ## Skill Routing
 
 Root `AGENTS.md` contains the persistent baseline. Load detailed guidance only for a concrete issue that cannot be resolved safely from the packet/current code:
 
+- repository/task orientation → `hippocampus-onboard-agent` only for a fresh/unfamiliar session
+- authority resolution → `hippocampus-source-of-truth`
 - Java language/domain design → `hippocampus-java-spring-engineering`
 - Spring framework behavior → `hippocampus-spring-boot-engineering`
 - React/TypeScript → `hippocampus-react-typescript-engineering`
 - non-trivial architecture/pattern choice → `hippocampus-architecture-patterns`
 - specialized test/security-test design → `hippocampus-testing-security`
 
-Do not automatically chain these skills. Cross-references are routing hints, not instructions to load more context. The independent `hippocampus-security-vulnerability-review` belongs to the later review role, not implementation.
+Do not automatically chain these skills. Cross-references are routing hints, not instructions to load more context. The independent `hippocampus-review-implementation` and `hippocampus-security-vulnerability-review` belong to the later Review role, not implementation.
 
 ## Scope / Safety
 
 - Do not pull later tracker work forward.
 - Do not introduce undocumented architecture, dependencies, infrastructure, or product capability.
 - Preserve module/dependency direction and authorization boundaries.
+- Preserve the application-owned learning-policy boundary.
+- Preserve Provider Router abstraction for runtime AI; do not couple domain/application logic directly to Gemini/Ollama/provider SDKs.
 - Security-sensitive uncertainty fails closed.
 - Do not weaken tests to obtain green output.
 - Do not commit, push, or create/update a PR unless the implementation packet/current user explicitly authorizes publication.
@@ -165,7 +189,7 @@ Agent-run tests:
 - none
 ```
 
-Then include exact commands the user should run:
+Then include exact commands the user or CI should run:
 
 ```text
 USER VALIDATION
@@ -177,4 +201,15 @@ Include container/integration commands here rather than running them.
 
 Optionally add one short `Notes:` entry only for a material caveat/blocker.
 
-Do not claim `VALIDATION PASS`, `Ready for Review`, or `Done` merely because an eligible changed test passed. Broader validation remains user/CI evidence for the review role.
+Do not claim `VALIDATION PASS`, `Ready for Review`, or `Done` merely because an eligible changed test passed. Broader validation remains user/CI evidence for the independent Review role.
+
+## Stop Conditions
+
+Stop instead of improvising when:
+
+- the packet conflicts with a higher-authority document or accepted ADR;
+- the tracker task/dependency state does not permit the requested behavior;
+- implementation would require a significant new architecture/infrastructure decision;
+- a security-sensitive boundary cannot be resolved safely;
+- the change would pull later tracker work forward;
+- the task cannot meet its Definition of Done under the approved scope.
