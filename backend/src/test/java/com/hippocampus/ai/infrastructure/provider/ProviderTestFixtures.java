@@ -65,16 +65,27 @@ public final class ProviderTestFixtures {
             return new AiOutputValidator(new JacksonAiStructuredOutputDecoder())
                     .validate(result, AiOutputContract.EXPLANATION);
         } catch (AiSchemaValidationException failure) {
+            String trimmedOutput = result.rawContent().strip();
             throw new AssertionError("""
                     provider: %s
                     model: %s
                     output contract: %s
                     schema failure reason: %s
+                    output token count: %s
+                    raw response character count: %d
+                    trimmed output starts with "{": %s
+                    trimmed output ends with "}": %s
+                    raw output contains a Markdown code fence ("```"): %s
                     """.formatted(
                             result.providerId(),
                             result.modelId(),
                             failure.outputContract(),
-                            failure.reason()).strip());
+                            failure.reason(),
+                            result.usage().outputTokens().map(String::valueOf).orElse("unknown"),
+                            result.rawContent().length(),
+                            trimmedOutput.startsWith("{"),
+                            trimmedOutput.endsWith("}"),
+                            result.rawContent().contains("```")).strip());
         }
     }
 }

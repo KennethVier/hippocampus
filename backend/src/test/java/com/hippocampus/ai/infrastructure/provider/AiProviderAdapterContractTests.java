@@ -101,19 +101,17 @@ class AiProviderAdapterContractTests {
         assertThat(adapterCase.adapter().supports(null)).isFalse();
     }
 
-    @ParameterizedTest(name = "safe diagnostic {index}")
+    @ParameterizedTest(name = "{0}")
     @MethodSource("liveSmokeValidationFailures")
-    void liveSmokeValidationFailureReportsOnlySafeSchemaMetadata(ProviderExecutionResult result) {
-        assertThatThrownBy(() -> validateLiveExplanation(result))
+    void liveSmokeValidationFailureReportsOnlySafeSchemaMetadata(SafeDiagnosticCase diagnosticCase) {
+        assertThatThrownBy(() -> validateLiveExplanation(diagnosticCase.result()))
                 .isInstanceOf(AssertionError.class)
-                .hasMessage("""
-                        provider: %s
-                        model: %s
-                        output contract: EXPLANATION
-                        schema failure reason: CONTRACT_MISMATCH
-                        """.formatted(result.providerId(), result.modelId()).strip())
+                .hasMessage(diagnosticCase.expectedMessage())
                 .hasNoCause()
-                .hasMessageNotContaining(RAW_PROVIDER_DETAIL);
+                .hasMessageNotContaining(diagnosticCase.result().rawContent())
+                .hasMessageNotContaining(RAW_PROVIDER_DETAIL)
+                .hasMessageNotContaining("system-policy-secret-marker")
+                .hasMessageNotContaining("student-task-secret-marker");
     }
 
     @ParameterizedTest(name = "{0}")
@@ -257,20 +255,46 @@ class AiProviderAdapterContractTests {
                 ollamaHttpFailure("Ollama unavailable", 503, ProviderFailureType.PROVIDER_UNAVAILABLE));
     }
 
-    static Stream<ProviderExecutionResult> liveSmokeValidationFailures() {
+    static Stream<SafeDiagnosticCase> liveSmokeValidationFailures() {
         return Stream.of(
-                new ProviderExecutionResult(
-                        ProviderId.GEMINI,
-                        "gemini-live",
-                        "{\"unexpected\":\"" + RAW_PROVIDER_DETAIL + "\"}",
-                        ProviderUsage.NONE,
-                        Duration.ZERO),
-                new ProviderExecutionResult(
-                        ProviderId.OLLAMA_CLOUD,
-                        "ollama-live",
-                        "{\"unexpected\":\"" + RAW_PROVIDER_DETAIL + "\"}",
-                        ProviderUsage.NONE,
-                        Duration.ZERO));
+                new SafeDiagnosticCase(
+                        "contract mismatch diagnostic",
+                        new ProviderExecutionResult(
+                                ProviderId.GEMINI,
+                                "gemini-live",
+                                "  {\"unexpected\":\"" + RAW_PROVIDER_DETAIL + "\"}  ",
+                                ProviderUsage.of(11, 17, 28),
+                                Duration.ZERO),
+                        """
+                                provider: GEMINI
+                                model: gemini-live
+                                output contract: EXPLANATION
+                                schema failure reason: CONTRACT_MISMATCH
+                                output token count: 17
+                                raw response character count: 53
+                                trimmed output starts with "{": true
+                                trimmed output ends with "}": true
+                                raw output contains a Markdown code fence ("```"): false
+                                """.strip()),
+                new SafeDiagnosticCase(
+                        "malformed JSON diagnostic",
+                        new ProviderExecutionResult(
+                                ProviderId.OLLAMA_CLOUD,
+                                "ollama-live",
+                                "```json\n{\"unexpected\":\"" + RAW_PROVIDER_DETAIL + "\"}\n```",
+                                ProviderUsage.of(13, 23, 36),
+                                Duration.ZERO),
+                        """
+                                provider: OLLAMA_CLOUD
+                                model: ollama-live
+                                output contract: EXPLANATION
+                                schema failure reason: MALFORMED_JSON
+                                output token count: 23
+                                raw response character count: 61
+                                trimmed output starts with "{": false
+                                trimmed output ends with "}": false
+                                raw output contains a Markdown code fence ("```"): true
+                                """.strip()));
     }
 
     static Stream<FailureCase> unsupportedRoutes() {
@@ -350,6 +374,16 @@ class AiProviderAdapterContractTests {
             verifier.run();
         }
 
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    record SafeDiagnosticCase(
+            String name,
+            ProviderExecutionResult result,
+            String expectedMessage) {
         @Override
         public String toString() {
             return name;
