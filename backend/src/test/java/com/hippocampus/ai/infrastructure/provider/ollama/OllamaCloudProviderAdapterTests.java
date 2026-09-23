@@ -1,10 +1,13 @@
 package com.hippocampus.ai.infrastructure.provider.ollama;
 
+import static com.hippocampus.ai.infrastructure.provider.ProviderTestFixtures.liveExplanationRequest;
 import static com.hippocampus.ai.infrastructure.provider.ProviderTestFixtures.request;
+import static com.hippocampus.ai.infrastructure.provider.ProviderTestFixtures.validateLiveExplanation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withRawStatus;
@@ -27,12 +30,19 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 import com.hippocampus.ai.application.provider.ProviderExecutionException;
+import com.hippocampus.ai.application.provider.ProviderExecutionRequest;
 import com.hippocampus.ai.application.provider.ProviderExecutionResult;
 import com.hippocampus.ai.application.provider.ProviderFailureType;
 import com.hippocampus.ai.application.provider.ProviderStreamCompleted;
 import com.hippocampus.ai.application.provider.ProviderStreamEvent;
 import com.hippocampus.ai.application.provider.ProviderTextDelta;
+import com.hippocampus.ai.application.prompt.PromptContext;
+import com.hippocampus.ai.application.prompt.PromptId;
 import com.hippocampus.ai.application.routing.ProviderId;
+import com.hippocampus.ai.domain.AiOutputContract;
+import com.hippocampus.ai.domain.AiTaskType;
+import com.hippocampus.ai.domain.ExplanationResult;
+import com.hippocampus.ai.domain.ValidatedAiResult;
 
 class OllamaCloudProviderAdapterTests {
     private static final String SECRET = "ollama-test-secret";
@@ -51,8 +61,21 @@ class OllamaCloudProviderAdapterTests {
                             {"role":"user","content":"student-task-secret-marker"}
                           ],
                           "stream":false,
-                          "format":"json",
-                          "options":{"num_predict":64}
+                          "format":{
+                            "type":"object",
+                            "properties":{
+                              "concept":{"type":"string"},
+                              "explanation":{"type":"string"},
+                              "keyPoints":{"type":"array","items":{"type":"string"}},
+                              "prerequisitesUsed":{"type":"array","items":{"type":"string"}},
+                              "sourceReferences":{"type":"array","items":{"type":"string"}},
+                              "supplementalKnowledgeUsed":{"type":"boolean"},
+                              "limitations":{"type":"array","items":{"type":"string"}}
+                            },
+                            "required":["concept","explanation","keyPoints","prerequisitesUsed","sourceReferences","supplementalKnowledgeUsed","limitations"],
+                            "additionalProperties":false
+                          },
+                          "options":{"num_predict":64,"temperature":0}
                         }
                         """))
                 .andRespond(withSuccess("""
@@ -75,6 +98,46 @@ class OllamaCloudProviderAdapterTests {
         assertThat(result.usage().outputTokens()).contains(5);
         assertThat(result.usage().totalTokens()).isEmpty();
         assertThat(result.latency().isNegative()).isFalse();
+        fixture.server().verify();
+    }
+
+    @Test
+    void liveSmokeFixtureUsesStrictStructuredOutputAndPassesValidation() {
+        Fixture fixture = fixture();
+        fixture.server().expect(requestTo("https://ollama.com/api/chat"))
+                .andExpect(jsonPath("$.format.type").value("object"))
+                .andExpect(jsonPath("$.format.required.length()").value(7))
+                .andExpect(jsonPath("$.format.additionalProperties").value(false))
+                .andExpect(jsonPath("$.options.num_predict").value(1024))
+                .andExpect(jsonPath("$.options.temperature").value(0))
+                .andRespond(withSuccess("""
+                        {
+                          "model":"cloud-live",
+                          "message":{"role":"assistant","content":"{\\\"concept\\\":\\\"atrioventricular nodal delay\\\",\\\"explanation\\\":\\\"Slow conduction allows the atria to empty before ventricular contraction.\\\",\\\"keyPoints\\\":[\\\"The delay supports sequential chamber contraction\\\"],\\\"prerequisitesUsed\\\":[\\\"cardiac conduction\\\"],\\\"sourceReferences\\\":[],\\\"supplementalKnowledgeUsed\\\":true,\\\"limitations\\\":[]}"}
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        ProviderExecutionResult result = fixture.adapter()
+                .execute(liveExplanationRequest(ProviderId.OLLAMA_CLOUD, "cloud-live"));
+        ValidatedAiResult<?> validated = validateLiveExplanation(result);
+
+        assertThat(validated.result()).isInstanceOf(ExplanationResult.class);
+        fixture.server().verify();
+    }
+
+    @Test
+    void genericJsonRequestPreservesExistingOptionsWithoutStructuredTemperature() {
+        Fixture fixture = fixture();
+        fixture.server().expect(requestTo("https://ollama.com/api/chat"))
+                .andExpect(jsonPath("$.format").value("json"))
+                .andExpect(jsonPath("$.options.num_predict").value(64))
+                .andExpect(jsonPath("$.options.temperature").doesNotExist())
+                .andRespond(withSuccess(
+                        "{\"message\":{\"role\":\"assistant\",\"content\":\"{}\"}}",
+                        MediaType.APPLICATION_JSON));
+
+        fixture.adapter().execute(genericJsonRequest());
+
         fixture.server().verify();
     }
 
@@ -240,8 +303,21 @@ class OllamaCloudProviderAdapterTests {
                             {"role":"user","content":"student-task-secret-marker"}
                           ],
                           "stream":true,
-                          "format":"json",
-                          "options":{"num_predict":64}
+                          "format":{
+                            "type":"object",
+                            "properties":{
+                              "concept":{"type":"string"},
+                              "explanation":{"type":"string"},
+                              "keyPoints":{"type":"array","items":{"type":"string"}},
+                              "prerequisitesUsed":{"type":"array","items":{"type":"string"}},
+                              "sourceReferences":{"type":"array","items":{"type":"string"}},
+                              "supplementalKnowledgeUsed":{"type":"boolean"},
+                              "limitations":{"type":"array","items":{"type":"string"}}
+                            },
+                            "required":["concept","explanation","keyPoints","prerequisitesUsed","sourceReferences","supplementalKnowledgeUsed","limitations"],
+                            "additionalProperties":false
+                          },
+                          "options":{"num_predict":64,"temperature":0}
                         }
                         """))
                 .andRespond(withSuccess("""
@@ -353,6 +429,23 @@ class OllamaCloudProviderAdapterTests {
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + SECRET);
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         return new Fixture(new OllamaCloudProviderAdapter(builder.build()), server);
+    }
+
+    private static ProviderExecutionRequest genericJsonRequest() {
+        ProviderExecutionRequest base = request(ProviderId.OLLAMA_CLOUD, "cloud-selected");
+        PromptContext promptContext = new PromptContext(
+                PromptId.HIPPOCAMPUS_SYSTEM_V1,
+                PromptId.QUESTION_GENERATION_V1,
+                base.promptContext().systemPrompt(),
+                base.promptContext().taskPrompt(),
+                base.promptContext().inputTokenCount(),
+                base.promptContext().reservedOutputTokens(),
+                base.promptContext().includedSources());
+        return new ProviderExecutionRequest(
+                AiTaskType.QUESTION_GENERATION,
+                AiOutputContract.QUESTION_GENERATION,
+                promptContext,
+                base.target());
     }
 
     private record Fixture(OllamaCloudProviderAdapter adapter, MockRestServiceServer server) {}
