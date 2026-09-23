@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -181,14 +182,20 @@ public final class OllamaCloudProviderAdapter implements AiProviderAdapter {
     }
 
     private static OllamaChatRequest providerRequest(ProviderExecutionRequest request, boolean stream) {
+        Object format = ProviderStructuredOutputSchema.ollamaFormat(request.outputContract());
+        Map<String, Integer> options = new LinkedHashMap<>();
+        options.put("num_predict", request.promptContext().reservedOutputTokens());
+        if (format instanceof Map<?, ?>) {
+            options.put("temperature", 0);
+        }
         return new OllamaChatRequest(
                 request.target().modelId(),
                 List.of(
                         new OllamaMessage("system", request.promptContext().systemPrompt()),
                         new OllamaMessage("user", request.promptContext().taskPrompt())),
                 stream,
-                ProviderStructuredOutputSchema.ollamaFormat(request.outputContract()),
-                Map.of("num_predict", request.promptContext().reservedOutputTokens()));
+                format,
+                Map.copyOf(options));
     }
 
     private void validateRequest(ProviderExecutionRequest request) {
