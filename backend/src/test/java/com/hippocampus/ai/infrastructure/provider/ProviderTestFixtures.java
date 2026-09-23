@@ -27,4 +27,31 @@ public final class ProviderTestFixtures {
                         List.of()),
                 new ProviderRoute.Target(providerId, modelId));
     }
+
+    public static ProviderExecutionRequest liveExplanationRequest(ProviderId providerId, String modelId) {
+        return new ProviderExecutionRequest(
+                AiTaskType.EXPLANATION,
+                AiOutputContract.EXPLANATION,
+                new PromptContext(
+                        PromptId.HIPPOCAMPUS_SYSTEM_V1,
+                        PromptId.EXPLANATION_V1,
+                        "You are the educational AI component of Hippocampus. Return only valid JSON matching the requested schema.",
+                        """
+                                Explain in one sentence why the atrioventricular node delays cardiac conduction.
+                                Return only this JSON object shape with every field present:
+                                {
+                                  "concept": "string",
+                                  "explanation": "string",
+                                  "keyPoints": ["string"],
+                                  "prerequisitesUsed": ["string"],
+                                  "sourceReferences": [],
+                                  "supplementalKnowledgeUsed": true,
+                                  "limitations": []
+                                }
+                                """,
+                        100,
+                        256,
+                        List.of()),
+                new ProviderRoute.Target(providerId, modelId));
+    }
 }

@@ -17,9 +17,11 @@ com.hippocampus.materials.infrastructure.config.PdfVisualExtractionConfiguration
 com.hippocampus.materials.infrastructure.config.TextNormalizationConfiguration
 com.hippocampus.materials.infrastructure.config.ChunkingConfiguration
 com.hippocampus.materials.infrastructure.config.SourceReferenceConfiguration
+com.hippocampus.ai.infrastructure.config.AiOutputValidationConfiguration
 com.hippocampus.rag.infrastructure.config.EmbeddingProcessingConfiguration
 com.hippocampus.rag.infrastructure.config.LexicalSearchConfiguration
 com.hippocampus.rag.infrastructure.config.VectorSearchConfiguration
 com.hippocampus.rag.infrastructure.config.RetrievalScopeConfiguration
 com.hippocampus.rag.infrastructure.config.EvidencePackageConfiguration
 com.hippocampus.rag.infrastructure.config.RetrievalInspectorConfiguration
+com.hippocampus.ai.infrastructure.config.AiDiagnosticsPersistenceConfiguration

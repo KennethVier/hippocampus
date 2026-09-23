@@ -18,5 +18,9 @@ public interface AiRequestTelemetry {
             String outcome,
             Duration duration,
             int retryCount) {}
+    default void fallback(
+            ProviderId primaryProviderId,
+            ProviderId fallbackProviderId,
+            AiTaskType taskType) {}
     default void circuitChanged(ProviderId providerId, String state) {}
 }

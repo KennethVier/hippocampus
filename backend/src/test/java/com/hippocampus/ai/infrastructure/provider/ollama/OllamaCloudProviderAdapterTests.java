@@ -121,6 +121,7 @@ class OllamaCloudProviderAdapterTests {
     void normalizesHttpFailuresWithoutLeakingSecretOrRawBody() {
         assertHttpFailure(401, ProviderFailureType.AUTHENTICATION_FAILURE);
         assertHttpFailure(403, ProviderFailureType.AUTHENTICATION_FAILURE);
+        assertHttpFailure(402, ProviderFailureType.QUOTA_EXHAUSTED);
         assertHttpFailure(429, ProviderFailureType.RATE_LIMITED);
         assertHttpFailure(503, ProviderFailureType.PROVIDER_UNAVAILABLE);
     }

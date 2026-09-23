@@ -55,6 +55,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("16");
         assertSuccessfulFlywayVersion("17");
         assertSuccessfulFlywayVersion("18");
+        assertSuccessfulFlywayVersion("19");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -73,6 +74,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertVisualAssetSchema();
         assertChunkSchema();
         assertEmbeddingSchema();
+        assertAiDiagnosticsSchema();
 
         try (var secondContext = startMigrationApplication()) {
             assertThat(secondContext.isActive()).isTrue();
@@ -96,6 +98,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("16");
         assertSuccessfulFlywayVersion("17");
         assertSuccessfulFlywayVersion("18");
+        assertSuccessfulFlywayVersion("19");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -105,6 +108,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertProcessingJobSchema();
         assertDocumentStructureSchema();
         assertEmbeddingSchema();
+        assertAiDiagnosticsSchema();
     }
 
     @Test
@@ -374,13 +378,49 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 actual.add(result.getString("table_name"));
             }
             assertThat(actual).containsExactly(
-                    "chunk_embeddings", "chunk_text_block_links", "chunk_visual_links", "chunks", "document_nodes",
+                    "ai_request_records", "chunk_embeddings", "chunk_text_block_links", "chunk_visual_links", "chunks", "document_nodes",
                     "index_generations",
                     "material_topic_links", "material_versions", "materials", "processing_jobs",
-                    "source_references", "spring_session", "spring_session_attributes",
+                    "provider_usage_records", "source_references", "spring_session", "spring_session_attributes",
                     "subjects", "subtopics", "text_blocks", "topics",
                     "user_password_credentials", "users", "visual_assets");
         }
+    }
+
+    private static void assertAiDiagnosticsSchema() throws SQLException {
+        assertColumnsMatch("ai_request_records", Map.ofEntries(
+                Map.entry("id", "uuid:NO"),
+                Map.entry("user_id", "uuid:YES"),
+                Map.entry("task_type", "character varying:NO"),
+                Map.entry("prompt_id", "character varying:NO"),
+                Map.entry("prompt_version", "character varying:NO"),
+                Map.entry("provider", "character varying:NO"),
+                Map.entry("model", "character varying:NO"),
+                Map.entry("status", "character varying:NO"),
+                Map.entry("grounding_mode", "character varying:YES"),
+                Map.entry("input_token_count", "integer:YES"),
+                Map.entry("output_token_count", "integer:YES"),
+                Map.entry("latency_ms", "bigint:YES"),
+                Map.entry("retry_count", "integer:NO"),
+                Map.entry("error_code", "character varying:YES"),
+                Map.entry("created_at", "timestamp with time zone:NO")));
+        assertColumnsMatch("provider_usage_records", Map.ofEntries(
+                Map.entry("id", "uuid:NO"),
+                Map.entry("provider", "character varying:NO"),
+                Map.entry("model", "character varying:NO"),
+                Map.entry("user_id", "uuid:YES"),
+                Map.entry("task_type", "character varying:NO"),
+                Map.entry("request_count", "integer:NO"),
+                Map.entry("input_tokens", "bigint:YES"),
+                Map.entry("output_tokens", "bigint:YES"),
+                Map.entry("estimated_cost", "numeric:YES"),
+                Map.entry("occurred_at", "timestamp with time zone:NO")));
+        assertForeignKey("ai_request_records", "user_id", "users", "id", "SET NULL");
+        assertForeignKey("provider_usage_records", "user_id", "users", "id", "SET NULL");
+        assertIndex("ai_request_records", "idx_ai_request_records_provider_created_at", false,
+                "provider", "created_at");
+        assertColumnDefault("ai_request_records", "retry_count", "0");
+        assertColumnDefault("provider_usage_records", "request_count", "1");
     }
 
     private static void assertDocumentStructureSchema() throws SQLException {

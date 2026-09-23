@@ -443,3 +443,54 @@ jobs:
       - name: Run isolated Phase 4 retrieval gate
         working-directory: backend
         run: ./mvnw -B -ntp -Dtest=Phase4RetrievalGateIntegrationTests test
+
+  phase5-gate:
+    name: phase5-gate
+    if: ${{ always() }}
+    needs:
+      - backend-quality
+      - frontend-quality
+      - auth-e2e
+      - security
+      - phase1-gate
+      - phase2-gate
+      - phase3-gate
+      - phase4-gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Require every Phase 5 acceptance input
+        env:
+          BACKEND_RESULT: ${{ needs.backend-quality.result }}
+          FRONTEND_RESULT: ${{ needs.frontend-quality.result }}
+          AUTH_E2E_RESULT: ${{ needs.auth-e2e.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+          PHASE1_GATE_RESULT: ${{ needs.phase1-gate.result }}
+          PHASE2_GATE_RESULT: ${{ needs.phase2-gate.result }}
+          PHASE3_GATE_RESULT: ${{ needs.phase3-gate.result }}
+          PHASE4_GATE_RESULT: ${{ needs.phase4-gate.result }}
+        run: |
+          set -euo pipefail
+          test "$BACKEND_RESULT" = success
+          test "$FRONTEND_RESULT" = success
+          test "$AUTH_E2E_RESULT" = success
+          test "$SECURITY_RESULT" = success
+          test "$PHASE1_GATE_RESULT" = success
+          test "$PHASE2_GATE_RESULT" = success
+          test "$PHASE3_GATE_RESULT" = success
+          test "$PHASE4_GATE_RESULT" = success
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Java
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '25.0.4'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Run isolated deterministic Phase 5 AI infrastructure gate
+        working-directory: backend
+        run: ./mvnw -B -ntp -Dtest=Phase5AiInfrastructureGateIntegrationTests test

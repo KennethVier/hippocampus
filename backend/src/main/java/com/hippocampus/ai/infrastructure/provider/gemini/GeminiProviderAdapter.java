@@ -258,6 +258,9 @@ public final class GeminiProviderAdapter implements AiProviderAdapter {
         if (status == 401 || status == 403) {
             return ProviderFailureType.AUTHENTICATION_FAILURE;
         }
+        if (status == 402) {
+            return ProviderFailureType.QUOTA_EXHAUSTED;
+        }
         if (status == 429) {
             return ProviderFailureType.RATE_LIMITED;
         }
