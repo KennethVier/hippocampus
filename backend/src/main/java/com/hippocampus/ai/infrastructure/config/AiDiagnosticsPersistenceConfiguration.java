@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
 
-import com.hippocampus.ai.application.diagnostics.AiDiagnosticsPersistence;
+import com.hippocampus.ai.port.AiDiagnosticsPersistence;
 import com.hippocampus.ai.infrastructure.persistence.JdbcAiDiagnosticsPersistence;
 
 @AutoConfiguration(afterName = {

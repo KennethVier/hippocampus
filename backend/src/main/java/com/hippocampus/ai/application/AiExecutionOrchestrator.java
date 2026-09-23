@@ -12,20 +12,23 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.hippocampus.ai.application.diagnostics.AiDiagnosticsPersistence;
-import com.hippocampus.ai.application.diagnostics.AiRequestDiagnostic;
-import com.hippocampus.ai.application.diagnostics.ProviderUsageDiagnostic;
+import com.hippocampus.ai.port.AiDiagnosticsPersistence;
+import com.hippocampus.ai.port.AiRequestDiagnostic;
+import com.hippocampus.ai.port.ProviderUsageDiagnostic;
 import com.hippocampus.ai.application.prompt.PromptContext;
 import com.hippocampus.ai.application.prompt.PromptContextBuilder;
 import com.hippocampus.ai.application.prompt.PromptId;
 import com.hippocampus.ai.application.prompt.PromptTokenBudget;
+import com.hippocampus.ai.application.provider.ProviderExecutionCancellationException;
 import com.hippocampus.ai.application.provider.ProviderExecutionException;
+import com.hippocampus.ai.application.provider.ProviderExecutionFailure;
 import com.hippocampus.ai.application.provider.ProviderExecutionRequest;
 import com.hippocampus.ai.application.provider.ProviderExecutionResult;
 import com.hippocampus.ai.application.provider.ProviderFailureType;
 import com.hippocampus.ai.application.request.AiRequestManager;
 import com.hippocampus.ai.application.request.AiRequestPriority;
 import com.hippocampus.ai.application.request.AiRequestSubmission;
+import com.hippocampus.ai.application.request.AiRequestTelemetry;
 import com.hippocampus.ai.application.routing.ProviderRoute;
 import com.hippocampus.ai.application.routing.ProviderRouter;
 import com.hippocampus.ai.application.routing.ProviderRoutingCandidate;
@@ -38,6 +41,7 @@ import com.hippocampus.ai.domain.AiTaskRequest;
 import com.hippocampus.ai.domain.AiTaskType;
 import com.hippocampus.ai.domain.StructuredOutputRepairInput;
 import com.hippocampus.ai.domain.ValidatedAiResult;
+import com.hippocampus.identity.port.CurrentUser;
 
 /**
  * Provider-independent execution flow for complete, machine-consumed AI responses.
@@ -46,34 +50,41 @@ import com.hippocampus.ai.domain.ValidatedAiResult;
 public final class AiExecutionOrchestrator {
 
     private final PromptContextBuilder promptContextBuilder;
+    private final CurrentUser currentUser;
     private final ProviderRouter providerRouter;
     private final AiRequestManager requestManager;
     private final AiOutputValidator outputValidator;
     private final AiSourceReferenceValidator sourceReferenceValidator;
     private final AiDiagnosticsPersistence diagnosticsPersistence;
+    private final AiRequestTelemetry telemetry;
     private final Clock clock;
 
     public AiExecutionOrchestrator(
             PromptContextBuilder promptContextBuilder,
-            ProviderRouter providerRouter,
-            AiRequestManager requestManager,
-            AiOutputValidator outputValidator,
-            AiSourceReferenceValidator sourceReferenceValidator,
-            AiDiagnosticsPersistence diagnosticsPersistence) {
-        this(promptContextBuilder, providerRouter, requestManager, outputValidator,
-                sourceReferenceValidator, diagnosticsPersistence, Clock.systemUTC());
-    }
-
-    AiExecutionOrchestrator(
-            PromptContextBuilder promptContextBuilder,
+            CurrentUser currentUser,
             ProviderRouter providerRouter,
             AiRequestManager requestManager,
             AiOutputValidator outputValidator,
             AiSourceReferenceValidator sourceReferenceValidator,
             AiDiagnosticsPersistence diagnosticsPersistence,
+            AiRequestTelemetry telemetry) {
+        this(promptContextBuilder, currentUser, providerRouter, requestManager, outputValidator,
+                sourceReferenceValidator, diagnosticsPersistence, telemetry, Clock.systemUTC());
+    }
+
+    AiExecutionOrchestrator(
+            PromptContextBuilder promptContextBuilder,
+            CurrentUser currentUser,
+            ProviderRouter providerRouter,
+            AiRequestManager requestManager,
+            AiOutputValidator outputValidator,
+            AiSourceReferenceValidator sourceReferenceValidator,
+            AiDiagnosticsPersistence diagnosticsPersistence,
+            AiRequestTelemetry telemetry,
             Clock clock) {
         this.promptContextBuilder = Objects.requireNonNull(
                 promptContextBuilder, "promptContextBuilder must not be null");
+        this.currentUser = Objects.requireNonNull(currentUser, "currentUser must not be null");
         this.providerRouter = Objects.requireNonNull(providerRouter, "providerRouter must not be null");
         this.requestManager = Objects.requireNonNull(requestManager, "requestManager must not be null");
         this.outputValidator = Objects.requireNonNull(outputValidator, "outputValidator must not be null");
@@ -81,23 +92,23 @@ public final class AiExecutionOrchestrator {
                 sourceReferenceValidator, "sourceReferenceValidator must not be null");
         this.diagnosticsPersistence = Objects.requireNonNull(
                 diagnosticsPersistence, "diagnosticsPersistence must not be null");
+        this.telemetry = Objects.requireNonNull(telemetry, "telemetry must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
 
     public CompletableFuture<ValidatedAiResult<?>> execute(
             AiTaskRequest<?> request,
-            UUID authenticatedUserId,
             AiRequestPriority priority,
             PromptTokenBudget tokenBudget,
             List<ProviderRoutingCandidate> routingCandidates,
             ProviderRoutingPreference routingPreference) {
         Objects.requireNonNull(request, "request must not be null");
-        Objects.requireNonNull(authenticatedUserId, "authenticatedUserId must not be null");
         Objects.requireNonNull(priority, "priority must not be null");
         Objects.requireNonNull(tokenBudget, "tokenBudget must not be null");
         Objects.requireNonNull(routingCandidates, "routingCandidates must not be null");
         Objects.requireNonNull(routingPreference, "routingPreference must not be null");
 
+        UUID authenticatedUserId = currentUser.authenticatedUser().userId();
         PromptContext originalPrompt = promptContextBuilder.build(request, tokenBudget);
         ProviderRoute route = providerRouter.route(request, routingCandidates, routingPreference);
 
@@ -150,7 +161,7 @@ public final class AiExecutionOrchestrator {
                 try {
                     recordFailure(
                             authenticatedUserId, request, originalPrompt, target,
-                            null, normalized, elapsedSince(startedNanos));
+                            null, failure, elapsedSince(startedNanos));
                 } catch (RuntimeException diagnosticsFailure) {
                     completeFailure(outcome, diagnosticsFailure);
                     return;
@@ -158,10 +169,13 @@ public final class AiExecutionOrchestrator {
                 if (!outcome.isCancelled()
                         && fallback.isPresent()
                         && isFallbackEligible(normalized)) {
+                    ProviderRoute.Target fallbackTarget = fallback.orElseThrow();
+                    telemetry.fallback(
+                            target.providerId(), fallbackTarget.providerId(), request.taskType());
                     startGeneration(
                             request,
                             originalPrompt,
-                            fallback.orElseThrow(),
+                            fallbackTarget,
                             Optional.empty(),
                             authenticatedUserId,
                             priority,
@@ -178,7 +192,7 @@ public final class AiExecutionOrchestrator {
             }
             ValidatedAiResult<?> validated;
             try {
-                validated = validate(providerResult, request, originalPrompt);
+                validated = validate(authenticatedUserId, providerResult, request, originalPrompt);
             } catch (AiSchemaValidationException schemaFailure) {
                 try {
                     recordFailure(
@@ -266,7 +280,7 @@ public final class AiExecutionOrchestrator {
                 try {
                     recordFailure(
                             authenticatedUserId, repairRequest, repairPrompt, originalTarget,
-                            null, normalized, elapsedSince(startedNanos));
+                            null, failure, elapsedSince(startedNanos));
                     completeFailure(outcome, normalized);
                 } catch (RuntimeException diagnosticsFailure) {
                     completeFailure(outcome, diagnosticsFailure);
@@ -280,7 +294,8 @@ public final class AiExecutionOrchestrator {
             try {
                 // Ground repaired output against the original request and the sources actually
                 // included in the original generation prompt, never the repair prompt.
-                validated = validate(providerResult, originalRequest, originalPrompt);
+                validated = validate(
+                        authenticatedUserId, providerResult, originalRequest, originalPrompt);
             } catch (RuntimeException validationFailure) {
                 try {
                     recordFailure(
@@ -308,7 +323,8 @@ public final class AiExecutionOrchestrator {
             PromptContext prompt,
             ProviderExecutionResult result) {
         record(userId, request, prompt, result.providerId().name(), result.modelId(),
-                "SUCCESS", null, result, result.latency(), result.retryCount());
+                "SUCCESS", null, result, result.latency(), result.retryCount(),
+                result.providerInvocationCount());
     }
 
     private void recordFailure(
@@ -322,7 +338,8 @@ public final class AiExecutionOrchestrator {
         String status = failure instanceof CancellationException ? "CANCELLED" : "FAILED";
         record(userId, request, prompt, target.providerId().name(), target.modelId(),
                 status, errorCode(failure), result, latency,
-                result == null ? retryCount(failure) : result.retryCount());
+                result == null ? retryCount(failure) : result.retryCount(),
+                result == null ? providerInvocationCount(failure) : result.providerInvocationCount());
     }
 
     private void record(
@@ -335,7 +352,8 @@ public final class AiExecutionOrchestrator {
             String errorCode,
             ProviderExecutionResult result,
             Duration latency,
-            int retryCount) {
+            int retryCount,
+            int providerInvocationCount) {
         Instant occurredAt = clock.instant();
         Integer inputTokens = result == null
                 ? null
@@ -359,18 +377,16 @@ public final class AiExecutionOrchestrator {
                 retryCount,
                 errorCode,
                 occurredAt);
-        ProviderUsageDiagnostic usageDiagnostic = new ProviderUsageDiagnostic(
-                UUID.randomUUID(),
-                provider,
-                result == null ? model : result.modelId(),
-                userId,
-                request.taskType().name(),
-                1,
-                inputTokens == null ? null : inputTokens.longValue(),
-                outputTokens == null ? null : outputTokens.longValue(),
-                null,
-                occurredAt);
-        diagnosticsPersistence.record(requestDiagnostic, usageDiagnostic);
+        if (providerInvocationCount > 0) {
+            ProviderUsageDiagnostic usageDiagnostic = new ProviderUsageDiagnostic(
+                    UUID.randomUUID(), provider, result == null ? model : result.modelId(), userId,
+                    request.taskType().name(), providerInvocationCount,
+                    inputTokens == null ? null : inputTokens.longValue(),
+                    outputTokens == null ? null : outputTokens.longValue(), null, occurredAt);
+            diagnosticsPersistence.record(requestDiagnostic, usageDiagnostic);
+        } else {
+            diagnosticsPersistence.record(requestDiagnostic);
+        }
     }
 
     private static String errorCode(Throwable failure) {
@@ -388,9 +404,24 @@ public final class AiExecutionOrchestrator {
     }
 
     private static int retryCount(Throwable failure) {
-        return failure instanceof ProviderExecutionException providerFailure
-                ? providerFailure.retryCount()
-                : 0;
+        Throwable normalized = normalize(failure);
+        if (failure instanceof ProviderExecutionFailure executionFailure) {
+            return executionFailure.retryCount();
+        }
+        return normalized instanceof ProviderExecutionException providerFailure
+                ? providerFailure.retryCount() : 0;
+    }
+
+    private static int providerInvocationCount(Throwable failure) {
+        if (failure instanceof ProviderExecutionCancellationException cancellation) {
+            return cancellation.providerInvocationCount();
+        }
+        if (failure instanceof ProviderExecutionFailure executionFailure) {
+            return executionFailure.providerInvocationCount();
+        }
+        Throwable normalized = normalize(failure);
+        return normalized instanceof ProviderExecutionException providerFailure
+                ? providerFailure.providerInvocationCount() : 0;
     }
 
     private static Duration elapsedSince(long startedNanos) {
@@ -398,12 +429,14 @@ public final class AiExecutionOrchestrator {
     }
 
     private ValidatedAiResult<?> validate(
+            UUID authenticatedUserId,
             ProviderExecutionResult providerResult,
             AiTaskRequest<?> originalRequest,
             PromptContext originalPrompt) {
         ValidatedAiResult<?> schemaValidated = outputValidator.validate(
                 providerResult, originalRequest.outputContract());
-        return sourceReferenceValidator.validate(schemaValidated, originalRequest, originalPrompt);
+        return sourceReferenceValidator.validate(
+                authenticatedUserId, schemaValidated, originalRequest, originalPrompt);
     }
 
     private static ProviderExecutionRequest providerRequest(
@@ -445,6 +478,9 @@ public final class AiExecutionOrchestrator {
     }
 
     private static Throwable normalize(Throwable failure) {
+        if (failure instanceof ProviderExecutionFailure executionFailure) {
+            return executionFailure.getCause();
+        }
         return failure instanceof CompletionException completion && completion.getCause() != null
                 ? completion.getCause()
                 : failure;

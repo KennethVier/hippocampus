@@ -16,6 +16,7 @@ public final class MicrometerAiRequestTelemetry implements AiRequestTelemetry {
     private static final String REJECTIONS = "hippocampus.ai.request.rejections";
     private static final String RETRIES = "hippocampus.ai.request.retries";
     private static final String LATENCY = "hippocampus.ai.request.latency";
+    private static final String FALLBACK_TRANSITIONS = "hippocampus.ai.fallback.transitions";
     private static final String CIRCUIT_TRANSITIONS = "hippocampus.ai.provider.circuit.transitions";
 
     private final MeterRegistry meterRegistry;
@@ -51,6 +52,20 @@ public final class MicrometerAiRequestTelemetry implements AiRequestTelemetry {
         Tags tags = baseTags(providerId, taskType).and("status", outcome);
         safely(() -> meterRegistry.counter(REQUESTS, tags).increment());
         safely(() -> meterRegistry.timer(LATENCY, tags).record(duration));
+    }
+
+    @Override
+    public void fallback(
+            ProviderId primaryProviderId,
+            ProviderId fallbackProviderId,
+            AiTaskType taskType) {
+        safely(() -> meterRegistry.counter(
+                FALLBACK_TRANSITIONS,
+                Tags.of(
+                        "primary_provider", primaryProviderId.name().toLowerCase(),
+                        "fallback_provider", fallbackProviderId.name().toLowerCase(),
+                        "task", taskType.name().toLowerCase()))
+                .increment());
     }
 
     @Override

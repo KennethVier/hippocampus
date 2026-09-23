@@ -1,16 +1,17 @@
 package com.hippocampus.ai.infrastructure.config;
 
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 
 import com.hippocampus.ai.application.validation.AiOutputValidator;
 import com.hippocampus.ai.application.validation.AiSourceReferenceValidator;
 import com.hippocampus.ai.infrastructure.validation.JacksonAiStructuredOutputDecoder;
 import com.hippocampus.ai.port.AiStructuredOutputDecoder;
-import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.materials.port.SourceReferenceRepository;
 
-@Configuration(proxyBeanMethods = false)
+@AutoConfiguration(
+        afterName = "com.hippocampus.materials.infrastructure.config.SourceReferenceConfiguration")
 public class AiOutputValidationConfiguration {
 
     @Bean
@@ -24,8 +25,8 @@ public class AiOutputValidationConfiguration {
     }
 
     @Bean
-    AiSourceReferenceValidator aiSourceReferenceValidator(
-            CurrentUser currentUser, SourceReferenceRepository sourceReferences) {
-        return new AiSourceReferenceValidator(currentUser, sourceReferences);
+    @ConditionalOnBean(SourceReferenceRepository.class)
+    AiSourceReferenceValidator aiSourceReferenceValidator(SourceReferenceRepository sourceReferences) {
+        return new AiSourceReferenceValidator(sourceReferences);
     }
 }

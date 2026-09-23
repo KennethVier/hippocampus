@@ -13,9 +13,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-import com.hippocampus.ai.application.diagnostics.AiDiagnosticsPersistence;
-import com.hippocampus.ai.application.diagnostics.AiRequestDiagnostic;
-import com.hippocampus.ai.application.diagnostics.ProviderUsageDiagnostic;
+import com.hippocampus.ai.port.AiDiagnosticsPersistence;
+import com.hippocampus.ai.port.AiRequestDiagnostic;
+import com.hippocampus.ai.port.ProviderUsageDiagnostic;
 import com.hippocampus.testing.PostgresIntegrationTestSupport;
 
 class AiDiagnosticsPersistenceIntegrationTests extends PostgresIntegrationTestSupport {
@@ -112,6 +112,22 @@ class AiDiagnosticsPersistenceIntegrationTests extends PostgresIntegrationTestSu
                     .query(UUID.class).optional()).isEmpty();
             assertThat(jdbc.sql("SELECT input_tokens FROM provider_usage_records")
                     .query(Long.class).optional()).isEmpty();
+        }
+    }
+
+    @Test
+    void persistsLogicalRequestWithoutProviderUsageWhenNoProviderWasInvoked() {
+        try (var context = startApplicationWithFlyway()) {
+            AiDiagnosticsPersistence persistence = context.getBean(AiDiagnosticsPersistence.class);
+            JdbcClient jdbc = context.getBean(JdbcClient.class);
+            UUID userId = insertUser(jdbc, "ai-diagnostics-rejected@example.test");
+
+            persistence.record(request(userId, "FAILED", "PROVIDER_UNAVAILABLE", null, null));
+
+            assertThat(jdbc.sql("SELECT count(*) FROM ai_request_records").query(Long.class).single())
+                    .isEqualTo(1L);
+            assertThat(jdbc.sql("SELECT count(*) FROM provider_usage_records").query(Long.class).single())
+                    .isZero();
         }
     }
 

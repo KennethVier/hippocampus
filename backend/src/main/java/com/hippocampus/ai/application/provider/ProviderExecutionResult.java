@@ -11,7 +11,8 @@ public record ProviderExecutionResult(
         String rawContent,
         ProviderUsage usage,
         Duration latency,
-        int retryCount) {
+        int retryCount,
+        int providerInvocationCount) {
 
     public ProviderExecutionResult(
             ProviderId providerId,
@@ -19,7 +20,7 @@ public record ProviderExecutionResult(
             String rawContent,
             ProviderUsage usage,
             Duration latency) {
-        this(providerId, modelId, rawContent, usage, latency, 0);
+        this(providerId, modelId, rawContent, usage, latency, 0, 0);
     }
 
     public ProviderExecutionResult {
@@ -38,10 +39,13 @@ public record ProviderExecutionResult(
         if (retryCount < 0) {
             throw new IllegalArgumentException("retryCount must not be negative");
         }
+        if (providerInvocationCount < 0) {
+            throw new IllegalArgumentException("providerInvocationCount must not be negative");
+        }
     }
 
-    public ProviderExecutionResult withRetryCount(int retries) {
+    public ProviderExecutionResult withExecutionMetadata(int retries, int invocationCount) {
         return new ProviderExecutionResult(
-                providerId, modelId, rawContent, usage, latency, retries);
+                providerId, modelId, rawContent, usage, latency, retries, invocationCount);
     }
 }

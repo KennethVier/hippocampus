@@ -39,8 +39,6 @@ import com.hippocampus.ai.domain.QuestionOption;
 import com.hippocampus.ai.domain.RecommendedAction;
 import com.hippocampus.ai.domain.ResponseEvaluationResult;
 import com.hippocampus.ai.domain.ValidatedAiResult;
-import com.hippocampus.identity.domain.AuthenticatedUser;
-import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.materials.domain.SourceReference;
 import com.hippocampus.materials.domain.SourceReferenceTarget;
 import com.hippocampus.materials.domain.ChunkSourceTarget;
@@ -65,9 +63,8 @@ class AiSourceReferenceValidatorTests {
     private static final UUID SECOND_CHUNK_ID = UUID.fromString("50000000-0000-0000-0000-000000000002");
 
     private final StubSourceReferenceRepository repository = new StubSourceReferenceRepository();
-    private final CurrentUser currentUser = () -> new AuthenticatedUser(USER_ID);
     private final AiSourceReferenceValidator validator =
-            new AiSourceReferenceValidator(currentUser, repository);
+            new AiSourceReferenceValidator(repository);
 
     @Test
     void acceptsOneReferenceActuallyIncludedInPrompt() {
@@ -75,7 +72,7 @@ class AiSourceReferenceValidatorTests {
         repository.authorize(chunk);
         ValidatedAiResult<ExplanationResult> result = explanation(List.of(CHUNK_ID.toString()));
 
-        assertThat(validator.validate(result, request(GroundingMode.STRICT_SOURCE, List.of(chunk)),
+        assertThat(validator.validate(USER_ID, result, request(GroundingMode.STRICT_SOURCE, List.of(chunk)),
                 prompt(List.of(included(chunk))))).isSameAs(result);
     }
 
@@ -87,6 +84,7 @@ class AiSourceReferenceValidatorTests {
         repository.authorize(second);
 
         assertThat(validator.validate(
+                USER_ID,
                 explanation(List.of(CHUNK_ID.toString(), SECOND_CHUNK_ID.toString())),
                 request(GroundingMode.SOURCE_FIRST, List.of(first, second)),
                 prompt(List.of(included(first), included(second)))).result().sourceReferences())
@@ -99,7 +97,7 @@ class AiSourceReferenceValidatorTests {
         ValidatedAiResult<ExplanationResult> result = explanation(List.of());
 
         assertThat(validator.validate(
-                result, request(GroundingMode.GENERAL_KNOWLEDGE, List.of()), prompt(List.of())))
+                USER_ID, result, request(GroundingMode.GENERAL_KNOWLEDGE, List.of()), prompt(List.of())))
                 .isSameAs(result);
     }
 
@@ -200,7 +198,7 @@ class AiSourceReferenceValidatorTests {
         EvidenceChunk chunk = chunk(1, CHUNK_ID);
         repository.authorize(chunk);
 
-        assertThat(validator.validate(new ValidatedAiResult<>(output),
+        assertThat(validator.validate(USER_ID, new ValidatedAiResult<>(output),
                 request(GroundingMode.STRICT_SOURCE, List.of(chunk)), prompt(List.of(included(chunk)))))
                 .isNotNull();
     }
@@ -211,6 +209,7 @@ class AiSourceReferenceValidatorTests {
         repository.failure = new IllegalStateException("secret provider output and private-source");
 
         assertThatThrownBy(() -> validator.validate(
+                USER_ID,
                 explanation(List.of(CHUNK_ID.toString())),
                 request(GroundingMode.STRICT_SOURCE, List.of(chunk)), prompt(List.of(included(chunk)))))
                 .isInstanceOfSatisfying(AiGroundingValidationException.class, failure -> {
@@ -226,7 +225,7 @@ class AiSourceReferenceValidatorTests {
             AiTaskRequest<?> request,
             PromptContext context,
             AiGroundingValidationException.Reason reason) {
-        assertThatThrownBy(() -> validator.validate(result, request, context))
+        assertThatThrownBy(() -> validator.validate(USER_ID, result, request, context))
                 .isInstanceOfSatisfying(AiGroundingValidationException.class, failure -> {
                     assertThat(failure.errorCode().value()).isEqualTo("AI_GROUNDING_FAILURE");
                     assertThat(failure.reason()).isEqualTo(reason);

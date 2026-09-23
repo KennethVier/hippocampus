@@ -29,7 +29,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.hippocampus.ai.application.AiExecutionOrchestrator;
-import com.hippocampus.ai.application.diagnostics.AiDiagnosticsPersistence;
+import com.hippocampus.ai.port.AiDiagnosticsPersistence;
 import com.hippocampus.ai.application.prompt.PromptContext;
 import com.hippocampus.ai.application.prompt.PromptContextBuilder;
 import com.hippocampus.ai.application.prompt.PromptId;
@@ -498,7 +498,8 @@ class Phase5AiInfrastructureGateIntegrationTests extends PostgresIntegrationTest
                 geminiBehavior,
                 ollamaModel,
                 ollamaBehavior,
-                new AiSourceReferenceValidator(currentUser, sourceReferences));
+                currentUser,
+                new AiSourceReferenceValidator(sourceReferences));
     }
 
     private static void assertCanonicalProviderRequest(
@@ -744,6 +745,7 @@ class Phase5AiInfrastructureGateIntegrationTests extends PostgresIntegrationTest
                 Function<ProviderExecutionRequest, ProviderExecutionResult> geminiBehavior,
                 String ollamaModel,
                 Function<ProviderExecutionRequest, ProviderExecutionResult> ollamaBehavior,
+                CurrentUser currentUser,
                 AiSourceReferenceValidator sourceValidator) {
             this.geminiModel = geminiModel;
             this.ollamaModel = ollamaModel;
@@ -765,11 +767,13 @@ class Phase5AiInfrastructureGateIntegrationTests extends PostgresIntegrationTest
                     List.of(gemini, ollama), policies, 10, AiRequestTelemetry.NONE);
             orchestrator = new AiExecutionOrchestrator(
                     promptBuilder,
+                    currentUser,
                     new ProviderRouter(),
                     manager,
                     outputValidator,
                     sourceValidator,
-                    diagnostics);
+                    diagnostics,
+                    AiRequestTelemetry.NONE);
         }
 
         private CompletableFuture<ValidatedAiResult<?>> execute(
@@ -778,7 +782,6 @@ class Phase5AiInfrastructureGateIntegrationTests extends PostgresIntegrationTest
                 List<ProviderRoutingCandidate> candidates) {
             return orchestrator.execute(
                     request,
-                    USER_ID,
                     AiRequestPriority.INTERACTIVE_EXPLANATION,
                     budget,
                     candidates,

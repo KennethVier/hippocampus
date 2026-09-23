@@ -14,7 +14,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.PriorityQueue;
 import java.util.UUID;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -22,9 +21,12 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.IntSupplier;
 
 import com.hippocampus.ai.application.provider.AiProviderAdapter;
+import com.hippocampus.ai.application.provider.ProviderExecutionCancellationException;
 import com.hippocampus.ai.application.provider.ProviderExecutionException;
+import com.hippocampus.ai.application.provider.ProviderExecutionFailure;
 import com.hippocampus.ai.application.provider.ProviderExecutionRequest;
 import com.hippocampus.ai.application.provider.ProviderExecutionResult;
 import com.hippocampus.ai.application.provider.ProviderFailureType;
@@ -235,6 +237,7 @@ public final class AiRequestManager implements AutoCloseable {
                 return;
             }
             request.providerInvocationStarted = true;
+            request.providerInvocationCount++;
         }
         T value = null;
         Throwable failure = null;
@@ -422,7 +425,8 @@ public final class AiRequestManager implements AutoCloseable {
 
     private <T> void complete(ManagedRequest<T> request, T value) {
         cancelTimeout(request);
-        T completedValue = withRetryCount(value, request.attempts - 1);
+        T completedValue = withExecutionMetadata(
+                value, request.attempts - 1, request.providerInvocationCount);
         if (request.result.complete(completedValue)) {
             telemetry.completed(request.state.adapter.providerId(), request.request.taskType(), "success",
                     elapsed(request), request.attempts - 1);
@@ -432,8 +436,10 @@ public final class AiRequestManager implements AutoCloseable {
     private void completeExceptionally(ManagedRequest<?> request, Throwable failure, String outcome) {
         cancelTimeout(request);
         Throwable completedFailure = failure instanceof ProviderExecutionException providerFailure
-                ? providerFailure.withRetryCount(request.attempts - 1)
-                : failure;
+                ? providerFailure.withExecutionMetadata(
+                        request.attempts - 1, request.providerInvocationCount)
+                : new ProviderExecutionFailure(
+                        failure, request.attempts - 1, request.providerInvocationCount);
         if (request.result.completeExceptionally(completedFailure)) {
             telemetry.completed(request.state.adapter.providerId(), request.request.taskType(), outcome,
                     elapsed(request), request.attempts - 1);
@@ -441,9 +447,10 @@ public final class AiRequestManager implements AutoCloseable {
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> T withRetryCount(T value, int retryCount) {
+    private static <T> T withExecutionMetadata(
+            T value, int retryCount, int providerInvocationCount) {
         if (value instanceof ProviderExecutionResult providerResult) {
-            return (T) providerResult.withRetryCount(retryCount);
+            return (T) providerResult.withExecutionMetadata(retryCount, providerInvocationCount);
         }
         return value;
     }
@@ -614,9 +621,10 @@ public final class AiRequestManager implements AutoCloseable {
         private final long deadlineNanos;
         private final ProviderInvocation<T> invocation;
         private final RetryPermission retryPermission;
-        private final CompletableFuture<T> result = new CompletableFuture<>();
+        private final CompletableFuture<T> result;
         private final long startedNanos = System.nanoTime();
         private int attempts = 1;
+        private volatile int providerInvocationCount;
         private boolean physicallyRunning;
         private boolean providerInvocationStarted;
         private Thread physicalThread;
@@ -640,6 +648,21 @@ public final class AiRequestManager implements AutoCloseable {
             this.deadlineNanos = deadlineNanos;
             this.invocation = invocation;
             this.retryPermission = retryPermission;
+            this.result = new ManagedExecutionFuture<>(() -> providerInvocationCount);
+        }
+    }
+
+    private static final class ManagedExecutionFuture<T> extends CompletableFuture<T> {
+        private final IntSupplier providerInvocationCount;
+
+        private ManagedExecutionFuture(IntSupplier providerInvocationCount) {
+            this.providerInvocationCount = providerInvocationCount;
+        }
+
+        @Override
+        public boolean cancel(boolean mayInterruptIfRunning) {
+            return completeExceptionally(new ProviderExecutionCancellationException(
+                    providerInvocationCount.getAsInt()));
         }
     }
 }

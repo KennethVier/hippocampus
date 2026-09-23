@@ -19,17 +19,22 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
-import com.hippocampus.ai.application.diagnostics.AiRequestDiagnostic;
-import com.hippocampus.ai.application.diagnostics.ProviderUsageDiagnostic;
+import com.hippocampus.ai.port.AiDiagnosticsPersistence;
+import com.hippocampus.ai.port.AiRequestDiagnostic;
+import com.hippocampus.ai.port.ProviderUsageDiagnostic;
 import com.hippocampus.ai.application.prompt.PromptContextBuilder;
 import com.hippocampus.ai.application.prompt.PromptId;
 import com.hippocampus.ai.application.prompt.PromptTemplateRegistry;
@@ -64,6 +69,8 @@ import com.hippocampus.ai.domain.StructuredOutputRepairInput;
 import com.hippocampus.ai.domain.ValidatedAiResult;
 import com.hippocampus.ai.infrastructure.validation.JacksonAiStructuredOutputDecoder;
 import com.hippocampus.identity.domain.AuthenticatedUser;
+import com.hippocampus.identity.infrastructure.security.HippocampusPrincipal;
+import com.hippocampus.identity.infrastructure.security.SpringSecurityCurrentUser;
 import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.materials.domain.ChunkSourceTarget;
 import com.hippocampus.materials.domain.SourceReference;
@@ -88,6 +95,11 @@ class AiExecutionOrchestratorTests {
     private static final UUID SECOND_CHUNK_ID = UUID.fromString("50000000-0000-0000-0000-000000000002");
     private static final UUID FABRICATED_CHUNK_ID = UUID.fromString("50000000-0000-0000-0000-000000000099");
     private static final PromptTokenBudget TOKEN_BUDGET = new PromptTokenBudget(200_000, 1_000);
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Test
     void validInitialResponseDoesNotRepair() {
@@ -168,6 +180,125 @@ class AiExecutionOrchestratorTests {
             assertThat(attempts).hasValue(2);
             assertThat(harness.diagnostics.records).hasSize(1);
             assertThat(harness.diagnostics.records.getFirst().request().retryCount()).isEqualTo(1);
+            assertThat(harness.diagnostics.records.getFirst().usage().requestCount()).isEqualTo(2);
+        }
+    }
+
+    @Test
+    void callerThreadSecurityIdentityAuthorizesSourcesAfterAsyncProviderCompletion() {
+        EvidenceChunk source = chunk(1, CHUNK_ID, "source one");
+        Thread callerThread = Thread.currentThread();
+        AtomicReference<Thread> providerThread = new AtomicReference<>();
+        SecurityContextHolder.getContext().setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(
+                        new HippocampusPrincipal(USER_ID, "student@example.test"),
+                        null,
+                        List.of()));
+
+        try (Harness harness = harness(
+                new SpringSecurityCurrentUser(),
+                AiRequestTelemetry.NONE,
+                request -> {
+                    providerThread.set(Thread.currentThread());
+                    assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+                    return providerResult(
+                            request, validExplanation(List.of(CHUNK_ID.toString())));
+                },
+                null)) {
+            harness.repository.authorize(source);
+
+            join(harness.execute(request(List.of(source))));
+
+            assertThat(providerThread.get()).isNotSameAs(callerThread);
+            assertThat(harness.repository.lastAuthorizedUserId).isEqualTo(USER_ID);
+            assertThat(harness.diagnostics.records.getFirst().request().userId()).isEqualTo(USER_ID);
+        }
+    }
+
+    @Test
+    void circuitRejectionPersistsLogicalRequestWithoutProviderUsage() {
+        try (Harness harness = harness(providerFailure(
+                ProviderId.GEMINI, ProviderFailureType.AUTHENTICATION_FAILURE))) {
+            assertThatThrownBy(() -> join(harness.execute(request(List.of()))))
+                    .isInstanceOf(ProviderExecutionException.class);
+            assertThatThrownBy(() -> join(harness.execute(request(List.of()))))
+                    .isInstanceOf(ProviderExecutionException.class);
+
+            assertThat(harness.adapter.requests).hasSize(1);
+            assertThat(harness.diagnostics.records).hasSize(2);
+            assertThat(harness.diagnostics.records.get(0).usage().requestCount()).isEqualTo(1);
+            assertThat(harness.diagnostics.records.get(1).usage()).isNull();
+        }
+    }
+
+    @Test
+    void unsupportedProviderRejectionPersistsLogicalRequestWithoutProviderUsage() {
+        AiTaskRequest<ExplanationInput> task = request(List.of());
+        try (Harness harness = harness(sequence(validExplanation(List.of())))) {
+            assertThatThrownBy(() -> join(harness.execute(task, List.of(Harness.candidate(
+                    task, ProviderId.OLLAMA_CLOUD, "ollama-not-configured", 1)))))
+                    .isInstanceOf(ProviderExecutionException.class);
+
+            assertThat(harness.adapter.requests).isEmpty();
+            assertThat(harness.diagnostics.records).singleElement()
+                    .extracting(RecordedDiagnostics::usage)
+                    .isNull();
+        }
+    }
+
+    @Test
+    void cancellationWhileQueuedPersistsNoProviderUsage() throws Exception {
+        CountDownLatch providerStarted = new CountDownLatch(1);
+        CountDownLatch releaseProvider = new CountDownLatch(1);
+        try (Harness harness = harness(request -> {
+            providerStarted.countDown();
+            try {
+                assertThat(releaseProvider.await(2, TimeUnit.SECONDS)).isTrue();
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new CancellationException("cancelled");
+            }
+            return providerResult(request, validExplanation(List.of()));
+        })) {
+            CompletableFuture<ValidatedAiResult<?>> running = harness.execute(request(List.of()));
+            assertThat(providerStarted.await(2, TimeUnit.SECONDS)).isTrue();
+            CompletableFuture<ValidatedAiResult<?>> queued = harness.execute(request(List.of()));
+
+            assertThat(queued.cancel(true)).isTrue();
+
+            assertThat(queued).isCancelled();
+            assertThat(harness.adapter.requests).hasSize(1);
+            assertThat(harness.diagnostics.records)
+                    .filteredOn(record -> "CANCELLED".equals(record.request().status()))
+                    .singleElement()
+                    .extracting(RecordedDiagnostics::usage)
+                    .isNull();
+            releaseProvider.countDown();
+            join(running);
+        } finally {
+            releaseProvider.countDown();
+        }
+    }
+
+    @Test
+    void fallbackEmitsExactlyOneBoundedTelemetrySignal() {
+        RecordingTelemetry telemetry = new RecordingTelemetry();
+        try (Harness harness = harness(
+                () -> new AuthenticatedUser(USER_ID),
+                telemetry,
+                providerFailure(ProviderId.GEMINI, ProviderFailureType.TIMEOUT),
+                sequence(validExplanation(List.of())))) {
+            join(harness.executeWithFallback(request(List.of())));
+
+            assertThat(telemetry.fallbackSignals)
+                    .containsExactly(new FallbackSignal(
+                            ProviderId.GEMINI,
+                            ProviderId.OLLAMA_CLOUD,
+                            AiTaskType.EXPLANATION));
+            assertThat(telemetry.fallbackSignals.toString())
+                    .doesNotContain(
+                            USER_ID.toString(), MATERIAL_ID.toString(), CHUNK_ID.toString(),
+                            "source", "prompt", "response");
         }
     }
 
@@ -510,6 +641,11 @@ class AiExecutionOrchestratorTests {
 
             assertThat(result).isCancelled();
             assertThat(harness.adapter.requests).hasSize(1);
+            assertThat(harness.diagnostics.records)
+                    .filteredOn(record -> "CANCELLED".equals(record.request().status()))
+                    .singleElement()
+                    .extracting(record -> record.usage().requestCount())
+                    .isEqualTo(1);
         }
     }
 
@@ -584,6 +720,14 @@ class AiExecutionOrchestratorTests {
             Function<ProviderExecutionRequest, ProviderExecutionResult> primaryBehavior,
             Function<ProviderExecutionRequest, ProviderExecutionResult> fallbackBehavior) {
         return new Harness(primaryBehavior, fallbackBehavior);
+    }
+
+    private static Harness harness(
+            CurrentUser currentUser,
+            AiRequestTelemetry telemetry,
+            Function<ProviderExecutionRequest, ProviderExecutionResult> primaryBehavior,
+            Function<ProviderExecutionRequest, ProviderExecutionResult> fallbackBehavior) {
+        return new Harness(primaryBehavior, fallbackBehavior, 1, currentUser, telemetry);
     }
 
     private static Harness harnessWithMaximumAttempts(
@@ -716,6 +860,20 @@ class AiExecutionOrchestratorTests {
                 Function<ProviderExecutionRequest, ProviderExecutionResult> primaryBehavior,
                 Function<ProviderExecutionRequest, ProviderExecutionResult> fallbackBehavior,
                 int maximumAttempts) {
+            this(
+                    primaryBehavior,
+                    fallbackBehavior,
+                    maximumAttempts,
+                    () -> new AuthenticatedUser(USER_ID),
+                    AiRequestTelemetry.NONE);
+        }
+
+        private Harness(
+                Function<ProviderExecutionRequest, ProviderExecutionResult> primaryBehavior,
+                Function<ProviderExecutionRequest, ProviderExecutionResult> fallbackBehavior,
+                int maximumAttempts,
+                CurrentUser currentUser,
+                AiRequestTelemetry telemetry) {
             adapter = new StubProviderAdapter(ProviderId.GEMINI, primaryBehavior);
             fallbackAdapter = fallbackBehavior == null
                     ? null
@@ -738,15 +896,16 @@ class AiExecutionOrchestratorTests {
                 adapters = List.of(adapter, fallbackAdapter);
                 policies.put(ProviderId.OLLAMA_CLOUD, policy);
             }
-            manager = new AiRequestManager(adapters, policies, 10, AiRequestTelemetry.NONE);
-            CurrentUser currentUser = () -> new AuthenticatedUser(USER_ID);
+            manager = new AiRequestManager(adapters, policies, 10, telemetry);
             orchestrator = new AiExecutionOrchestrator(
                     new PromptContextBuilder(new PromptTemplateRegistry(), String::length),
+                    currentUser,
                     new ProviderRouter(),
                     manager,
                     new AiOutputValidator(new JacksonAiStructuredOutputDecoder()),
-                    new AiSourceReferenceValidator(currentUser, repository),
-                    diagnostics);
+                    new AiSourceReferenceValidator(repository),
+                    diagnostics,
+                    telemetry);
         }
 
         private CompletableFuture<ValidatedAiResult<?>> execute(AiTaskRequest<?> request) {
@@ -768,7 +927,6 @@ class AiExecutionOrchestratorTests {
                 AiTaskRequest<?> request, List<ProviderRoutingCandidate> candidates) {
             return orchestrator.execute(
                     request,
-                    USER_ID,
                     AiRequestPriority.INTERACTIVE_EXPLANATION,
                     TOKEN_BUDGET,
                     candidates,
@@ -803,8 +961,13 @@ class AiExecutionOrchestratorTests {
     }
 
     private static final class RecordingDiagnostics
-            implements com.hippocampus.ai.application.diagnostics.AiDiagnosticsPersistence {
+            implements AiDiagnosticsPersistence {
         private final List<RecordedDiagnostics> records = new CopyOnWriteArrayList<>();
+
+        @Override
+        public void record(AiRequestDiagnostic request) {
+            records.add(new RecordedDiagnostics(request, null));
+        }
 
         @Override
         public void record(AiRequestDiagnostic request, ProviderUsageDiagnostic usage) {
@@ -815,6 +978,24 @@ class AiExecutionOrchestratorTests {
     private record RecordedDiagnostics(
             AiRequestDiagnostic request,
             ProviderUsageDiagnostic usage) {}
+
+    private static final class RecordingTelemetry implements AiRequestTelemetry {
+        private final List<FallbackSignal> fallbackSignals = new CopyOnWriteArrayList<>();
+
+        @Override
+        public void fallback(
+                ProviderId primaryProviderId,
+                ProviderId fallbackProviderId,
+                AiTaskType taskType) {
+            fallbackSignals.add(new FallbackSignal(
+                    primaryProviderId, fallbackProviderId, taskType));
+        }
+    }
+
+    private record FallbackSignal(
+            ProviderId primaryProviderId,
+            ProviderId fallbackProviderId,
+            AiTaskType taskType) {}
 
     private static final class StubProviderAdapter implements AiProviderAdapter {
         private final ProviderId providerId;
@@ -881,6 +1062,7 @@ class AiExecutionOrchestratorTests {
 
     private static final class StubSourceReferenceRepository implements SourceReferenceRepository {
         private final Map<UUID, SourceReferenceSeed> sources = new java.util.HashMap<>();
+        private volatile UUID lastAuthorizedUserId;
 
         private void authorize(EvidenceChunk chunk) {
             sources.put(chunk.chunkId(), new SourceReferenceSeed(
@@ -897,6 +1079,7 @@ class AiExecutionOrchestratorTests {
         @Override
         public Optional<SourceReferenceSeed> findAuthorizedTarget(
                 UUID userId, SourceReferenceTarget target) {
+            lastAuthorizedUserId = userId;
             if (!USER_ID.equals(userId) || !(target instanceof ChunkSourceTarget chunkTarget)) {
                 return Optional.empty();
             }

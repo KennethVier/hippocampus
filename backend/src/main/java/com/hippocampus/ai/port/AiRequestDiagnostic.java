@@ -1,4 +1,4 @@
-package com.hippocampus.ai.application.diagnostics;
+package com.hippocampus.ai.port;
 
 import java.time.Instant;
 import java.util.Objects;

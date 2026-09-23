@@ -19,7 +19,6 @@ import com.hippocampus.ai.domain.ExplanationResult;
 import com.hippocampus.ai.domain.QuestionGenerationResult;
 import com.hippocampus.ai.domain.ResponseEvaluationResult;
 import com.hippocampus.ai.domain.ValidatedAiResult;
-import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.materials.domain.ChunkSourceTarget;
 import com.hippocampus.materials.port.SourceReferenceRepository;
 import com.hippocampus.materials.port.SourceReferenceSeed;
@@ -29,19 +28,19 @@ import com.hippocampus.rag.domain.EvidenceSourceReference;
 
 public class AiSourceReferenceValidator {
 
-    private final CurrentUser currentUser;
     private final SourceReferenceRepository sourceReferences;
 
-    public AiSourceReferenceValidator(CurrentUser currentUser, SourceReferenceRepository sourceReferences) {
-        this.currentUser = Objects.requireNonNull(currentUser, "currentUser must not be null");
+    public AiSourceReferenceValidator(SourceReferenceRepository sourceReferences) {
         this.sourceReferences = Objects.requireNonNull(sourceReferences, "sourceReferences must not be null");
     }
 
     @Transactional(readOnly = true)
     public <T> ValidatedAiResult<T> validate(
+            UUID authenticatedUserId,
             ValidatedAiResult<T> result,
             AiTaskRequest<?> request,
             PromptContext promptContext) {
+        Objects.requireNonNull(authenticatedUserId, "authenticatedUserId must not be null");
         Objects.requireNonNull(result, "result must not be null");
         Objects.requireNonNull(request, "request must not be null");
         Objects.requireNonNull(promptContext, "promptContext must not be null");
@@ -65,7 +64,6 @@ public class AiSourceReferenceValidator {
             parsedReferences.add(chunkId);
         }
 
-        UUID userId = authenticatedUserId();
         for (UUID chunkId : parsedReferences) {
             PromptContext.IncludedSource prompted = promptedSources.get(chunkId);
             if (prompted == null) {
@@ -78,7 +76,7 @@ public class AiSourceReferenceValidator {
                 fail(AiGroundingValidationException.Reason.EVIDENCE_PROVENANCE_MISMATCH);
             }
 
-            SourceReferenceSeed current = resolveCurrent(userId, prompted);
+            SourceReferenceSeed current = resolveCurrent(authenticatedUserId, prompted);
             if (!matchesCurrent(prompted, current)) {
                 fail(AiGroundingValidationException.Reason.CURRENT_PROVENANCE_MISMATCH);
             }
@@ -120,15 +118,6 @@ public class AiSourceReferenceValidator {
                 .filter(reference -> reference.kind() == EvidenceReferenceKind.CHUNK)
                 .forEach(reference -> result.put(reference.chunkId(), reference));
         return result;
-    }
-
-    private UUID authenticatedUserId() {
-        try {
-            return currentUser.authenticatedUser().userId();
-        } catch (RuntimeException exception) {
-            throw new AiGroundingValidationException(
-                    AiGroundingValidationException.Reason.AUTHORIZATION_NOT_CONFIRMED);
-        }
     }
 
     private SourceReferenceSeed resolveCurrent(UUID userId, PromptContext.IncludedSource source) {

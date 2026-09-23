@@ -8,9 +8,9 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.hippocampus.ai.application.diagnostics.AiDiagnosticsPersistence;
-import com.hippocampus.ai.application.diagnostics.AiRequestDiagnostic;
-import com.hippocampus.ai.application.diagnostics.ProviderUsageDiagnostic;
+import com.hippocampus.ai.port.AiDiagnosticsPersistence;
+import com.hippocampus.ai.port.AiRequestDiagnostic;
+import com.hippocampus.ai.port.ProviderUsageDiagnostic;
 
 public final class JdbcAiDiagnosticsPersistence implements AiDiagnosticsPersistence {
 
@@ -23,6 +23,12 @@ public final class JdbcAiDiagnosticsPersistence implements AiDiagnosticsPersiste
         this.jdbc = Objects.requireNonNull(jdbc, "jdbc must not be null");
         this.transactions = new TransactionTemplate(Objects.requireNonNull(
                 transactionManager, "transactionManager must not be null"));
+    }
+
+    @Override
+    public void record(AiRequestDiagnostic request) {
+        Objects.requireNonNull(request, "request must not be null");
+        transactions.executeWithoutResult(ignored -> insertRequest(request));
     }
 
     @Override

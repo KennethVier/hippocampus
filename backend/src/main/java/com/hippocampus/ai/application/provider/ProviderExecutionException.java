@@ -11,6 +11,7 @@ public final class ProviderExecutionException extends RuntimeException {
     private final ProviderFailureType failureType;
     private final Optional<Duration> retryAfter;
     private final int retryCount;
+    private final int providerInvocationCount;
 
     public ProviderExecutionException(ProviderId providerId, ProviderFailureType failureType) {
         this(providerId, failureType, Optional.empty());
@@ -20,14 +21,15 @@ public final class ProviderExecutionException extends RuntimeException {
             ProviderId providerId,
             ProviderFailureType failureType,
             Optional<Duration> retryAfter) {
-        this(providerId, failureType, retryAfter, 0);
+        this(providerId, failureType, retryAfter, 0, 0);
     }
 
     private ProviderExecutionException(
             ProviderId providerId,
             ProviderFailureType failureType,
             Optional<Duration> retryAfter,
-            int retryCount) {
+            int retryCount,
+            int providerInvocationCount) {
         super("AI provider execution failed: " + Objects.requireNonNull(failureType, "failureType must not be null"));
         this.providerId = Objects.requireNonNull(providerId, "providerId must not be null");
         this.failureType = failureType;
@@ -39,6 +41,10 @@ public final class ProviderExecutionException extends RuntimeException {
             throw new IllegalArgumentException("retryCount must not be negative");
         }
         this.retryCount = retryCount;
+        if (providerInvocationCount < 0) {
+            throw new IllegalArgumentException("providerInvocationCount must not be negative");
+        }
+        this.providerInvocationCount = providerInvocationCount;
     }
 
     public ProviderId providerId() {
@@ -57,7 +63,12 @@ public final class ProviderExecutionException extends RuntimeException {
         return retryCount;
     }
 
-    public ProviderExecutionException withRetryCount(int retries) {
-        return new ProviderExecutionException(providerId, failureType, retryAfter, retries);
+    public int providerInvocationCount() {
+        return providerInvocationCount;
+    }
+
+    public ProviderExecutionException withExecutionMetadata(int retries, int invocationCount) {
+        return new ProviderExecutionException(
+                providerId, failureType, retryAfter, retries, invocationCount);
     }
 }
