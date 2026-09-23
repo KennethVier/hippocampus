@@ -33,7 +33,7 @@ public final class AiRagFailurePolicy {
             case RAG_INSUFFICIENT -> failedAction.constraints().supplementalKnowledgeAllowed()
                     ? supplementalAlternative(state, failedAction)
                     : limitation(state, failedAction, SOURCE_UNAVAILABLE);
-            case RAG_FAILED -> hasValidatedContent(state)
+            case RAG_FAILED -> hasCompatibleValidatedContent(state, failedAction)
                     ? reuseValidated(state, failedAction)
                     : retryDependency(state, failedAction, DEPENDENCY_RETRY);
             case AI_UNAVAILABLE -> handleAiUnavailable(state, failedAction);
@@ -43,7 +43,7 @@ public final class AiRagFailurePolicy {
 
     private static NextLearningAction handleAiUnavailable(
             LearningState state, NextLearningAction failedAction) {
-        if (hasValidatedContent(state)) {
+        if (hasCompatibleValidatedContent(state, failedAction)) {
             return reuseValidated(state, failedAction);
         }
         if (failedAction.constraints().sourceRequirement() != SourceRequirement.NONE
@@ -59,10 +59,16 @@ public final class AiRagFailurePolicy {
                 LearningActionConstraints.unconstrained());
     }
 
-    private static boolean hasValidatedContent(LearningState state) {
+    private static boolean hasCompatibleValidatedContent(
+            LearningState state, NextLearningAction failedAction) {
         return state.recentActivityHistory().stream()
                 .anyMatch(activity -> activity.conceptKey().equals(state.conceptKey())
-                        && activity.validatedContent());
+                        && activity.validatedContent()
+                        && PolicyHistory.represents(activity, failedAction.actionType())
+                        && activity.difficulty() == failedAction.difficulty()
+                        && Objects.equals(activity.questionIntent(), failedAction.constraints().questionIntent())
+                        && Objects.equals(activity.templateSignature(), failedAction.constraints().templateSignature())
+                        && !failedAction.constraints().visualRequired());
     }
 
     private static NextLearningAction reuseValidated(

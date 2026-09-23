@@ -24,6 +24,11 @@ public final class TimeAwareMissionPolicy {
             LearningActionType.PAUSE,
             LearningActionType.STOP);
 
+    private static final Set<LearningActionType> RETRIEVAL_SUBSTITUTABLE_ACTIONS = EnumSet.of(
+            LearningActionType.UNDERSTAND,
+            LearningActionType.CONNECT,
+            LearningActionType.APPLY);
+
     private final LearningPolicyConfiguration configuration;
 
     public TimeAwareMissionPolicy(LearningPolicyConfiguration configuration) {
@@ -38,7 +43,7 @@ public final class TimeAwareMissionPolicy {
             return candidate;
         }
 
-        if (candidate.actionType() != LearningActionType.RETRIEVE
+        if (RETRIEVAL_SUBSTITUTABLE_ACTIONS.contains(candidate.actionType())
                 && state.evidence().isAtLeast(EvidenceDimension.UNDERSTANDING, EvidenceStrength.DEVELOPING)
                 && configuration.durationFor(LearningActionType.RETRIEVE)
                         <= state.timeContext().remainingMinutes()) {

@@ -48,8 +48,11 @@ public final class LearningEngine {
             return lifecycleAction;
         }
 
-        NextLearningAction candidate = scaffoldingPolicy.select(state)
-                .orElseGet(() -> progressionAction(state));
+        NextLearningAction candidate = progressionAction(state);
+        if (candidate.actionType() == LearningActionType.APPLY
+                || state.currentStage() != LearningStage.APPLICATION) {
+            candidate = scaffoldingPolicy.select(state).orElse(candidate);
+        }
         NextLearningAction sourceSafe = sourceCapabilityPolicy.adjust(state, candidate);
         NextLearningAction timeSafe = timeAwareMissionPolicy.adjust(state, sourceSafe);
         return antiRepetitionPolicy.adjust(state, timeSafe);
@@ -64,7 +67,7 @@ public final class LearningEngine {
         if (lifecycleAction != null) {
             return lifecycleAction;
         }
-        return aiRagFailurePolicy.handle(state, failure, failedAction);
+        return sourceCapabilityPolicy.adjust(state, aiRagFailurePolicy.handle(state, failure, failedAction));
     }
 
     private NextLearningAction progressionAction(LearningState state) {

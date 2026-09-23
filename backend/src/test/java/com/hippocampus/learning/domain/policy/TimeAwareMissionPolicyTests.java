@@ -16,6 +16,7 @@ import com.hippocampus.learning.domain.SourceCapability;
 import com.hippocampus.learning.domain.SourceReadiness;
 import java.util.List;
 import java.util.Map;
+import java.util.EnumMap;
 import org.junit.jupiter.api.Test;
 
 class TimeAwareMissionPolicyTests {
@@ -54,6 +55,20 @@ class TimeAwareMissionPolicyTests {
         assertThat(state.evidence().strengthOf(EvidenceDimension.APPLICATION))
                 .isEqualTo(EvidenceStrength.INSUFFICIENT);
         assertThat(state.missionState()).isEqualTo(MissionLifecycleState.ACTIVE);
+    }
+
+    @Test
+    void doesNotReplaceFeedbackWithRetrievalWhenClosureIsTooLong() {
+        EnumMap<LearningActionType, Integer> durations =
+                new EnumMap<>(PolicyTestFixtures.configuration().activityDurationMinutes());
+        durations.put(LearningActionType.FEEDBACK, 6);
+        TimeAwareMissionPolicy customPolicy = new TimeAwareMissionPolicy(
+                new com.hippocampus.learning.domain.LearningPolicyConfiguration(2, 3, 4, 5, 2, 3, durations));
+
+        var action = customPolicy.adjust(state(5), candidate(LearningActionType.FEEDBACK));
+
+        assertThat(action.actionType()).isEqualTo(LearningActionType.REFLECT);
+        assertThat(action.actionType()).isNotEqualTo(LearningActionType.RETRIEVE);
     }
 
     private static com.hippocampus.learning.domain.LearningState state(int remainingMinutes) {

@@ -68,8 +68,8 @@ class AiRagFailurePolicyTests {
     private static LearningState state(boolean groundedText, boolean validatedContent) {
         var history = validatedContent
                 ? List.of(PolicyTestFixtures.activity(
-                        LearningActionType.UNDERSTAND,
-                        LearningDifficulty.FOUNDATIONAL,
+                        LearningActionType.APPLY,
+                        LearningDifficulty.INTERMEDIATE,
                         null,
                         null,
                         null,
