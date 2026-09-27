@@ -66,9 +66,13 @@ public final class AntiRepetitionPolicy {
                 && candidate.constraints().templateSignature().equals(activity.templateSignature());
         boolean sameIntent = candidate.constraints().questionIntent() != null
                 && candidate.constraints().questionIntent().equals(activity.questionIntent());
-        boolean sameShape = PolicyHistory.represents(activity, candidate.actionType())
+        // sameShape is restricted to evaluative/practice activities (those with a non-null questionIntent).
+        // Non-evaluative steps (UNDERSTAND, FEEDBACK, REFLECT, COMPLETE) have null questionIntent and
+        // must never be suppressed as accidental duplicates based on action type and difficulty alone.
+        boolean sameShape = candidate.constraints().questionIntent() != null
+                && PolicyHistory.represents(activity, candidate.actionType())
                 && activity.difficulty() == candidate.difficulty()
-                && (candidate.constraints().questionIntent() == null || sameIntent);
+                && sameIntent;
         return sameTemplate || sameShape;
     }
 }

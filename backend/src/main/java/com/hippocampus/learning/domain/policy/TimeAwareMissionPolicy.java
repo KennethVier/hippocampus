@@ -17,6 +17,7 @@ import java.util.Set;
 public final class TimeAwareMissionPolicy {
 
     private static final Set<LearningActionType> SAFETY_ACTIONS = EnumSet.of(
+            LearningActionType.COMPLETE,
             LearningActionType.COMMUNICATE_LIMITATION,
             LearningActionType.SOURCE_ONLY,
             LearningActionType.REUSE_VALIDATED_CONTENT,

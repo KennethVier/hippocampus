@@ -264,6 +264,20 @@ class LearningEngineTests {
                 .isEqualTo(LearningActionType.REUSE_VALIDATED_CONTENT);
     }
 
+    @Test
+    void enginePreservesCompletedLifecycleStateRegardlessOfRemainingTime() {
+        LearningState state = state(
+                MissionLifecycleState.COMPLETED,
+                new SourceCapability(SourceReadiness.READY, true, false, false),
+                new LearningTimeContext(30, 0, 30),
+                LearningActionConstraints.unconstrained(),
+                List.of());
+
+        NextLearningAction action = engine.decide(state);
+
+        assertThat(action.actionType()).isEqualTo(LearningActionType.COMPLETE);
+    }
+
     private static LearningState stateWithEvidence(
             Map<EvidenceDimension, EvidenceStrength> evidence,
             boolean connectionRelevant,

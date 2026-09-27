@@ -93,4 +93,22 @@ class TimeAwareMissionPolicyTests {
                 true,
                 LearningActionConstraints.unconstrained());
     }
+
+    @Test
+    void objectiveCompleteWithZeroTimePreservesCompleteAndDoesNotDowngradeToReflect() {
+        var completeCandidate = new NextLearningAction(
+                LearningActionType.COMPLETE,
+                java.util.UUID.fromString("00000000-0000-0000-0000-000000000002"),
+                "cardiac-output",
+                null,
+                "OBJECTIVE_COMPLETE",
+                false,
+                LearningActionConstraints.unconstrained());
+
+        var action = policy.adjust(state(0), completeCandidate);
+
+        assertThat(action.actionType()).isEqualTo(LearningActionType.COMPLETE);
+        assertThat(action.rationaleCode()).isEqualTo("OBJECTIVE_COMPLETE");
+        assertThat(action.rationaleCode()).isNotEqualTo(TIME_LIMIT);
+    }
 }

@@ -5,8 +5,19 @@ import com.hippocampus.learning.domain.LearningState;
 import com.hippocampus.learning.domain.RecentLearningActivity;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 final class PolicyHistory {
+
+    /**
+     * Stage-name synonyms: keys are upper-cased activityType strings that appear in history
+     * when activities are recorded under a stage label rather than the action-type name.
+     */
+    private static final Map<String, LearningActionType> STAGE_SYNONYMS = Map.of(
+            "APPLICATION", LearningActionType.APPLY,
+            "RETRIEVAL", LearningActionType.RETRIEVE,
+            "UNDERSTANDING", LearningActionType.UNDERSTAND,
+            "CONNECTION", LearningActionType.CONNECT);
 
     private PolicyHistory() {
     }
@@ -25,6 +36,10 @@ final class PolicyHistory {
 
     static boolean represents(RecentLearningActivity activity, LearningActionType actionType) {
         String normalized = activity.activityType().toUpperCase();
-        return normalized.equals(actionType.name()) || normalized.contains(actionType.name());
+        LearningActionType synonym = STAGE_SYNONYMS.get(normalized);
+        if (synonym != null) {
+            return synonym == actionType;
+        }
+        return normalized.equals(actionType.name());
     }
 }
