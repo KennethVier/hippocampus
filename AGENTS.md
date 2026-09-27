@@ -48,7 +48,7 @@ Default tool assignment:
 
 Do not use Antigravity and Jules redundantly on the same task unless a concrete reason justifies separate execution. Do not let an implementation executor self-approve its own work.
 
-Antigravity discovers workspace skills under `.agents/skills/`. Jules reads this root `AGENTS.md`; when Jules executes a task, the prompt/plan must also direct it to the exact relevant skill file when the skill contains task-critical behavior.
+Antigravity discovers workspace skills under `.agents/skills/` and custom agent profiles under `.agents/agents/`. The `hippocampus-implementer` profile defines the local execution policy (`commandExecutionPolicy: auto`) while enforcing that broad validation is user/CI-owned and only eligible changed tests may be run by default. The `hippocampus-reviewer` profile is explicitly constrained to read-only inspection/review capabilities, disabling write/edit tools and setting `commandExecutionPolicy: off` to prevent unnecessary write or unrestricted command capabilities. Jules reads this root `AGENTS.md`; when Jules executes a task, the prompt/plan must also direct it to the exact relevant skill file when the skill contains task-critical behavior.
 
 For a fresh agent/session, use `hippocampus-onboard-agent` once before task work when repository context is not already established. The onboarding skill is orientation only; it does not replace tracker-task planning.
 

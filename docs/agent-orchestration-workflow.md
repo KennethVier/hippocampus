@@ -78,7 +78,12 @@ Once an implementation packet is approved, that packet controls execution unless
 
 Antigravity receives the approved packet and uses `hippocampus-implement-task`.
 
-Antigravity natively discovers repository skills from `.agents/skills/`; prefer the repository skill over ad-hoc repeated instructions.
+Antigravity natively discovers repository skills from `.agents/skills/` and agent profiles from `.agents/agents/`. It uses the `hippocampus-implementer` custom agent profile (`.agents/agents/hippocampus-implementer/agent.md`).
+
+Antigravity execution policy:
+- `commandExecutionPolicy: auto` permits running commands autonomously only when authorized by repository policy;
+- repository command policy strictly bounds execution: run nothing by default except an eligible cheap test created or modified by the current implementation;
+- broad validation remains user/CI-owned and must not be run by the agent.
 
 Default behavior:
 
@@ -183,6 +188,8 @@ When a command fails, provide the first causal failure/relevant log section to t
 ## 5. Review — Independent Reviewer
 
 The reviewer must not simply trust the implementation report. Review the actual changed files/diff plus supplied evidence.
+
+When using Antigravity for review, use the `hippocampus-reviewer` custom agent profile (`.agents/agents/hippocampus-reviewer/agent.md`). The reviewer profile is explicitly constrained to read-only inspection and review capabilities (`view_file`, `grep_search`, `list_dir`, `search_web`, `read_url_content`, MCP read tools, `ask_question`). Write and file modification tools (`write_to_file`, `replace_file_content`, `multi_replace_file_content`) are disabled, and terminal command execution is disabled (`commandExecutionPolicy: off`). Reviewers inspect code and evidence without write/edit or unrestricted command capabilities.
 
 The reviewer inspects:
 

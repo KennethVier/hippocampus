@@ -331,7 +331,7 @@ PUBLICATION
 
 ### Implement
 
-Default local executor: Antigravity.
+Default local executor: Antigravity. Uses the `hippocampus-implementer` custom agent profile (`commandExecutionPolicy: auto` strictly bounded by repository command policy).
 
 Optional cloud executor: Jules.
 
@@ -343,7 +343,7 @@ Broad validation belongs to the user or CI. The executor runs only a cheap test/
 
 ### Review
 
-Review actual diff + tracker/authority + tests + user/CI evidence. Do not trust the implementation report alone.
+Review actual diff + tracker/authority + tests + user/CI evidence. Do not trust the implementation report alone. When using Antigravity, uses the `hippocampus-reviewer` profile (read-only inspection, write/edit tools disabled, `commandExecutionPolicy: off`).
 
 General review and security review are separate. The implementation context cannot approve itself.
 

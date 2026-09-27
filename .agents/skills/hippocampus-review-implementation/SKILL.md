@@ -9,7 +9,7 @@ description: Independent review role for a Hippocampus implementation or PR. Ins
 
 Review the actual implementation, not the implementer's narration. Consume user/CI validation evidence instead of reproducing broad validation work.
 
-The reviewer must be independent from the implementation execution context. A fresh Gemini/reviewer session is preferred. If Antigravity is used for review, use a separate review context/agent rather than allowing the implementation session to approve itself. Jules must not self-approve work it produced.
+The reviewer must be independent from the implementation execution context. A fresh Gemini/reviewer session is preferred. If Antigravity is used for review, use the `hippocampus-reviewer` agent profile (`.agents/agents/hippocampus-reviewer/agent.md`), which is explicitly constrained to read-only inspection capabilities (`view_file`, `grep_search`, `list_dir`, `search_web`, `read_url_content`, MCP read tools, `ask_question`) with write/edit tools disabled and terminal commands disabled (`commandExecutionPolicy: off`). Jules must not self-approve work it produced.
 
 ## Review Order
 
@@ -39,6 +39,8 @@ Prefer direct evidence in this order:
 Do not accept an implementation report as proof that a file, test, or behavior exists.
 
 ## Command Policy
+
+Review capabilities are strictly read-only inspection. The reviewer profile disables write/edit tools and sets `commandExecutionPolicy: off`.
 
 Do not run builds, tests, Docker/Testcontainers, application startup, lint, typecheck, E2E, validation scripts, or other broad commands by default.
 

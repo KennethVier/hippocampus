@@ -90,7 +90,7 @@ Confirm understanding of these durable facts:
 
 ### Antigravity
 
-Antigravity is the default local executor and discovers `.agents/skills/` automatically. Use skill names directly when the task requires them; do not duplicate their full content into every prompt.
+Antigravity is the default local executor and discovers `.agents/skills/` and `.agents/agents/` automatically. It uses `hippocampus-implementer` (`commandExecutionPolicy: auto` strictly bounded by the repository command policy) for implementation and `hippocampus-reviewer` (read-only inspection, no write/edit capabilities, `commandExecutionPolicy: off`) for review. Use skill names directly when the task requires them; do not duplicate their full content into every prompt.
 
 ### Jules
 
