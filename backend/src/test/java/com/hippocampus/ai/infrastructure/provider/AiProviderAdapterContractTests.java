@@ -1,5 +1,6 @@
 package com.hippocampus.ai.infrastructure.provider;
 
+import static com.hippocampus.ai.infrastructure.provider.ProviderTestFixtures.validateLiveExplanation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -17,6 +18,7 @@ import java.util.stream.Stream;
 
 import com.google.genai.errors.ClientException;
 import com.google.genai.errors.ServerException;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -39,6 +41,7 @@ import com.hippocampus.ai.application.provider.ProviderFailureType;
 import com.hippocampus.ai.application.provider.ProviderStreamCompleted;
 import com.hippocampus.ai.application.provider.ProviderStreamEvent;
 import com.hippocampus.ai.application.provider.ProviderTextDelta;
+import com.hippocampus.ai.application.provider.ProviderUsage;
 import com.hippocampus.ai.application.routing.ProviderId;
 import com.hippocampus.ai.domain.AiTaskType;
 import com.hippocampus.ai.infrastructure.provider.gemini.GeminiProviderAdapter;
@@ -48,6 +51,26 @@ import reactor.core.publisher.Flux;
 class AiProviderAdapterContractTests {
 
     private static final String RAW_PROVIDER_DETAIL = "raw-provider-body api-key-secret";
+
+    @Test
+    void liveExplanationFixtureReservesExpandedOutputBudget() {
+        assertThat(ProviderTestFixtures.liveExplanationRequest(ProviderId.GEMINI, "gemini-live")
+                        .promptContext().reservedOutputTokens())
+                .isEqualTo(1024);
+        assertThat(ProviderTestFixtures.liveExplanationRequest(ProviderId.OLLAMA_CLOUD, "ollama-live")
+                        .promptContext().reservedOutputTokens())
+                .isEqualTo(1024);
+    }
+
+    @Test
+    void ordinaryProviderFixturesKeepTheirExistingOutputBudget() {
+        assertThat(ProviderTestFixtures.request(ProviderId.GEMINI, "gemini-selected")
+                        .promptContext().reservedOutputTokens())
+                .isEqualTo(64);
+        assertThat(ProviderTestFixtures.request(ProviderId.OLLAMA_CLOUD, "ollama-selected")
+                        .promptContext().reservedOutputTokens())
+                .isEqualTo(64);
+    }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("adapters")
@@ -76,6 +99,19 @@ class AiProviderAdapterContractTests {
     void adaptersExposeTheSameTaskCapabilityContract(AdapterCase adapterCase) {
         assertThat(Stream.of(AiTaskType.values()).allMatch(adapterCase.adapter()::supports)).isTrue();
         assertThat(adapterCase.adapter().supports(null)).isFalse();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("liveSmokeValidationFailures")
+    void liveSmokeValidationFailureReportsOnlySafeSchemaMetadata(SafeDiagnosticCase diagnosticCase) {
+        assertThatThrownBy(() -> validateLiveExplanation(diagnosticCase.result()))
+                .isInstanceOf(AssertionError.class)
+                .hasMessage(diagnosticCase.expectedMessage())
+                .hasNoCause()
+                .hasMessageNotContaining(diagnosticCase.result().rawContent())
+                .hasMessageNotContaining(RAW_PROVIDER_DETAIL)
+                .hasMessageNotContaining("system-policy-secret-marker")
+                .hasMessageNotContaining("student-task-secret-marker");
     }
 
     @ParameterizedTest(name = "{0}")
@@ -219,6 +255,48 @@ class AiProviderAdapterContractTests {
                 ollamaHttpFailure("Ollama unavailable", 503, ProviderFailureType.PROVIDER_UNAVAILABLE));
     }
 
+    static Stream<SafeDiagnosticCase> liveSmokeValidationFailures() {
+        return Stream.of(
+                new SafeDiagnosticCase(
+                        "contract mismatch diagnostic",
+                        new ProviderExecutionResult(
+                                ProviderId.GEMINI,
+                                "gemini-live",
+                                "  {\"unexpected\":\"" + RAW_PROVIDER_DETAIL + "\"}  ",
+                                ProviderUsage.of(11, 17, 28),
+                                Duration.ZERO),
+                        """
+                                provider: GEMINI
+                                model: gemini-live
+                                output contract: EXPLANATION
+                                schema failure reason: CONTRACT_MISMATCH
+                                output token count: 17
+                                raw response character count: 53
+                                trimmed output starts with "{": true
+                                trimmed output ends with "}": true
+                                raw output contains a Markdown code fence ("```"): false
+                                """.strip()),
+                new SafeDiagnosticCase(
+                        "malformed JSON diagnostic",
+                        new ProviderExecutionResult(
+                                ProviderId.OLLAMA_CLOUD,
+                                "ollama-live",
+                                "```json\n{\"unexpected\":\"" + RAW_PROVIDER_DETAIL + "\"}\n```",
+                                ProviderUsage.of(13, 23, 36),
+                                Duration.ZERO),
+                        """
+                                provider: OLLAMA_CLOUD
+                                model: ollama-live
+                                output contract: EXPLANATION
+                                schema failure reason: MALFORMED_JSON
+                                output token count: 23
+                                raw response character count: 61
+                                trimmed output starts with "{": false
+                                trimmed output ends with "}": false
+                                raw output contains a Markdown code fence ("```"): true
+                                """.strip()));
+    }
+
     static Stream<FailureCase> unsupportedRoutes() {
         return Stream.of(
                 new FailureCase(
@@ -296,6 +374,16 @@ class AiProviderAdapterContractTests {
             verifier.run();
         }
 
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    record SafeDiagnosticCase(
+            String name,
+            ProviderExecutionResult result,
+            String expectedMessage) {
         @Override
         public String toString() {
             return name;

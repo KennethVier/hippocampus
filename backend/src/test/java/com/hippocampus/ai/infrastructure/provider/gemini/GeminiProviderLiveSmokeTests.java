@@ -1,6 +1,7 @@
 package com.hippocampus.ai.infrastructure.provider.gemini;
 
 import static com.hippocampus.ai.infrastructure.provider.ProviderTestFixtures.liveExplanationRequest;
+import static com.hippocampus.ai.infrastructure.provider.ProviderTestFixtures.validateLiveExplanation;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Assumptions;
@@ -8,13 +9,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatModel;
 
 import com.google.genai.Client;
-import com.hippocampus.ai.application.validation.AiOutputValidator;
 import com.hippocampus.ai.application.provider.ProviderExecutionResult;
 import com.hippocampus.ai.application.routing.ProviderId;
-import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.domain.ExplanationResult;
 import com.hippocampus.ai.domain.ValidatedAiResult;
-import com.hippocampus.ai.infrastructure.validation.JacksonAiStructuredOutputDecoder;
 
 class GeminiProviderLiveSmokeTests {
 
@@ -36,8 +34,7 @@ class GeminiProviderLiveSmokeTests {
 
         ProviderExecutionResult result = new GeminiProviderAdapter(chatModel)
                 .execute(liveExplanationRequest(ProviderId.GEMINI, model));
-        ValidatedAiResult<?> validated = new AiOutputValidator(new JacksonAiStructuredOutputDecoder())
-                .validate(result, AiOutputContract.EXPLANATION);
+        ValidatedAiResult<?> validated = validateLiveExplanation(result);
 
         assertThat(result.providerId()).isEqualTo(ProviderId.GEMINI);
         assertThat(result.modelId()).isNotBlank();

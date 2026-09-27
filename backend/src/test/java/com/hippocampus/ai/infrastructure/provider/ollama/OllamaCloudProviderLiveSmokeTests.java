@@ -1,6 +1,7 @@
 package com.hippocampus.ai.infrastructure.provider.ollama;
 
 import static com.hippocampus.ai.infrastructure.provider.ProviderTestFixtures.liveExplanationRequest;
+import static com.hippocampus.ai.infrastructure.provider.ProviderTestFixtures.validateLiveExplanation;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Assumptions;
@@ -8,13 +9,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.client.RestClient;
 
-import com.hippocampus.ai.application.validation.AiOutputValidator;
 import com.hippocampus.ai.application.provider.ProviderExecutionResult;
 import com.hippocampus.ai.application.routing.ProviderId;
-import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.domain.ExplanationResult;
 import com.hippocampus.ai.domain.ValidatedAiResult;
-import com.hippocampus.ai.infrastructure.validation.JacksonAiStructuredOutputDecoder;
 
 class OllamaCloudProviderLiveSmokeTests {
 
@@ -32,8 +30,7 @@ class OllamaCloudProviderLiveSmokeTests {
                 .build();
         ProviderExecutionResult result = new OllamaCloudProviderAdapter(client)
                 .execute(liveExplanationRequest(ProviderId.OLLAMA_CLOUD, model));
-        ValidatedAiResult<?> validated = new AiOutputValidator(new JacksonAiStructuredOutputDecoder())
-                .validate(result, AiOutputContract.EXPLANATION);
+        ValidatedAiResult<?> validated = validateLiveExplanation(result);
 
         assertThat(result.providerId()).isEqualTo(ProviderId.OLLAMA_CLOUD);
         assertThat(result.modelId()).isNotBlank();

@@ -1305,6 +1305,10 @@ Phase outcome is separate from task status. Record it under the phase as **Phase
 
 **Implementation items:** 14
 
+**Phase Gate State:** PASS
+
+**Phase Gate Evidence:** P5-01 through P5-14 are Done, including the explicit P5-14 gate. PR #187 (`feat(ai): complete Phase 5 AI infrastructure`) merged on 2026-09-23 as `4e4d7034029963f610605f9b806d7de801ee6acb`; its 73 focused AI/diagnostics/grounding tests, 11 architecture tests, `Phase5AiInfrastructureGateIntegrationTests`, broad backend validation, external implementation review, independent security review, and GitHub Actions quality run #521 (ID `35820969573`, including `phase5-gate`) passed. PR #189 (`fix(ai): enforce provider structured output schemas`) merged on 2026-09-23 as `3309c763899640b0328e7678145d1ca333e1e2a8`, with final quality workflow ID `35843773456` succeeding. Gemini live smoke ID `35839604263` and Ollama Cloud live smoke ID `35847284543` using the approved `gpt-oss:20b-cloud` model passed strict validated `EXPLANATION` structured output; failed earlier `gemma4:31b` attempts remain failures and are not counted as evidence. Provider output/schema and grounding boundaries remain strict and fail closed, authenticated source authorization remains intact, repair and fallback are bounded, and persisted diagnostics remain privacy-safe. No undocumented architectural deviation or Phase 6 behavior was introduced. Document 26 Phase 5 Exit Criteria are satisfied: a compatible AI task executes through Gemini or Ollama without domain code depending on the concrete provider. Milestone M2 — Grounded Intelligence is achieved.
+
 
 ## P5-01 — Define canonical AiTask contracts
 
@@ -1461,7 +1465,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Keep provider output untrusted.
 - **Build:** Parse structured output, validate enums/business constraints and required fields before returning ValidatedAiResult.
 - **How it works:** Invalid output cannot mutate learning state.
@@ -1470,14 +1474,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Only valid typed results cross AI boundary.
 - **Definition of Done:** Validation suite passes.
 - **Authority:** Documents 10,12,22
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** PR #187 implemented strict validation for every canonical output contract. Malformed JSON and missing, extra, wrong-type, or domain-invalid fields are rejected, and provider output remains untrusted until it crosses the authoritative `AiOutputValidator` application boundary. Focused validation, broad backend validation, architecture validation, external implementation review (`APPROVED`), independent security review (`SECURITY PASS`), and GitHub Actions quality run #521 (ID `35820969573`) passed before PR #187 merged on 2026-09-23 as `4e4d7034029963f610605f9b806d7de801ee6acb`. PR #189 then corrected provider-side structured-output enforcement without weakening application validation and merged on 2026-09-23 as `3309c763899640b0328e7678145d1ca333e1e2a8`; final quality workflow ID `35843773456` succeeded. Strict validated `EXPLANATION` output also passed Gemini live smoke ID `35839604263` and Ollama Cloud live smoke ID `35847284543` using `gpt-oss:20b-cloud`. No Markdown stripping, arbitrary JSON extraction, malformed-output acceptance, or unresolved blocker remains.
 - **Notes / blockers:** _None_
 
 ## P5-09 — Implement source-reference validation
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Prevent fabricated citations.
 - **Build:** Validate provider-returned source IDs are subset of supplied EvidencePackage and still authorized/active.
 - **How it works:** Forgery causes AI_GROUNDING_FAILURE or repair path.
@@ -1486,14 +1490,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** AI cannot invent accepted citations.
 - **Definition of Done:** Security tests pass.
 - **Authority:** Documents 22,25
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** PR #187 restricted provider-returned references to the exact sources in the immutable `PromptContext` and required current authenticated authorization plus active-source validation before acceptance. Fabricated, cross-user, inactive, and stale references fail closed; authenticated identity is captured before asynchronous execution so later validation cannot lose or substitute the caller context. Focused grounding/security tests, broad backend and architecture validation, external implementation review (`APPROVED`), independent security review (`SECURITY PASS`), and GitHub Actions quality run #521 (ID `35820969573`) passed. PR #187 merged on 2026-09-23 as `4e4d7034029963f610605f9b806d7de801ee6acb`; no unresolved blocker remains.
 - **Notes / blockers:** _None_
 
 ## P5-10 — Implement bounded repair/retry
 
 - **Workstream:** AI
 - **Priority:** Should
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Recover format errors without loops.
 - **Build:** Allow one/few configured structured-output repair attempts using same task/evidence/policy.
 - **How it works:** Do not retry safety/authorization failures as availability errors.
@@ -1502,14 +1506,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Malformed provider output either safely repairs or fails transparently.
 - **Definition of Done:** Bounded behavior verified.
 - **Authority:** Documents 12,19
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** PR #187 implemented at most one structured-output repair attempt, triggered only by schema validation failure and preserving the same provider, model, task, immutable evidence, grounding rules, and canonical output contract. Repair cannot recurse, and grounding, authorization, cancellation, provider, or application failures cannot enter or abuse the repair path. Focused repair/failure tests, broad backend and architecture validation, external implementation review (`APPROVED`), independent security review (`SECURITY PASS`), and GitHub Actions quality run #521 (ID `35820969573`) passed. PR #187 merged on 2026-09-23 as `4e4d7034029963f610605f9b806d7de801ee6acb`; no unresolved blocker remains.
 - **Notes / blockers:** _None_
 
 ## P5-11 — Implement fallback orchestration
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Preserve contract across providers.
 - **Build:** On eligible provider availability failure, route same canonical task/evidence/grounding/schema to approved fallback.
 - **How it works:** Fallback cannot broaden context or weaken policy.
@@ -1518,14 +1522,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Fallback works invisibly when contract-compatible.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 10,22
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** PR #187 implemented at most one approved cross-provider fallback for normalized provider-unavailable, rate-limit, quota, or timeout failures. Fallback preserves the immutable canonical task, evidence, grounding, and output contract; schema, grounding, authorization, and other ineligible failures cannot trigger it. Fallback telemetry is bounded and records the actual execution path. Focused fallback/eligibility/context-preservation tests, broad backend and architecture validation, external implementation review (`APPROVED`), independent security review (`SECURITY PASS`), and GitHub Actions quality run #521 (ID `35820969573`) passed. PR #187 merged on 2026-09-23 as `4e4d7034029963f610605f9b806d7de801ee6acb`; no unresolved blocker remains.
 - **Notes / blockers:** _None_
 
 ## P5-12 — Persist AI request/usage diagnostics
 
 - **Workstream:** Observability
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Measure quality/cost without content leakage.
 - **Build:** Write ai_request_records/provider_usage_records with provider/model/task/prompt/tokens/latency/status/fallback.
 - **How it works:** Do not persist full prompts by default.
@@ -1534,14 +1538,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Operations can compare providers safely.
 - **Definition of Done:** Telemetry verified.
 - **Authority:** Documents 18,24
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** PR #187 added Flyway V19 and PostgreSQL-backed `ai_request_records` and `provider_usage_records`. Records contain privacy-safe operational metadata only: no full prompt, source text, student response, or raw model response is persisted. Physical provider invocation counts are recorded accurately, with zero provider-usage rows when no physical invocation occurs. Persistence uses short atomic database transactions outside provider/network execution. PostgreSQL integration and privacy tests, broad backend and architecture validation, external implementation review (`APPROVED`), independent security review (`SECURITY PASS`), and GitHub Actions quality run #521 (ID `35820969573`) passed. PR #187 merged on 2026-09-23 as `4e4d7034029963f610605f9b806d7de801ee6acb`; no unresolved blocker remains.
 - **Notes / blockers:** _None_
 
 ## P5-13 — Create provider contract and prompt regression suite
 
 - **Workstream:** Testing
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Make AI integration stable.
 - **Build:** Shared tests run against fake provider adapters; small scheduled live smoke set; prompt snapshots/golden schema cases.
 - **How it works:** PR CI avoids unnecessary quota.
@@ -1550,14 +1554,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Provider changes do not silently break contracts.
 - **Definition of Done:** Suites documented and green.
 - **Authority:** Documents 25
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** PR #187 added shared Gemini/Ollama provider contract tests and a deterministic prompt regression suite covering all approved task contracts plus structured repair. Live smoke validation is separated from ordinary PR quota use. Gemini live smoke ID `35839604263` passed strict validated `EXPLANATION` output. Ollama Cloud live smoke ID `35847284543` passed the same contract with the final approved model `gpt-oss:20b-cloud`; earlier `gemma4:31b` failures were correctly rejected for Markdown-fenced, non-schema-compliant output and are not recorded as passes. The 73 focused AI/diagnostics/grounding tests, 11 architecture tests, external implementation review (`APPROVED`), independent security review (`SECURITY PASS`), and GitHub Actions quality run #521 (ID `35820969573`) passed. PR #187 merged on 2026-09-23 as `4e4d7034029963f610605f9b806d7de801ee6acb`; PR #189's provider structured-output correction merged as `3309c763899640b0328e7678145d1ca333e1e2a8`, and final quality workflow ID `35843773456` succeeded. No unresolved blocker remains.
 - **Notes / blockers:** _None_
 
 ## P5-14 — Phase 5 AI infrastructure gate
 
 - **Workstream:** Gate
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Prove provider abstraction works independently of Learning Engine.
 - **Build:** Execute same supported task via Gemini and Ollama; simulate primary failure and verify fallback/validation/telemetry.
 - **How it works:** RAG evidence remains identical.
@@ -1566,7 +1570,7 @@ responsibilities remain outside P5-06.
 - **Expected result:** Provider can change without domain rewrite.
 - **Definition of Done:** Gate evidence recorded.
 - **Authority:** Documents 26
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** `Phase5AiInfrastructureGateIntegrationTests` proves the canonical provider-independent execution path from prompt registry/context through router, request manager, provider, schema/source validation, bounded repair/fallback, and PostgreSQL diagnostics. The deterministic gate verifies that fallback preserves the same immutable evidence/context, fabricated references fail closed, and no database transaction spans provider calls. The gate test, 73 focused AI/diagnostics/grounding tests, 11 architecture tests, and broad backend validation passed; GitHub Actions quality run #521 (ID `35820969573`) passed `backend-quality`, `frontend-quality`, `auth-e2e`, `security`, `phase1-gate`, `phase2-gate`, `phase3-gate`, `phase4-gate`, and `phase5-gate`. Gemini live smoke ID `35839604263` and Ollama Cloud live smoke ID `35847284543` with `gpt-oss:20b-cloud` passed. External implementation review returned `APPROVED`, independent security review returned `SECURITY PASS`, PR #187 merged on 2026-09-23 as `4e4d7034029963f610605f9b806d7de801ee6acb`, and corrective PR #189 merged as `3309c763899640b0328e7678145d1ca333e1e2a8` with final quality workflow ID `35843773456` succeeding. The Definition of Done and Document 26 Phase 5 Exit Criteria are satisfied, with no unresolved blocker, undocumented architectural deviation, or Phase 6 behavior introduced.
 - **Notes / blockers:** _None_
 
 # Phase 6 — AI Learning Engine
