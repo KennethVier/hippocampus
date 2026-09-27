@@ -13,4 +13,14 @@ public record LearningEvidenceSnapshot(Map<EvidenceDimension, EvidenceStrength> 
         });
         dimensions = Map.copyOf(dimensions);
     }
+
+    public EvidenceStrength strengthOf(EvidenceDimension dimension) {
+        Objects.requireNonNull(dimension, "dimension must not be null");
+        return dimensions.getOrDefault(dimension, EvidenceStrength.INSUFFICIENT);
+    }
+
+    public boolean isAtLeast(EvidenceDimension dimension, EvidenceStrength minimum) {
+        Objects.requireNonNull(minimum, "minimum must not be null");
+        return strengthOf(dimension).compareTo(minimum) >= 0;
+    }
 }

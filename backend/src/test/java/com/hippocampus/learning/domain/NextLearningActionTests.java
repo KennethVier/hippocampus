@@ -19,13 +19,25 @@ class NextLearningActionTests {
     @Test
     void definesTheExactActionVocabulary() {
         assertThat(EnumSet.allOf(LearningActionType.class)).containsExactly(
+                LearningActionType.START,
+                LearningActionType.RESUME,
                 LearningActionType.UNDERSTAND,
                 LearningActionType.RETRIEVE,
                 LearningActionType.CONNECT,
                 LearningActionType.APPLY,
+                LearningActionType.RETRY,
+                LearningActionType.HINT,
+                LearningActionType.PREREQUISITE_SUPPORT,
+                LearningActionType.REDUCE_DIFFICULTY,
                 LearningActionType.FEEDBACK,
                 LearningActionType.REFLECT,
-                LearningActionType.COMPLETE);
+                LearningActionType.REUSE_VALIDATED_CONTENT,
+                LearningActionType.SOURCE_ONLY,
+                LearningActionType.COMMUNICATE_LIMITATION,
+                LearningActionType.RETRY_DEPENDENCY,
+                LearningActionType.PAUSE,
+                LearningActionType.COMPLETE,
+                LearningActionType.STOP);
     }
 
     @Test
@@ -75,6 +87,7 @@ class NextLearningActionTests {
         assertThat(json.get("difficulty").asText()).isEqualTo("INTERMEDIATE");
         assertThat(json.get("rationaleCode").asText()).isEqualTo("CONNECTION_EVIDENCE_NEEDED");
         assertThat(json.get("aiTaskRequired").asBoolean()).isTrue();
+        assertThat(json.get("constraints").get("sourceRequirement").asText()).isEqualTo("NONE");
     }
 
     @Test
@@ -139,7 +152,8 @@ class NextLearningActionTests {
                 "conceptKey",
                 "difficulty",
                 "rationaleCode",
-                "aiTaskRequired");
+                "aiTaskRequired",
+                "constraints");
         assertThat(componentNames).noneMatch(name -> {
             String lowerName = name.toLowerCase();
             return lowerName.contains("prompt")

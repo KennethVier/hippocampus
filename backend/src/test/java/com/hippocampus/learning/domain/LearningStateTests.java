@@ -50,6 +50,19 @@ class LearningStateTests {
                 LearningDifficulty.FOUNDATIONAL,
                 LearningDifficulty.INTERMEDIATE,
                 LearningDifficulty.APPLIED);
+        assertThat(EnumSet.allOf(AttemptOutcome.class)).containsExactly(
+                AttemptOutcome.CORRECT,
+                AttemptOutcome.PARTIAL,
+                AttemptOutcome.INCORRECT);
+        assertThat(EnumSet.allOf(LearningActivityIntent.class)).containsExactly(
+                LearningActivityIntent.STANDARD,
+                LearningActivityIntent.CORRECTIVE_RETRY,
+                LearningActivityIntent.REASSESSMENT,
+                LearningActivityIntent.SPACED_REVIEW);
+        assertThat(EnumSet.allOf(SourceRequirement.class)).containsExactly(
+                SourceRequirement.NONE,
+                SourceRequirement.PREFERRED,
+                SourceRequirement.REQUIRED);
     }
 
     @Test
@@ -86,6 +99,8 @@ class LearningStateTests {
         assertThat(state.sourceCapability()).isEqualTo(sourceCapability);
         assertThat(state.timeContext()).isEqualTo(timeContext);
         assertThat(state.recentActivityHistory()).containsExactly(activity);
+        assertThat(state.connectionRelevant()).isFalse();
+        assertThat(state.actionConstraints()).isEqualTo(LearningActionConstraints.unconstrained());
     }
 
     @Test
@@ -184,6 +199,10 @@ class LearningStateTests {
                         "concept", "activity", null, null, UUID.randomUUID()))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("difficulty");
+        assertThatThrownBy(() -> new LearningActionConstraints(
+                        null, false, false, null, null, LearningActivityIntent.STANDARD))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("sourceRequirement");
     }
 
     @Test
@@ -236,7 +255,13 @@ class LearningStateTests {
                 SourceReadiness.class,
                 LearningTimeContext.class,
                 RecentLearningActivity.class,
-                LearningDifficulty.class);
+                LearningDifficulty.class,
+                AttemptOutcome.class,
+                LearningActivityIntent.class,
+                SourceRequirement.class,
+                LearningActionConstraints.class,
+                LearningDependencyFailure.class,
+                LearningPolicyConfiguration.class);
 
         assertThat(modelTypes).allSatisfy(type -> {
             assertThat(type.getPackageName()).isEqualTo("com.hippocampus.learning.domain");
