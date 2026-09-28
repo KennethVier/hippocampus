@@ -56,6 +56,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("17");
         assertSuccessfulFlywayVersion("18");
         assertSuccessfulFlywayVersion("19");
+        assertSuccessfulFlywayVersion("20");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -99,6 +100,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("17");
         assertSuccessfulFlywayVersion("18");
         assertSuccessfulFlywayVersion("19");
+        assertSuccessfulFlywayVersion("20");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -378,12 +380,34 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 actual.add(result.getString("table_name"));
             }
             assertThat(actual).containsExactly(
-                    "ai_request_records", "chunk_embeddings", "chunk_text_block_links", "chunk_visual_links", "chunks", "document_nodes",
+                    "activity_source_references",
+                    "ai_request_records",
+                    "chunk_embeddings",
+                    "chunk_text_block_links",
+                    "chunk_visual_links",
+                    "chunks",
+                    "document_nodes",
+                    "generated_artifacts",
                     "index_generations",
-                    "material_topic_links", "material_versions", "materials", "processing_jobs",
-                    "provider_usage_records", "source_references", "spring_session", "spring_session_attributes",
-                    "subjects", "subtopics", "text_blocks", "topics",
-                    "user_password_credentials", "users", "visual_assets");
+                    "learning_activities",
+                    "learning_objectives",
+                    "material_topic_links",
+                    "material_versions",
+                    "materials",
+                    "mission_materials",
+                    "processing_jobs",
+                    "provider_usage_records",
+                    "source_references",
+                    "spring_session",
+                    "spring_session_attributes",
+                    "study_missions",
+                    "subjects",
+                    "subtopics",
+                    "text_blocks",
+                    "topics",
+                    "user_password_credentials",
+                    "users",
+                    "visual_assets");
         }
     }
 
