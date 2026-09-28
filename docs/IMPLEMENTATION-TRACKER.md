@@ -1581,7 +1581,7 @@ responsibilities remain outside P5-06.
 
 **Phase Gate State:** Not Evaluated
 
-**Phase Gate Evidence:** P6-01 through P6-11 are Done. P6-03 through P6-11 were initially implemented in PR #192 at head `c83fff36f2edf0ec689ce6633bd03d7aea1c5fc0` (merge `ffa7015f4789ef97f5e2d847a9a4b9a5140ca65a`), reverted by PR #193, and restored by PR #194 at head `d638c638847fc64884dd92cd89fd0bd2dffcb716` (merge `4709bceddd7aaff19dbdc8c0acd13a7603a27726`); quality #547 (run `36335971320`) succeeded. PR #195 corrected the restored Learning Engine policy composition at head `8148340a520e3c3e150a262ec90417d87cffe39a` and merged on 2026-09-28 as `d31f18b9583836e6c475fce03d6f0675b6d5c9e3`; quality #549 (run `36369402886`) succeeded. PR #196 reconciled tracker/workflow documentation and merged as `ce4433182cf238cd5ada334a609836ab2643fa0c`; quality #551 (run `36373567934`) succeeded. P6-03 through P6-11 received final aggregate external implementation review on 2026-09-28: APPROVED. P6-03 through P6-11 received independent security review on 2026-09-28: SECURITY PASS. P6-12 through P6-14 remain `Not Started`; P6-14 is the Phase 6 gate.
+**Phase Gate Evidence:** P6-01 through P6-13 are Done. The P6-12 deterministic 629-scenario Learning Engine suite and the P6-13 provider-independence verification are merged. P6-14 is Ready for Review; its candidate adds a dedicated deterministic Phase 6 gate covering representative action-and-rationale decisions and a CI `phase6-gate` job that depends on all earlier required quality and phase-gate inputs. Final Phase 6 `PASS` remains pending P6-14 external implementation review, independent security review, GitHub Actions success, merge, and completion evidence.
 
 ## P6-01 — Define LearningState model
 
@@ -1789,7 +1789,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** Architecture
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Prevent AI authority drift.
 - **Build:** ArchUnit rules block learning.domain dependencies on ai.infrastructure, Spring MVC/JPA/provider SDKs.
 - **How it works:** Engine may depend only on domain/ports/value types.
@@ -1805,14 +1805,18 @@ responsibilities remain outside P5-06.
   the targeted architecture test correctly failed with three ArchUnit violations identifying that probe. The probe
   was removed completely, and the same targeted architecture test passed after removal. The existing architecture
   rule remains CI-active through `backend-quality`. No production/runtime architecture change or new dependency was
-  required, and no P6-14 work was performed.
+  required, and no P6-14 work was performed. PR #199 merged as
+  `ab1261904354b465ec721817b134ec0076c5badc`. Quality #558 (workflow run `36392160863`) completed with
+  `backend-quality`, `frontend-quality`, `security`, `auth-e2e`, and `phase1-gate` through `phase5-gate` all
+  successful. External implementation review: APPROVED. Independent scoped security review: SECURITY PASS. Blocker:
+  None.
 - **Notes / blockers:** _None_
 
 ## P6-14 — Phase 6 Learning Engine gate
 
 - **Workstream:** Gate
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Prove Hippocampus can decide next action without LLM.
 - **Build:** Feed representative student states and review expected actions/rationales.
 - **How it works:** No provider calls occur.
@@ -1821,7 +1825,16 @@ responsibilities remain outside P5-06.
 - **Expected result:** Pedagogical sequencing is application-owned.
 - **Definition of Done:** Gate evidence recorded.
 - **Authority:** Documents 26
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Added `Phase6LearningEngineGateTests`, a curated deterministic suite of representative
+  `LearningState` inputs that directly constructs `LearningEngine` and verifies each expected `LearningActionType`
+  and rationale code. The gate covers lifecycle precedence, understand/retrieve/connection/application progression,
+  the corrected P6-05/P6-06 APPLY/FEEDBACK composition path, strict-source limitation, time-bounded completion,
+  corrective retry, and reflection. It runs without Spring, providers, HTTP, persistence, a database, or provider
+  secrets/calls. The P6-12 `LearningEngineScenarioTests` matrix remains unchanged; focused validation passed the 10
+  curated P6-14 cases and all 629 P6-12 scenarios. Added the `phase6-gate` workflow job, which requires successful
+  `backend-quality`, `frontend-quality`, `auth-e2e`, `security`, and `phase1-gate` through `phase5-gate`, then runs
+  the curated gate plus the 629-scenario regression suite. No production-domain change, new dependency, provider
+  execution, or architecture deviation was introduced. Blockers: None.
 - **Notes / blockers:** _None_
 
 # Phase 7 — Study Missions
