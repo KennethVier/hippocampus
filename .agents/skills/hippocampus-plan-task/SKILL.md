@@ -1,17 +1,17 @@
 ---
 name: hippocampus-plan-task
-description: Optional in-repository planner for Hippocampus tracker work. Normal planning is Human + Gemini. Produce a compact executor-ready implementation packet with minimum authority, exact scope, permitted changed-test execution, user/CI validation commands, publication restrictions, and stop conditions.
+description: Optional in-repository planner for Hippocampus tracker work. Normal planning is Human + ChatGPT. Produce a compact executor-ready implementation packet with minimum authority, exact scope, permitted changed-test execution, user/CI validation commands, publication restrictions, and stop conditions.
 ---
 
 # Plan a Hippocampus Tracker Task
 
 ## Role
 
-Normal Hippocampus planning happens with the human + Gemini planning role. Use this skill when planning is intentionally performed inside a coding environment or when an approved packet must be reconstructed from repository authority.
+Normal Hippocampus planning happens with the human + ChatGPT planning role. Use this skill when planning is intentionally performed inside a coding environment or when an approved packet must be reconstructed from repository authority.
 
 PLAN ONLY. Do not modify implementation files, run validation commands, install dependencies, implement, commit, push, create a PR, or change tracker status while planning unless the user explicitly authorizes a documentation-only planning change.
 
-The output is executor-neutral. The normal executor is Antigravity locally; Jules may be selected for cloud execution.
+The output is executor-neutral. Codex is the default local executor; Antigravity is the approved alternate local executor.
 
 ## Workflow
 
@@ -71,6 +71,18 @@ PUBLICATION
 
 Do not require the executor to rediscover or restate this plan.
 
+## Codex Handoff
+
+Codex follows root `AGENTS.md`; keep the implementation prompt short:
+
+```text
+Implement the approved Hippocampus packet below.
+Follow .agents/skills/hippocampus-implement-task/SKILL.md.
+Do not re-plan unless a concrete contradiction, blocker, or significant unresolved decision appears.
+Do not self-approve or mark the task Done.
+<packet>
+```
+
 ## Antigravity Handoff
 
 Antigravity natively discovers `.agents/skills/`. The implementation prompt should be short:
@@ -82,23 +94,7 @@ Do not re-plan unless a concrete contradiction or blocker appears.
 <packet>
 ```
 
-Do not make Antigravity repeat repository orientation if the current session already has it.
-
-## Jules Handoff
-
-Jules reads root `AGENTS.md`, but task-critical skill instructions should be named explicitly in the task prompt:
-
-```text
-Before executing, follow:
-- AGENTS.md
-- .agents/skills/hippocampus-implement-task/SKILL.md
-- <additional task-specific skill only if needed>
-
-The approved packet below is controlling. Your generated Jules plan may restate it for execution but must not expand or redesign it.
-<packet>
-```
-
-If the Jules-generated plan materially deviates from the approved packet, the human must not approve it; return to planning for resolution.
+Do not make Antigravity repeat repository orientation if the current session already has it. For Codex or Antigravity, any internal/generated plan may restate the approved packet for execution but cannot expand or redesign it.
 
 ## Planning Rules
 

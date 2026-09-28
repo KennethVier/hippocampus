@@ -10,21 +10,21 @@ The workflow is role-based so model/tool changes do not change project authority
 
 Normal work uses three logical roles:
 
-1. **Plan — Human + Gemini**
-2. **Implement — Antigravity local OR Jules cloud**
-3. **Review — independent reviewer**
+1. **Plan — Human + ChatGPT**
+2. **Implement — Codex local OR Antigravity local**
+3. **Review — ChatGPT external independent reviewer**
 
 Default choices:
 
-- Gemini is the planning/reasoning surface used with the human to prepare an implementation-ready tracker packet.
-- Google Antigravity is the default local implementation executor.
-- Google Jules is an optional cloud executor when explicitly selected for a task. It replaces Antigravity for that execution; it is not an extra mandatory step.
-- The reviewer must be independent of the implementation execution context.
+- ChatGPT is the planning/reasoning surface used with the human to prepare an implementation-ready tracker packet.
+- Codex is the default local implementation executor.
+- Google Antigravity is an approved alternate local executor. It replaces Codex for that execution; it is not an extra mandatory step.
+- ChatGPT performs the external general review and must remain independent of the implementation execution context.
 - The required security pass is independent and happens after general review is clean.
 
 There is no separate validation agent in the normal loop. Broad validation is run by the user or GitHub Actions and supplied to review as evidence.
 
-## 1. Plan — Human + Gemini
+## 1. Plan — Human + ChatGPT
 
 Resolve the hard reasoning once:
 
@@ -72,11 +72,27 @@ Use one of:
 
 Once an implementation packet is approved, that packet controls execution unless a concrete contradiction or blocker is discovered.
 
-## 2. Implement — Antigravity or Jules
+## 2. Implement — Codex or Antigravity
 
-### 2.1 Antigravity — default local executor
+### 2.1 Codex — default local executor
 
-Antigravity receives the approved packet and uses `hippocampus-implement-task`.
+Codex receives the approved packet, follows root `AGENTS.md`, and uses `hippocampus-implement-task`.
+
+Default behavior:
+
+- implement immediately from the approved packet;
+- do not repeat/re-derive planning merely because a coding product offers a planning mode;
+- read only affected code/authority needed by the packet;
+- make the smallest complete change;
+- use one agent;
+- load detailed engineering guidance only for a concrete issue;
+- do not perform broad repository/Git/agent/skill reconnaissance;
+- do not run broad commands;
+- remain quiet while working unless a blocker, contradiction, significant decision, or eligible changed-test failure must be reported.
+
+### 2.2 Antigravity — approved alternate local executor
+
+Antigravity receives the same approved packet and uses `hippocampus-implement-task`.
 
 Antigravity natively discovers repository skills from `.agents/skills/` and agent profiles from `.agents/agents/`. It uses the `hippocampus-implementer` custom agent profile (`.agents/agents/hippocampus-implementer/agent.md`).
 
@@ -97,33 +113,11 @@ Default behavior:
 - do not run broad commands;
 - remain quiet while working unless a blocker, contradiction, significant decision, or eligible changed-test failure must be reported.
 
-### 2.2 Jules — optional cloud executor
-
-Jules may be selected when remote execution is useful.
-
-Jules reads root `AGENTS.md`, but the task prompt should also explicitly direct it to:
-
-```text
-.agents/skills/hippocampus-implement-task/SKILL.md
-```
-
-and any one additional detailed skill that is materially required by the task.
-
-Jules normally creates a product-level plan before editing. That Jules plan is not a new architecture/planning authority. It must be treated as an execution restatement of the already-approved Hippocampus implementation packet.
-
-Before approving a Jules plan, confirm:
-
-- it implements only the owning tracker task;
-- it preserves all `DO NOT` exclusions;
-- it does not add dependencies/infrastructure/later-task behavior;
-- it respects command/publication restrictions;
-- it does not contradict the Source of Truth or accepted ADRs.
-
-If Jules proposes a material deviation, do not approve it. Return to the Plan role for resolution.
+For either Codex or Antigravity, an internal/generated plan may restate the packet for execution but cannot override or redesign the externally approved Hippocampus packet.
 
 ### 2.3 One executor per normal task
 
-Do not have Antigravity and Jules independently implement the same normal tracker task. Use a second executor only for a concrete recovery, comparison, or isolated parallelizable reason explicitly approved by the human.
+Do not have Codex and Antigravity independently implement the same normal tracker task. Use a second executor only for a concrete recovery, comparison, or isolated parallelizable reason explicitly approved by the human.
 
 ## 3. Implementation Command Rule
 
@@ -185,11 +179,11 @@ GitHub Actions <job/run>: PASS
 
 When a command fails, provide the first causal failure/relevant log section to the executor or reviewer unless more context is required.
 
-## 5. Review — Independent Reviewer
+## 5. Review — ChatGPT External Independent Reviewer
 
 The reviewer must not simply trust the implementation report. Review the actual changed files/diff plus supplied evidence.
 
-When using Antigravity for review, use the `hippocampus-reviewer` custom agent profile (`.agents/agents/hippocampus-reviewer/agent.md`). The reviewer profile is explicitly constrained to read-only inspection and review capabilities (`view_file`, `grep_search`, `list_dir`, `search_web`, `read_url_content`, MCP read tools, `ask_question`). Write and file modification tools (`write_to_file`, `replace_file_content`, `multi_replace_file_content`) are disabled, and terminal command execution is disabled (`commandExecutionPolicy: off`). Reviewers inspect code and evidence without write/edit or unrestricted command capabilities.
+ChatGPT is the normal external reviewer. When Antigravity is explicitly selected as a fallback reviewer, use the `hippocampus-reviewer` custom agent profile (`.agents/agents/hippocampus-reviewer/agent.md`). The fallback profile is explicitly constrained to read-only inspection and review capabilities (`view_file`, `grep_search`, `list_dir`, `search_web`, `read_url_content`, MCP read tools, `ask_question`). Write and file modification tools (`write_to_file`, `replace_file_content`, `multi_replace_file_content`) are disabled, and terminal command execution is disabled (`commandExecutionPolicy: off`). Reviewers inspect code and evidence without write/edit or unrestricted command capabilities.
 
 The reviewer inspects:
 
@@ -280,7 +274,7 @@ Expand context only for a concrete dependency, contradiction, failure, architect
 
 ## 10. Runtime AI Is Separate From Developer Tooling
 
-Gemini, Antigravity, and Jules are development workflow tools. They do not change Hippocampus runtime AI authority.
+ChatGPT, Codex, and Antigravity are development workflow tools. They do not change Hippocampus runtime AI authority.
 
 Runtime AI continues to follow Documents 10–15 and the owning tracker tasks:
 

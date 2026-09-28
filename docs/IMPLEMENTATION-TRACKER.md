@@ -5,7 +5,7 @@ Version: 1.0.0
 Status: Active
 Owner: Project Hippocampus Team
 Created: 2026-08-24
-Last Updated: 2026-09-01
+Last Updated: 2026-09-28
 Purpose: Operational tracker for implementing the frozen Hippocampus v1 Source of Truth phase by phase with concrete build requirements, tests, expected behavior, definition of done, and evidence.
 Authority: Document 26 defines implementation order; Documents 00–25 define product/technical requirements; Document 27 governs deviations.
 ---
@@ -1579,12 +1579,15 @@ responsibilities remain outside P5-06.
 
 **Implementation items:** 14
 
+**Phase Gate State:** Not Evaluated
+
+**Phase Gate Evidence:** P6-01 and P6-02 are complete. P6-03 through P6-11 were initially implemented in PR #192 at head `c83fff36f2edf0ec689ce6633bd03d7aea1c5fc0` (merge `ffa7015f4789ef97f5e2d847a9a4b9a5140ca65a`), reverted by PR #193, and restored by PR #194 at head `d638c638847fc64884dd92cd89fd0bd2dffcb716` (merge `4709bceddd7aaff19dbdc8c0acd13a7603a27726`); quality #547 (run `36335971320`) succeeded. PR #195 corrected the restored Learning Engine policy composition at head `8148340a520e3c3e150a262ec90417d87cffe39a` and merged on 2026-09-28 as `d31f18b9583836e6c475fce03d6f0675b6d5c9e3`; quality #549 (run `36369402886`) succeeded across backend, frontend, security, auth E2E, and Phase 1–5 gates, while reported focused Learning Engine/domain tests, existing backend/architecture validation, and `git diff --check` passed. The scoped correction received external implementation approval and scoped security review, but P6-03 through P6-11 remain `Ready for Review` because complete independent general and security review of the final restored aggregate is not yet recorded. P6-12 through P6-14 remain `Not Started`; P6-14 is the Phase 6 gate.
 
 ## P6-01 — Define LearningState model
 
 - **Workstream:** Domain
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Represent only evidence needed for pedagogical decisions.
 - **Build:** Create immutable domain view of mission state, evidence dimensions, source capability, time context and history.
 - **How it works:** No provider DTOs or UI state inside.
@@ -1593,14 +1596,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Learning Engine receives deterministic input.
 - **Definition of Done:** Model stable and provider-free.
 - **Authority:** Documents 11,19
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** PR #191 implemented the immutable, framework/provider-independent `LearningState` covering mission lifecycle, learning stage/evidence, source readiness, study-time context, recent activity, and objective/concept identity. Final reviewed head `b48ecd26253c0ec7ff1e67322ee0bfb34fb29bb9` merged on 2026-09-23 as `7600e320c6220860cbb73df0dba752f8eb917b72`; GitHub Actions quality #534 (run `35853378252`) succeeded, external implementation review returned `APPROVED`, and independent security review returned `SECURITY PASS`.
 - **Notes / blockers:** _None_
 
 ## P6-02 — Define NextLearningAction model
 
 - **Workstream:** Domain
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Make engine outputs explicit.
 - **Build:** Create typed actions: UNDERSTAND, RETRIEVE, CONNECT, APPLY, FEEDBACK/REFLECT/COMPLETE as approved with objective/difficulty/rationale/AI requirement.
 - **How it works:** Application layer interprets action.
@@ -1609,14 +1612,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** No raw prompt text returned by engine.
 - **Definition of Done:** Action model tested.
 - **Authority:** Documents 11,19
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** PR #191 implemented immutable typed `NextLearningAction` values for UNDERSTAND, RETRIEVE, CONNECT, APPLY, FEEDBACK, REFLECT, and COMPLETE with objective, concept target, difficulty, rationale code, and AI requirement, without raw prompt/provider/UI state. Final reviewed head `b48ecd26253c0ec7ff1e67322ee0bfb34fb29bb9` merged on 2026-09-23 as `7600e320c6220860cbb73df0dba752f8eb917b72`; GitHub Actions quality #534 (run `35853378252`) succeeded, external implementation review returned `APPROVED`, and independent security review returned `SECURITY PASS`.
 - **Notes / blockers:** _None_
 
 ## P6-03 — Implement mission state machine policy
 
 - **Workstream:** Domain
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Protect valid progression lifecycle.
 - **Build:** Implement planned/active/paused/completed/stopped transitions and validation.
 - **How it works:** Completion does not imply mastery.
@@ -1625,14 +1628,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Illegal transitions rejected deterministically.
 - **Definition of Done:** State suite passes.
 - **Authority:** Documents 11,18
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Mission lifecycle transition policy and deterministic illegal-transition rejection were implemented in PR #192 (`c83fff36f2edf0ec689ce6633bd03d7aea1c5fc0`), reverted by PR #193, restored by PR #194 (`d638c638847fc64884dd92cd89fd0bd2dffcb716`, merge `4709bceddd7aaff19dbdc8c0acd13a7603a27726`), and retained after the composition correction in PR #195 (`8148340a520e3c3e150a262ec90417d87cffe39a`, merge `d31f18b9583836e6c475fce03d6f0675b6d5c9e3`). Quality #547 (run `36335971320`) and #549 (run `36369402886`) succeeded.
+- **Notes / blockers:** Implementation and CI evidence are present; complete independent general and security review of the final restored P6-03–P6-11 aggregate remains outstanding.
 
 ## P6-04 — Implement understand→retrieve policy
 
 - **Workstream:** Domain
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Move from explanation to active recall appropriately.
 - **Build:** Define conditions for explanation then retrieval, respecting time/source capability and existing evidence.
 - **How it works:** Engine chooses action, AI only generates content later.
@@ -1641,14 +1644,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Weak/insufficient knowledge gets appropriate understanding/retrieval.
 - **Definition of Done:** Cases pass.
 - **Authority:** Documents 03,11
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Deterministic understand→retrieve selection using evidence, time, and source capability was implemented in PR #192 (`c83fff36f2edf0ec689ce6633bd03d7aea1c5fc0`), reverted by PR #193, restored by PR #194 (`d638c638847fc64884dd92cd89fd0bd2dffcb716`, merge `4709bceddd7aaff19dbdc8c0acd13a7603a27726`), and retained after PR #195's final composition correction (`8148340a520e3c3e150a262ec90417d87cffe39a`, merge `d31f18b9583836e6c475fce03d6f0675b6d5c9e3`). Quality #547 and #549 succeeded.
+- **Notes / blockers:** Implementation and CI evidence are present; complete independent general and security review of the final restored P6-03–P6-11 aggregate remains outstanding.
 
 ## P6-05 — Implement connection policy
 
 - **Workstream:** Domain
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Require relational learning when appropriate.
 - **Build:** Select CONNECT activities after basic understanding/retrieval when concept relationships matter.
 - **How it works:** Uses evidence not learning-style labels.
@@ -1657,14 +1660,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Connections appear at appropriate stage.
 - **Definition of Done:** Policy tests pass.
 - **Authority:** Documents 03,11
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Evidence-driven CONNECT selection was implemented in PR #192 (`c83fff36f2edf0ec689ce6633bd03d7aea1c5fc0`), reverted by PR #193, restored by PR #194 (`d638c638847fc64884dd92cd89fd0bd2dffcb716`, merge `4709bceddd7aaff19dbdc8c0acd13a7603a27726`), and retained after PR #195's final composition correction (`8148340a520e3c3e150a262ec90417d87cffe39a`, merge `d31f18b9583836e6c475fce03d6f0675b6d5c9e3`). Quality #547 and #549 succeeded.
+- **Notes / blockers:** Implementation and CI evidence are present; complete independent general and security review of the final restored P6-03–P6-11 aggregate remains outstanding.
 
 ## P6-06 — Implement application/scenario policy
 
 - **Workstream:** Domain
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Introduce practical medical application with scaffolding.
 - **Build:** Choose APPLY when prerequisites are adequate; reduce difficulty or return to UNDERSTAND/RETRIEVE after weak performance.
 - **How it works:** Early students get educational scenarios, not clinical autonomy.
@@ -1673,14 +1676,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Appropriate application practice selected.
 - **Definition of Done:** Policy suite passes.
 - **Authority:** Documents 03,11
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** APPLY selection, difficulty reduction, and weak-performance fallback were implemented in PR #192 (`c83fff36f2edf0ec689ce6633bd03d7aea1c5fc0`), reverted by PR #193, restored by PR #194 (`d638c638847fc64884dd92cd89fd0bd2dffcb716`, merge `4709bceddd7aaff19dbdc8c0acd13a7603a27726`), and retained after PR #195's final composition correction (`8148340a520e3c3e150a262ec90417d87cffe39a`, merge `d31f18b9583836e6c475fce03d6f0675b6d5c9e3`). Quality #547 and #549 succeeded.
+- **Notes / blockers:** Implementation and CI evidence are present; complete independent general and security review of the final restored P6-03–P6-11 aggregate remains outstanding.
 
 ## P6-07 — Implement time-aware mission policy
 
 - **Workstream:** Domain
 - **Priority:** Should
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Fit learning sequence to available study time.
 - **Build:** Use available_time and activity estimates to select bounded next actions/complete gracefully.
 - **How it works:** Timer does not equal mastery.
@@ -1689,14 +1692,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Mission remains coherent within time limit.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 06,11
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Bounded action selection for available study time and graceful completion were implemented in PR #192 (`c83fff36f2edf0ec689ce6633bd03d7aea1c5fc0`), reverted by PR #193, restored by PR #194 (`d638c638847fc64884dd92cd89fd0bd2dffcb716`, merge `4709bceddd7aaff19dbdc8c0acd13a7603a27726`), and retained after PR #195's final composition correction (`8148340a520e3c3e150a262ec90417d87cffe39a`, merge `d31f18b9583836e6c475fce03d6f0675b6d5c9e3`). Quality #547 and #549 succeeded.
+- **Notes / blockers:** Implementation and CI evidence are present; complete independent general and security review of the final restored P6-03–P6-11 aggregate remains outstanding.
 
 ## P6-08 — Implement scaffolding policy
 
 - **Workstream:** Domain
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Respond to difficulty without giving answers immediately.
 - **Build:** Define retry → hint → simpler explanation/prerequisite → reattempt behavior.
 - **How it works:** Scaffolding is deterministic; wording may use AI.
@@ -1705,14 +1708,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Student receives progressively useful support.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 03,11
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Deterministic retry→hint→simpler/prerequisite→reattempt scaffolding was implemented in PR #192 (`c83fff36f2edf0ec689ce6633bd03d7aea1c5fc0`), reverted by PR #193, restored by PR #194 (`d638c638847fc64884dd92cd89fd0bd2dffcb716`, merge `4709bceddd7aaff19dbdc8c0acd13a7603a27726`), and retained after PR #195's final composition correction (`8148340a520e3c3e150a262ec90417d87cffe39a`, merge `d31f18b9583836e6c475fce03d6f0675b6d5c9e3`). Quality #547 and #549 succeeded.
+- **Notes / blockers:** Implementation and CI evidence are present; complete independent general and security review of the final restored P6-03–P6-11 aggregate remains outstanding.
 
 ## P6-09 — Implement anti-repetition policy
 
 - **Workstream:** Domain
 - **Priority:** Should
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Avoid mechanically repeating same question/activity.
 - **Build:** Track recent activity/concept/template history and exclude unnecessary repeats while allowing deliberate spaced review.
 - **How it works:** No random repetition by provider.
@@ -1721,14 +1724,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Learning variety remains purposeful.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 11
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** History-based duplicate prevention was implemented in PR #192 (`c83fff36f2edf0ec689ce6633bd03d7aea1c5fc0`), reverted by PR #193, and restored by PR #194 (`d638c638847fc64884dd92cd89fd0bd2dffcb716`, merge `4709bceddd7aaff19dbdc8c0acd13a7603a27726`). PR #195 corrected the restored composition so anti-repetition still prevents duplicate RETRIEVE/APPLY practice while preserving FEEDBACK, REFLECT, and COMPLETE instead of replacing closure with `REFLECT / ACCIDENTAL_REPEAT_AVOIDED`; it merged as `d31f18b9583836e6c475fce03d6f0675b6d5c9e3` after quality #549 (run `36369402886`) succeeded.
+- **Notes / blockers:** The scoped PR #195 correction was externally approved and security-reviewed; complete independent general and security review of the final restored P6-03–P6-11 aggregate remains outstanding.
 
 ## P6-10 — Implement source-capability policy
 
 - **Workstream:** Domain
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Never request unsupported activity types.
 - **Build:** Use material capabilities/quality to avoid visual/source-strict tasks when unavailable or poor.
 - **How it works:** RAG/ingestion limitations feed engine.
@@ -1737,14 +1740,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Engine picks safe alternative or signals limitation.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 11,21
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Source capability/readiness constraints and safe unsupported-activity fallback were implemented in PR #192 (`c83fff36f2edf0ec689ce6633bd03d7aea1c5fc0`), reverted by PR #193, restored by PR #194 (`d638c638847fc64884dd92cd89fd0bd2dffcb716`, merge `4709bceddd7aaff19dbdc8c0acd13a7603a27726`), and retained after PR #195's final composition correction (`8148340a520e3c3e150a262ec90417d87cffe39a`, merge `d31f18b9583836e6c475fce03d6f0675b6d5c9e3`). Quality #547 and #549 succeeded.
+- **Notes / blockers:** Implementation and CI evidence are present; complete independent general and security review of the final restored P6-03–P6-11 aggregate remains outstanding.
 
 ## P6-11 — Implement AI/RAG failure policy
 
 - **Workstream:** Domain
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Define pedagogical fallback when dependencies fail.
 - **Build:** Map RAG LIMITED/INSUFFICIENT/FAILED and AI unavailable to reuse/source-only/retry/pause actions where appropriate.
 - **How it works:** Failure is explicit, never hidden as empty context.
@@ -1753,8 +1756,8 @@ responsibilities remain outside P5-06.
 - **Expected result:** Mission degrades safely.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 11,19
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Explicit RAG LIMITED/INSUFFICIENT/FAILED and AI-unavailable pedagogical fallback was implemented in PR #192 (`c83fff36f2edf0ec689ce6633bd03d7aea1c5fc0`), reverted by PR #193, restored by PR #194 (`d638c638847fc64884dd92cd89fd0bd2dffcb716`, merge `4709bceddd7aaff19dbdc8c0acd13a7603a27726`), and retained after PR #195's final composition correction (`8148340a520e3c3e150a262ec90417d87cffe39a`, merge `d31f18b9583836e6c475fce03d6f0675b6d5c9e3`). Quality #547 and #549 succeeded.
+- **Notes / blockers:** Implementation and CI evidence are present; complete independent general and security review of the final restored P6-03–P6-11 aggregate remains outstanding.
 
 ## P6-12 — Create Learning Engine scenario suite
 

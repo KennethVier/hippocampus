@@ -40,15 +40,15 @@ Hippocampus uses roles, not model-specific authority. The repository workflow mu
 
 Default tool assignment:
 
-1. **Plan** — Human + Gemini resolve the tracker task and produce the approved implementation packet.
-2. **Implement (local)** — Google Antigravity is the default local implementation executor and uses `hippocampus-implement-task`.
-3. **Implement (cloud, optional)** — Google Jules may execute an approved packet when explicitly selected. Jules is an alternate executor, not an additional mandatory stage.
-4. **Review** — an independent reviewer inspects the actual diff plus user/CI evidence using `hippocampus-review-implementation`.
-5. **Security review** — after general review is clean, run `hippocampus-security-vulnerability-review` independently.
+1. **Plan** — Human + ChatGPT resolve the tracker task and produce the approved implementation packet.
+2. **Implement** — Codex is the default local implementation executor; Antigravity is an approved alternate local executor. Both use `hippocampus-implement-task`.
+3. **Validate** — the user or GitHub Actions supplies broad validation evidence.
+4. **Review** — ChatGPT acts as the external independent reviewer of the actual diff plus user/CI evidence using `hippocampus-review-implementation`.
+5. **Security review** — after general review is clean, run `hippocampus-security-vulnerability-review` independently, coordinated/reviewed through ChatGPT.
 
-Do not use Antigravity and Jules redundantly on the same task unless a concrete reason justifies separate execution. Do not let an implementation executor self-approve its own work.
+Do not use Codex and Antigravity redundantly on the same task unless a concrete reason justifies separate execution. Do not let an implementation executor self-approve its own work.
 
-Antigravity discovers workspace skills under `.agents/skills/` and custom agent profiles under `.agents/agents/`. The `hippocampus-implementer` profile defines the local execution policy (`commandExecutionPolicy: auto`) while enforcing that broad validation is user/CI-owned and only eligible changed tests may be run by default. The `hippocampus-reviewer` profile is explicitly constrained to read-only inspection/review capabilities, disabling write/edit tools and setting `commandExecutionPolicy: off` to prevent unnecessary write or unrestricted command capabilities. Jules reads this root `AGENTS.md`; when Jules executes a task, the prompt/plan must also direct it to the exact relevant skill file when the skill contains task-critical behavior.
+Codex follows this root `AGENTS.md` and `hippocampus-implement-task`. Antigravity discovers workspace skills under `.agents/skills/` and custom agent profiles under `.agents/agents/`; its `hippocampus-implementer` profile enforces the same approved-packet and command restrictions. The optional `hippocampus-reviewer` profile remains available as a constrained read-only fallback, with write/edit tools disabled and `commandExecutionPolicy: off`; it does not replace the normal external ChatGPT review role.
 
 For a fresh agent/session, use `hippocampus-onboard-agent` once before task work when repository context is not already established. The onboarding skill is orientation only; it does not replace tracker-task planning.
 
@@ -57,19 +57,19 @@ For a fresh agent/session, use `hippocampus-onboard-agent` once before task work
 Normal tracker work follows:
 
 ```text
-Human + Gemini planning
+Human + ChatGPT planning
         ↓
 approved implementation packet
         ↓
-Antigravity local OR Jules cloud
+Codex local OR Antigravity local
         ↓
 IMPLEMENTED — USER VALIDATION REQUIRED
         ↓
 user / GitHub Actions validation
         ↓
-independent implementation review
+ChatGPT external implementation review
         ↓
-independent security review
+independent security review coordinated/reviewed through ChatGPT
         ↓
 publication / merge
         ↓
@@ -87,7 +87,7 @@ Rules:
 - Do not introduce speculative abstractions, dependencies, infrastructure, or features.
 - Leave completion/merge decisions to independent review and factual evidence.
 
-`docs/agent-orchestration-workflow.md` contains the full role/tool workflow. `docs/agent-context-and-bootstrap.md` contains the durable repository orientation and reusable Antigravity/Jules bootstrap prompts.
+`docs/agent-orchestration-workflow.md` contains the full role/tool workflow. `docs/agent-context-and-bootstrap.md` contains the durable repository orientation and reusable Codex/Antigravity bootstrap prompts.
 
 ## Implementation Command Policy
 
