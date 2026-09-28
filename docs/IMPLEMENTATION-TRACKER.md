@@ -1763,7 +1763,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** Testing
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Prove pedagogy deterministically.
 - **Build:** Build table-driven scenarios across evidence dimensions, time, misconceptions, source quality and history.
 - **How it works:** No live AI needed.
@@ -1778,14 +1778,18 @@ responsibilities remain outside P5-06.
   where adequate connection evidence bypassed `ApplicationPolicy`; `ConnectionPolicy` was corrected to yield after
   adequate connection evidence so `ApplicationPolicy` owns APPLY/FEEDBACK progression. `ConnectionPolicyTests`: 3/3
   PASS. `LearningEngineScenarioTests`: 629/629 PASS. `git diff --check`: PASS. External implementation review:
-  APPROVED. Independent security review: SECURITY PASS.
+  APPROVED. Independent security review: SECURITY PASS. PR #198 merged as
+  `c58519e1e9bd6856006f992070e570c0f0f171ae`. Quality #555 (workflow run ID `36379764371`) completed with
+  `backend-quality`, `frontend-quality`, `security`, `auth-e2e`, and `phase1-gate` through `phase5-gate` all
+  successful. Final external implementation review: APPROVED. Independent security review: SECURITY PASS. Blockers:
+  None.
 - **Notes / blockers:** _None_
 
 ## P6-13 — Verify Learning Engine provider independence
 
 - **Workstream:** Architecture
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Prevent AI authority drift.
 - **Build:** ArchUnit rules block learning.domain dependencies on ai.infrastructure, Spring MVC/JPA/provider SDKs.
 - **How it works:** Engine may depend only on domain/ports/value types.
@@ -1794,7 +1798,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Learning Engine remains pure/testable.
 - **Definition of Done:** CI rule active.
 - **Authority:** Documents 19,25
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** The existing `DOMAIN_INDEPENDENCE_RULE` applies to `learning.domain` and blocks domain
+  dependencies on infrastructure, Spring, JPA, `java.sql`, `java.net.http`, and the Gemini SDK. The initial clean
+  targeted architecture test passed. A temporary intentional `learning.domain` violation probe referencing
+  `GeminiProviderConfiguration`, `jakarta.persistence.EntityManager`, and `com.google.genai.Client` was introduced;
+  the targeted architecture test correctly failed with three ArchUnit violations identifying that probe. The probe
+  was removed completely, and the same targeted architecture test passed after removal. The existing architecture
+  rule remains CI-active through `backend-quality`. No production/runtime architecture change or new dependency was
+  required, and no P6-14 work was performed.
 - **Notes / blockers:** _None_
 
 ## P6-14 — Phase 6 Learning Engine gate
