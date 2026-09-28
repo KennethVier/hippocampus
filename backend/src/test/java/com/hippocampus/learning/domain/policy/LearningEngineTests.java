@@ -1,5 +1,8 @@
 package com.hippocampus.learning.domain.policy;
 
+import static com.hippocampus.learning.domain.LearningRationaleCodes.FEEDBACK_DUE;
+import static com.hippocampus.learning.domain.LearningRationaleCodes.OBJECTIVE_COMPLETE;
+import static com.hippocampus.learning.domain.LearningRationaleCodes.REFLECTION_DUE;
 import static com.hippocampus.learning.domain.LearningRationaleCodes.SOURCE_UNAVAILABLE;
 import static com.hippocampus.learning.domain.LearningRationaleCodes.TIME_LIMIT;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -278,6 +281,39 @@ class LearningEngineTests {
         assertThat(action.actionType()).isEqualTo(LearningActionType.COMPLETE);
     }
 
+    @Test
+    void repeatedFeedbackRemainsUnchangedDespiteMatchingHistoryTemplate() {
+        NextLearningAction action = engine.decide(closureState(
+                LearningStage.FEEDBACK,
+                LearningActionType.FEEDBACK,
+                "closure-feedback"));
+
+        assertThat(action.actionType()).isEqualTo(LearningActionType.FEEDBACK);
+        assertThat(action.rationaleCode()).isEqualTo(FEEDBACK_DUE);
+    }
+
+    @Test
+    void repeatedReflectionRemainsUnchangedDespiteMatchingHistoryTemplate() {
+        NextLearningAction action = engine.decide(closureState(
+                LearningStage.REFLECTION,
+                LearningActionType.REFLECT,
+                "closure-reflect"));
+
+        assertThat(action.actionType()).isEqualTo(LearningActionType.REFLECT);
+        assertThat(action.rationaleCode()).isEqualTo(REFLECTION_DUE);
+    }
+
+    @Test
+    void repeatedCompletionRemainsUnchangedDespiteMatchingHistoryTemplate() {
+        NextLearningAction action = engine.decide(closureState(
+                LearningStage.EVIDENCE_UPDATE,
+                LearningActionType.COMPLETE,
+                "closure-complete"));
+
+        assertThat(action.actionType()).isEqualTo(LearningActionType.COMPLETE);
+        assertThat(action.rationaleCode()).isEqualTo(OBJECTIVE_COMPLETE);
+    }
+
     private static LearningState stateWithEvidence(
             Map<EvidenceDimension, EvidenceStrength> evidence,
             boolean connectionRelevant,
@@ -294,6 +330,42 @@ class LearningEngineTests {
                 history,
                 connectionRelevant,
                 LearningActionConstraints.unconstrained());
+    }
+
+    private static LearningState closureState(
+            LearningStage stage, LearningActionType actionType, String templateSignature) {
+        LearningActionConstraints constraints = new LearningActionConstraints(
+                SourceRequirement.NONE,
+                false,
+                false,
+                "CLOSURE_RESPONSE",
+                templateSignature,
+                LearningActivityIntent.STANDARD);
+        RecentLearningActivity priorActivity = new RecentLearningActivity(
+                "cardiac-output",
+                actionType.name(),
+                "CLOSURE_RESPONSE",
+                LearningDifficulty.FOUNDATIONAL,
+                UUID.randomUUID(),
+                templateSignature,
+                null,
+                LearningActivityIntent.STANDARD,
+                false);
+        return new LearningState(
+                UUID.fromString("00000000-0000-0000-0000-000000000001"),
+                UUID.fromString("00000000-0000-0000-0000-000000000002"),
+                "cardiac-output",
+                MissionLifecycleState.ACTIVE,
+                stage,
+                new LearningEvidenceSnapshot(Map.of(
+                        EvidenceDimension.UNDERSTANDING, EvidenceStrength.STRONG,
+                        EvidenceDimension.RECALL, EvidenceStrength.STRONG,
+                        EvidenceDimension.APPLICATION, EvidenceStrength.WEAK)),
+                new SourceCapability(SourceReadiness.READY, true, false, false),
+                new LearningTimeContext(30, 30, 0),
+                List.of(priorActivity),
+                false,
+                constraints);
     }
 
     private static RecentLearningActivity failedApply(LearningDifficulty difficulty) {

@@ -26,6 +26,10 @@ public final class AntiRepetitionPolicy {
             VISUAL_UNAVAILABLE,
             VISUAL_UNRELIABLE,
             TIME_LIMIT);
+    private static final Set<LearningActionType> PROTECTED_ACTION_TYPES = Set.of(
+            LearningActionType.FEEDBACK,
+            LearningActionType.REFLECT,
+            LearningActionType.COMPLETE);
 
     private final LearningPolicyConfiguration configuration;
 
@@ -36,7 +40,8 @@ public final class AntiRepetitionPolicy {
     public NextLearningAction adjust(LearningState state, NextLearningAction candidate) {
         Objects.requireNonNull(state, "state must not be null");
         Objects.requireNonNull(candidate, "candidate must not be null");
-        if (HIGHER_PRIORITY_RATIONALES.contains(candidate.rationaleCode())
+        if (PROTECTED_ACTION_TYPES.contains(candidate.actionType())
+                || HIGHER_PRIORITY_RATIONALES.contains(candidate.rationaleCode())
                 || candidate.constraints().repetitionIntent() != LearningActivityIntent.STANDARD) {
             return candidate;
         }
@@ -67,8 +72,6 @@ public final class AntiRepetitionPolicy {
         boolean sameIntent = candidate.constraints().questionIntent() != null
                 && candidate.constraints().questionIntent().equals(activity.questionIntent());
         // sameShape is restricted to evaluative/practice activities (those with a non-null questionIntent).
-        // Non-evaluative steps (UNDERSTAND, FEEDBACK, REFLECT, COMPLETE) have null questionIntent and
-        // must never be suppressed as accidental duplicates based on action type and difficulty alone.
         boolean sameShape = candidate.constraints().questionIntent() != null
                 && PolicyHistory.represents(activity, candidate.actionType())
                 && activity.difficulty() == candidate.difficulty()
