@@ -9,7 +9,8 @@ public record NextLearningAction(
         String conceptKey,
         LearningDifficulty difficulty,
         String rationaleCode,
-        boolean aiTaskRequired) {
+        boolean aiTaskRequired,
+        LearningActionConstraints constraints) {
 
     public NextLearningAction {
         Objects.requireNonNull(actionType, "actionType must not be null");
@@ -21,5 +22,34 @@ public record NextLearningAction(
         if (rationaleCode.isBlank()) {
             throw new IllegalArgumentException("rationaleCode must not be blank");
         }
+        Objects.requireNonNull(constraints, "constraints must not be null");
+    }
+
+    public NextLearningAction(
+            LearningActionType actionType,
+            UUID learningObjectiveId,
+            String conceptKey,
+            LearningDifficulty difficulty,
+            String rationaleCode,
+            boolean aiTaskRequired) {
+        this(
+                actionType,
+                learningObjectiveId,
+                conceptKey,
+                difficulty,
+                rationaleCode,
+                aiTaskRequired,
+                LearningActionConstraints.unconstrained());
+    }
+
+    public NextLearningAction withRationale(String newRationaleCode) {
+        return new NextLearningAction(
+                actionType,
+                learningObjectiveId,
+                conceptKey,
+                difficulty,
+                newRationaleCode,
+                aiTaskRequired,
+                constraints);
     }
 }
