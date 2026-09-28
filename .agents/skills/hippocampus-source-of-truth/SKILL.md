@@ -9,7 +9,7 @@ description: Resolve the minimum authoritative Hippocampus documentation needed 
 
 Find the smallest authoritative context that safely governs the current task. Do not read the entire documentation set by default.
 
-This skill resolves project authority, not development-tool preference. Gemini/Antigravity/Jules usage for software development does not change runtime product/AI architecture.
+This skill resolves project authority, not development-tool preference. ChatGPT/Codex/Antigravity usage for software development does not change runtime product/AI architecture.
 
 ## Resolve
 
@@ -43,7 +43,7 @@ If documents conflict, follow root `AGENTS.md` authority order. If a significant
 - Material != Topic.
 - Ownership scope precedes RAG ranking; cross-user leakage tolerance is zero.
 - v1 runtime AI providers remain remote Ollama API + Gemini API behind the Provider Router/approved abstraction.
-- Development use of Gemini, Antigravity, or Jules does not authorize direct runtime coupling to those tools/providers.
+- Development use of ChatGPT, Codex, or Antigravity does not authorize direct runtime coupling to those tools/providers.
 - Provider-specific DTOs/SDK concerns stay inside provider adapters.
 - Visual mock content never creates product behavior absent higher authority.
 

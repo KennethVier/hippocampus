@@ -1,6 +1,6 @@
 ---
 name: hippocampus-implement-task
-description: Default Hippocampus execution workflow for an approved implementation packet. Antigravity is the default local executor; Jules may be used as an optional cloud executor. Implement directly with minimal context, no re-planning, no broad command execution, changed-test-only execution when eligible, and a terse user-validation handoff.
+description: Default Hippocampus execution workflow for an approved implementation packet. Codex is the default local executor; Antigravity is an approved alternate local executor. Implement directly with minimal context, no re-planning, no broad command execution, changed-test-only execution when eligible, and a terse user-validation handoff.
 ---
 
 # Implement a Hippocampus Tracker Task
@@ -11,7 +11,7 @@ Implement the approved task correctly with the smallest sufficient context, chan
 
 If an externally approved implementation packet exists, treat it as the working plan and start implementation. Do not reproduce or re-derive that plan unless implementation exposes a real contradiction, blocker, or significant unresolved decision.
 
-This skill is executor-neutral. It is normally used by Antigravity locally via the `hippocampus-implementer` custom agent profile (`.agents/agents/hippocampus-implementer/agent.md`). Jules may follow the same contract when selected for cloud execution.
+This skill is executor-neutral. Codex is the default implementation executor and follows root `AGENTS.md` plus this skill. Antigravity is an approved alternate and may use the `hippocampus-implementer` custom agent profile (`.agents/agents/hippocampus-implementer/agent.md`). Both follow the same approved packet, scope, command, validation, review, and publication rules.
 
 ## Execution
 
@@ -41,7 +41,7 @@ The implementation executor must not silently change:
 
 If repository reality contradicts the approved packet, stop and report the contradiction instead of improvising a new plan.
 
-For Jules specifically: a Jules-generated plan is an execution restatement only. It does not override the externally approved Hippocampus packet.
+For either Codex or Antigravity, an internal/generated plan is an execution restatement only. It does not override the externally approved Hippocampus packet.
 
 ## Lean Implementation Rules
 
@@ -74,7 +74,7 @@ Single-agent execution is the default.
 
 ## Command Policy — Default Is Run Nothing
 
-When Antigravity executes as `hippocampus-implementer`, its execution policy (`commandExecutionPolicy: auto`) permits running commands autonomously only when authorized by repository policy. Broad validation remains strictly user/CI-owned.
+When Antigravity executes as `hippocampus-implementer`, its execution policy (`commandExecutionPolicy: auto`) permits running commands autonomously only when authorized by repository policy. Codex follows the same repository command restrictions. Broad validation remains strictly user/CI-owned for either executor.
 
 Do not run any command unless it is permitted below or the current user instruction explicitly authorizes the exact command.
 

@@ -1,6 +1,6 @@
 ---
 name: hippocampus-review-implementation
-description: Independent review role for a Hippocampus implementation or PR. Inspect the actual diff plus user/CI evidence for tracker/SOT alignment, scope, architecture, correctness, tests, and security readiness. Prefer a fresh reviewer context independent from the Antigravity/Jules implementation session; do not rerun broad commands by default.
+description: Independent ChatGPT review role for a Hippocampus implementation or PR. Inspect the actual diff plus user/CI evidence for tracker/SOT alignment, scope, architecture, correctness, tests, and security readiness. Keep the reviewer external to the Codex/Antigravity implementation context; do not rerun broad commands by default.
 ---
 
 # Review Hippocampus Implementation
@@ -9,7 +9,7 @@ description: Independent review role for a Hippocampus implementation or PR. Ins
 
 Review the actual implementation, not the implementer's narration. Consume user/CI validation evidence instead of reproducing broad validation work.
 
-The reviewer must be independent from the implementation execution context. A fresh Gemini/reviewer session is preferred. If Antigravity is used for review, use the `hippocampus-reviewer` agent profile (`.agents/agents/hippocampus-reviewer/agent.md`), which is explicitly constrained to read-only inspection capabilities (`view_file`, `grep_search`, `list_dir`, `search_web`, `read_url_content`, MCP read tools, `ask_question`) with write/edit tools disabled and terminal commands disabled (`commandExecutionPolicy: off`). Jules must not self-approve work it produced.
+The normal reviewer is ChatGPT operating externally from the implementation execution context. It reviews the actual diff plus factual user/CI evidence and must not self-approve implementation it produced. If Antigravity is explicitly selected as a fallback reviewer, use the `hippocampus-reviewer` agent profile (`.agents/agents/hippocampus-reviewer/agent.md`), which is constrained to read-only inspection capabilities (`view_file`, `grep_search`, `list_dir`, `search_web`, `read_url_content`, MCP read tools, `ask_question`) with write/edit tools disabled and terminal commands disabled (`commandExecutionPolicy: off`).
 
 ## Review Order
 
@@ -97,7 +97,7 @@ For narrow findings, produce a compact correction packet containing:
 - exact user/CI validation commands;
 - explicit no-scope-expansion rule.
 
-Send the correction to the selected executor (normally Antigravity, or Jules if that task is explicitly cloud-executed). Do not resend the full original plan unless the finding invalidates it.
+Send the correction to the selected executor: Codex by default, or Antigravity when it was selected for that task. Do not resend the full original plan unless the finding invalidates it.
 
 The corrected implementation must be reviewed again from the updated diff/head; never approve based on a superseded revision.
 
@@ -120,7 +120,7 @@ When runtime AI/RAG/provider code is in scope, verify that:
 - deterministic learning policy/state remains application-owned;
 - provider fallback does not silently change grounding/safety/task contracts.
 
-Development use of Gemini/Antigravity/Jules is not evidence that runtime Gemini behavior is authorized by the tracker task.
+Development use of ChatGPT/Codex/Antigravity is not evidence that runtime Gemini behavior is authorized by the tracker task.
 
 ## Communication
 

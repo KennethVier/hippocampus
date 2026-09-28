@@ -58,7 +58,7 @@ Confirm understanding of these durable facts:
 ### Runtime AI / RAG
 
 - Gemini API + remote Ollama API remain runtime provider adapters behind the Provider Router;
-- development use of Gemini/Antigravity/Jules does not change runtime AI authority;
+- development use of ChatGPT/Codex/Antigravity does not change runtime AI authority;
 - provider/model output is untrusted and validated;
 - provider-specific SDK/DTO concerns stay in adapters;
 - authorization/scope occurs before retrieval/ranking;
@@ -67,10 +67,10 @@ Confirm understanding of these durable facts:
 
 ### Agent workflow
 
-- Plan: Human + Gemini;
-- Implement: Antigravity local by default OR Jules cloud when explicitly selected;
+- Plan: Human + ChatGPT;
+- Implement: Codex local by default OR Antigravity local as an approved alternate;
 - Validate: user/GitHub Actions for broad evidence;
-- Review: independent actual-diff review;
+- Review: ChatGPT external independent actual-diff review;
 - Security: independent `hippocampus-security-vulnerability-review`;
 - completion requires tracker Definition of Done/evidence, not merely code/tests.
 
@@ -88,13 +88,13 @@ Confirm understanding of these durable facts:
 
 ## Tool-Specific Orientation
 
+### Codex
+
+Codex is the default local executor. It follows root `AGENTS.md` and `hippocampus-implement-task`, executes an approved packet directly, and obeys the repository command and publication restrictions.
+
 ### Antigravity
 
-Antigravity is the default local executor and discovers `.agents/skills/` and `.agents/agents/` automatically. It uses `hippocampus-implementer` (`commandExecutionPolicy: auto` strictly bounded by the repository command policy) for implementation and `hippocampus-reviewer` (read-only inspection, no write/edit capabilities, `commandExecutionPolicy: off`) for review. Use skill names directly when the task requires them; do not duplicate their full content into every prompt.
-
-### Jules
-
-Jules is an optional cloud executor. It reads root `AGENTS.md`, but a task prompt should explicitly name `.agents/skills/hippocampus-implement-task/SKILL.md` and any additional materially relevant skill. A Jules-generated plan is an execution restatement, not authority to redesign the approved packet.
+Antigravity is an approved alternate local executor and discovers `.agents/skills/` and `.agents/agents/` automatically. It may use `hippocampus-implementer` (`commandExecutionPolicy: auto` strictly bounded by the repository command policy) for implementation. The `hippocampus-reviewer` profile remains an explicitly selected read-only fallback and does not replace the normal external ChatGPT review role. Use skill names directly when the task requires them; do not duplicate their full content into every prompt.
 
 ## Output
 
