@@ -1763,7 +1763,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** Testing
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Prove pedagogy deterministically.
 - **Build:** Build table-driven scenarios across evidence dimensions, time, misconceptions, source quality and history.
 - **How it works:** No live AI needed.
@@ -1772,7 +1772,13 @@ responsibilities remain outside P5-06.
 - **Expected result:** Changes reveal pedagogical regressions.
 - **Definition of Done:** Suite green and versioned.
 - **Authority:** Documents 11,25
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Deterministic table-driven Learning Engine scenario suite added with 629 scenarios covering
+  evidence progression, lifecycle precedence, time constraints, source/visual capability, repeated difficulty/history,
+  anti-repetition, protected closure actions, and AI/RAG failures. The suite exposed a P6-05/P6-06 composition defect
+  where adequate connection evidence bypassed `ApplicationPolicy`; `ConnectionPolicy` was corrected to yield after
+  adequate connection evidence so `ApplicationPolicy` owns APPLY/FEEDBACK progression. `ConnectionPolicyTests`: 3/3
+  PASS. `LearningEngineScenarioTests`: 629/629 PASS. `git diff --check`: PASS. External implementation review:
+  APPROVED. Independent security review: SECURITY PASS.
 - **Notes / blockers:** _None_
 
 ## P6-13 — Verify Learning Engine provider independence

@@ -1,6 +1,5 @@
 package com.hippocampus.learning.domain.policy;
 
-import static com.hippocampus.learning.domain.LearningRationaleCodes.APPLICATION_READY;
 import static com.hippocampus.learning.domain.LearningRationaleCodes.CONNECTION_GAP;
 import static com.hippocampus.learning.domain.LearningRationaleCodes.CONNECTION_READY;
 import static com.hippocampus.learning.domain.LearningRationaleCodes.FOUNDATION_INSUFFICIENT;
@@ -47,11 +46,6 @@ public final class ConnectionPolicy {
                     rationale,
                     true));
         }
-        return Optional.of(PolicyActions.action(
-                state,
-                LearningActionType.APPLY,
-                LearningDifficulty.FOUNDATIONAL,
-                APPLICATION_READY,
-                true));
+        return Optional.empty();
     }
 }

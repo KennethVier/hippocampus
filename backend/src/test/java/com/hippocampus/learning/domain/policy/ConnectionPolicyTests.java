@@ -52,13 +52,13 @@ class ConnectionPolicyTests {
     }
 
     @Test
-    void progressesTowardApplicationAfterAdequateConnectionEvidence() {
+    void delegatesApplicationProgressionAfterAdequateConnectionEvidence() {
         var action = policy.select(state(Map.of(
                 EvidenceDimension.UNDERSTANDING, EvidenceStrength.STRONG,
                 EvidenceDimension.RECALL, EvidenceStrength.STRONG,
-                EvidenceDimension.CONNECTION, EvidenceStrength.DEVELOPING), true)).orElseThrow();
+                EvidenceDimension.CONNECTION, EvidenceStrength.DEVELOPING), true));
 
-        assertThat(action.actionType()).isEqualTo(LearningActionType.APPLY);
+        assertThat(action).isEmpty();
     }
 
     private static com.hippocampus.learning.domain.LearningState state(
