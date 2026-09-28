@@ -1856,7 +1856,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** Database
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Persist complete mission plan and current activity.
 - **Build:** Implement tables/entities/repos and mission_materials/source links as Doc 18.
 - **How it works:** Mission freezes material versions.
@@ -1865,8 +1865,8 @@ responsibilities remain outside P5-06.
 - **Expected result:** Mission can be resumed reproducibly.
 - **Definition of Done:** Schema tests pass.
 - **Authority:** Documents 18
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** P7-01 introduced Flyway V20 (`V20__create_study_mission_foundation.sql`) and the learning-owned Study Mission domain/port/JPA persistence foundation. V20 creates `study_missions`, corrected UUID-identified `mission_materials`, `learning_objectives`, `learning_activities`, and `activity_source_references`, plus the schema-only `generated_artifacts` prerequisite required by the authoritative nullable LearningActivity foreign key; no GeneratedArtifact domain behavior, repository, or use case was added. Mission source scope supports canonical whole-version rows with nullable `document_node_id` and node-scoped rows, enforces same-Material MaterialVersion and same-version DocumentNode relationships, and retains the frozen MaterialVersion after a newer version becomes active. Composite constraints enforce same-mission objective/activity and current-activity integrity. The repository load path requires both mission ID and authoritative owner ID. Focused PostgreSQL/Testcontainers validation passed 21 tests with 0 failures/errors/skips: 5 StudyMission persistence migration/FK/version scenarios, 5 Flyway migration regression tests including fresh V20/idempotency and exact table inventory, and all 11 architecture tests. No P7-02+ behavior, API/controller, AI/RAG execution, new dependency, or undocumented architecture deviation was introduced.
+- **Notes / blockers:** *None*
 
 ## P7-02 — Create StudentAttempt schema
 
