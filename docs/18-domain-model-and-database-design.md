@@ -4,7 +4,7 @@ Audience: Backend, architecture, database, AI, QA, security, and DevOps
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 18
-Last Updated: 2026-09-09
+Last Updated: 2026-09-28
 Owner: Project Hippocampus Team
 Prerequisites:
 - 00 - Project Vision
@@ -47,7 +47,7 @@ Scope: Core entities, aggregate boundaries, PostgreSQL schema design,
   versioning, and migration rules.
 Status: Final
 Title: Domain Model & Database Design
-Version: 1.0.2
+Version: 1.0.3
 ---
 
 # 18 - Domain Model & Database Design
@@ -908,14 +908,39 @@ A StudyMission may use multiple Materials/versions.
 ## Table: `mission_materials`
 
 ``` text
+id UUID PK
 study_mission_id UUID FK -> study_missions.id
 material_id UUID FK -> materials.id
 material_version_id UUID FK -> material_versions.id
 document_node_id UUID NULL FK -> document_nodes.id
-PRIMARY KEY(study_mission_id, material_version_id, document_node_id)
+UNIQUE NULLS NOT DISTINCT(
+    study_mission_id,
+    material_version_id,
+    document_node_id
+)
 ```
 
-This freezes source versions for reproducible mission behavior.
+`id` is the persistence row identity. The canonical mission source-scope
+identity is the `UNIQUE NULLS NOT DISTINCT` constraint above.
+
+Required relationship integrity:
+
+``` text
+(material_id, material_version_id)
+    -> material_versions(material_id, id)
+
+(document_node_id, material_version_id)
+    -> document_nodes(id, material_version_id)
+```
+
+The second relationship applies when `document_node_id` is present.
+`document_node_id = NULL` represents the whole frozen MaterialVersion;
+a non-null `document_node_id` represents node scope inside that exact
+frozen version. `UNIQUE NULLS NOT DISTINCT` prevents duplicate
+whole-version scopes and duplicate node scopes within a StudyMission.
+
+MissionMaterial continues to freeze exact MaterialVersions for
+reproducible mission behavior.
 
 ------------------------------------------------------------------------
 
@@ -2512,6 +2537,14 @@ and:
                                                         initial deterministic
                                                         replay identity with
                                                         ADR-0005
+
+  1.0.3             2026-09-28        Project           Corrected
+                                      Hippocampus Team  MissionMaterial row
+                                                        identity, canonical
+                                                        nullable source-scope
+                                                        uniqueness, and
+                                                        version/node
+                                                        relationship integrity
 
   -----------------------------------------------------------------------
 
