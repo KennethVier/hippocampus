@@ -205,25 +205,33 @@ public class SubmitActivityResponseUseCase {
             Map<UUID, List<StudentAttempt>> attempts,
             AttemptOutcome currentOutcome,
             Instant now) {
-        LearningObjective objective = mission.objectives().stream()
-                .filter(candidate -> candidate.id().equals(current.learningObjectiveId()))
-                .findFirst()
-                .orElseThrow(() -> failure(
-                        ActivityResponseException.Reason.ACTIVITY_NOT_CURRENT,
-                        "The current activity has no valid learning objective."));
+        Map<UUID, LearningObjective> objectivesById = new java.util.LinkedHashMap<>();
+        for (LearningObjective objective : mission.objectives()) {
+            objectivesById.put(objective.id(), objective);
+        }
+        LearningObjective currentObjective = objectiveFor(
+                objectivesById, current, "The current activity has no valid learning objective.");
         EnumMap<EvidenceDimension, EvidenceStrength> evidence = new EnumMap<>(EvidenceDimension.class);
         List<RecentLearningActivity> recent = new ArrayList<>();
         mission.activities().stream()
                 .sorted(Comparator.comparingInt(LearningActivity::sequenceNumber).reversed())
                 .forEach(activity -> {
+                    LearningObjective activityObjective = activity.id().equals(current.id())
+                            ? currentObjective
+                            : objectiveFor(
+                                    objectivesById,
+                                    activity,
+                                    "A mission activity has no valid learning objective.");
                     List<StudentAttempt> historicalAttempts = attempts.getOrDefault(activity.id(), List.of());
                     historicalAttempts.stream()
                             .sorted(Comparator.comparingInt(StudentAttempt::attemptNumber).reversed())
                             .forEach(attempt -> addHistory(
-                                    recent, evidence, mission, objective, activity,
+                                    recent, evidence, mission, currentObjective, activityObjective, activity,
                                     outcome(attempt.evaluationStatus())));
                     if (activity.id().equals(current.id())) {
-                        addHistory(recent, evidence, mission, objective, activity, currentOutcome);
+                        addHistory(
+                                recent, evidence, mission, currentObjective, activityObjective,
+                                activity, currentOutcome);
                     }
                 });
         int available = mission.availableTimeMinutes() == null ? 0 : mission.availableTimeMinutes();
@@ -232,27 +240,39 @@ public class SubmitActivityResponseUseCase {
                         Duration.between(mission.startedAt(), now).toMinutes())));
         int remaining = Math.max(0, available - age);
         return new LearningState(
-                mission.id(), objective.id(), conceptKey(objective), MissionLifecycleState.ACTIVE,
+                mission.id(), currentObjective.id(), conceptKey(currentObjective), MissionLifecycleState.ACTIVE,
                 mission.learningState(), new LearningEvidenceSnapshot(evidence),
                 sourceCapability(mission), new LearningTimeContext(available, remaining, age),
                 recent, false, constraintsFor(mission.groundingMode()));
+    }
+
+    private static LearningObjective objectiveFor(
+            Map<UUID, LearningObjective> objectivesById,
+            LearningActivity activity,
+            String failureMessage) {
+        LearningObjective objective = objectivesById.get(activity.learningObjectiveId());
+        if (objective == null) {
+            throw failure(ActivityResponseException.Reason.ACTIVITY_NOT_CURRENT, failureMessage);
+        }
+        return objective;
     }
 
     private static void addHistory(
             List<RecentLearningActivity> recent,
             Map<EvidenceDimension, EvidenceStrength> evidence,
             StudyMission mission,
-            LearningObjective objective,
+            LearningObjective currentObjective,
+            LearningObjective activityObjective,
             LearningActivity activity,
             AttemptOutcome outcome) {
         EvidenceDimension dimension = dimensionFor(activity.representedActionType());
-        if (dimension != null) {
+        if (activityObjective.id().equals(currentObjective.id()) && dimension != null) {
             EvidenceStrength strength = strengthFor(outcome);
             evidence.merge(dimension, strength, (left, right) -> left.compareTo(right) >= 0 ? left : right);
         }
         if (activity.difficulty() != null) {
             recent.add(activity.toRecentLearningActivity(
-                    conceptKey(objective), mission.id(), outcome,
+                    conceptKey(activityObjective), mission.id(), outcome,
                     LearningActivityIntent.STANDARD, activity.generatedArtifactId() != null));
         }
     }
