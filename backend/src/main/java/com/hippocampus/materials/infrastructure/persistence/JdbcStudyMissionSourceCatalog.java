@@ -7,12 +7,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
 
 import com.hippocampus.learning.domain.SourceReadiness;
 import com.hippocampus.learning.port.StudyMissionSourceCatalog;
 
-@Repository
 public class JdbcStudyMissionSourceCatalog implements StudyMissionSourceCatalog {
 
     private static final String RESOLVE_SOURCE = """
