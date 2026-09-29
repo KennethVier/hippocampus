@@ -1920,7 +1920,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** Application
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Process student answer safely.
 - **Build:** Persist/prepare attempt, evaluate deterministically or via AI, validate result, generate evidence event later, ask engine for next action, persist state in short transactions.
 - **How it works:** No DB transaction held across long provider call.
@@ -1929,14 +1929,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Answer leads to validated feedback and next action without duplicate state.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 19
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Implemented the response-submission application flow with owner-scoped attempt preparation, evaluation outside database transactions, validated result persistence, stale/duplicate-state protection, and Learning Engine next-action progression. Final controller/profile regression validation passed 10 tests with 0 failures, 0 errors, and 0 skipped. The complete backend suite passed 1,983 tests with 0 failures, 0 errors, and 11 skipped; Maven `BUILD SUCCESS` (2026-09-29). `git diff --check` passed.
+- **Notes / blockers:** Implementation and user validation are complete. External implementation review and the independent security gate remain required.
 
 ## P7-06 — Implement pause/resume/stop mission
 
 - **Workstream:** Application
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Preserve continuity.
 - **Build:** Add use cases and endpoints maintaining current activity/time/material versions.
 - **How it works:** Resume does not regenerate completed setup unnecessarily.
@@ -1945,8 +1945,8 @@ responsibilities remain outside P5-06.
 - **Expected result:** Student can leave and return safely.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 06,18
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Implemented owner-scoped pause, resume, and stop mission transitions and endpoints while preserving the current activity and frozen material-version continuity. Final controller/profile regression validation passed 10 tests with 0 failures, 0 errors, and 0 skipped. The complete backend suite passed 1,983 tests with 0 failures, 0 errors, and 11 skipped; Maven `BUILD SUCCESS` (2026-09-29). `git diff --check` passed.
+- **Notes / blockers:** Implementation and user validation are complete. External implementation review and the independent security gate remain required.
 
 ## P7-07 — Implement explanation task end-to-end
 
