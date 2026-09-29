@@ -1,12 +1,12 @@
 ---
 Document ID: 11
 Title: AI Learning Engine
-Version: 1.0.0
+Version: 1.0.1
 Status: Final
 Owner: Project Hippocampus Team
 Authors: Project Hippocampus Team
 Created: 2026-08-23
-Last Updated: 2026-08-23
+Last Updated: 2026-09-29
 Purpose: Define how Hippocampus decides the next educational action using deterministic learning rules, learner context, Study Mission state, learning evidence, source readiness, time constraints, and bounded AI assistance.
 Scope: Learning-state evaluation, mission-state transitions, next-action policy, rule precedence, AI task invocation, retries, adaptation, evidence updates, anti-repetition behavior, time-aware decisions, review decisions, failure paths, and explainability.
 Audience: Product, AI, backend, architecture, QA, UX, and medical-education contributors.
@@ -618,21 +618,51 @@ This is a core evidence-based rule.
 
 # 14. Anti-Repetition Engine
 
-The Learning Engine should track recent activity signatures.
+The Learning Engine should track recent activity signatures. A conceptual
+`RecentLearningActivity` entry that represents a durable LearningActivity
+includes:
 
-A conceptual activity signature may include:
-
-```text
-Concept
-+
-Activity Type
-+
-Question Intent
-+
-Difficulty
-+
-Session
+``` text
+RecentLearningActivity
+├── learningActivityId
+├── conceptKey
+├── activityType <- durable representedActionType
+├── questionIntent
+├── difficulty
+├── sessionId
+├── templateSignature
+├── attemptOutcome
+├── repetitionIntent
+└── validatedContent
 ```
+
+`RecentLearningActivity.activityType` is reconstructed from the durable
+LearningActivity `representedActionType`, not from its concrete rendering
+`activityType`. This preserves distinctions such as `HINT` and
+`PREREQUISITE_SUPPORT` when both materialize as concrete `UNDERSTAND`
+activities. Provider-specific or artifact-specific concerns do not belong in
+this history contract.
+
+For direct pedagogical actions (`UNDERSTAND`, `RETRIEVE`, `CONNECT`, `APPLY`,
+`HINT`, `PREREQUISITE_SUPPORT`, `FEEDBACK`, and `REFLECT`), the durable
+represented action is the underlying pedagogical action being materialized.
+When `visualRequired` changes the concrete rendering to `VISUAL`, that
+represented action does not change.
+
+`RETRY`, `REDUCE_DIFFICULTY`, and `REUSE_VALIDATED_CONTENT` are deterministic
+adaptation/orchestration actions, not represented pedagogical activity types.
+The resulting LearningActivity inherits its concrete activity type and
+represented action type from the exact prior activity being retried, adapted,
+or reused. `REDUCE_DIFFICULTY` replaces difficulty with the new value selected
+by the Learning Engine. Consequently, a retried `RETRIEVE` remains a
+`RETRIEVE` in reconstructed history, and an `APPLY` activity whose difficulty
+was reduced remains recognizable as `APPLY`. Non-materializable control
+actions remain outside LearningActivity.
+
+This ADR adds no visual-compatibility history field. Existing Phase 6 policy
+continues to disallow `REUSE_VALIDATED_CONTENT` when the failed action has
+`visualRequired == true`; visual fallback and reuse policy are otherwise
+unchanged.
 
 The engine should distinguish:
 
@@ -659,6 +689,33 @@ Educational Purpose?
       ├── No → Suppress / Choose Alternative
       └── Yes → Allow
 ```
+
+When the existing compatibility policy selects prior validated content, it
+selects the most recent compatible history entry according to the existing
+recent-history ordering. The resulting `NextLearningAction` is
+`REUSE_VALIDATED_CONTENT` and carries that exact entry's
+`learningActivityId` as `reuseLearningActivityId`.
+
+`reuseLearningActivityId` is non-null only for
+`REUSE_VALIDATED_CONTENT`; it is null for every other action type. The
+application must resolve that exact prior LearningActivity and must not
+independently rediscover pedagogical compatibility. It revalidates
+authorization, artifact eligibility, grounding, provenance, material lifecycle,
+and the mission's frozen MaterialVersion/DocumentNode scope before creating a
+new activity. Reuse is deterministic and does not call AI merely to regenerate
+already validated compatible content.
+
+The new reused LearningActivity inherits `representedActionType` from the exact
+prior activity selected by `reuseLearningActivityId`. It does not store
+`REUSE_VALIDATED_CONTENT` as its represented action because that value describes
+the orchestration decision, not the reused pedagogical activity.
+
+The explicit `reuseLearningActivityId` target remains specific to
+`REUSE_VALIDATED_CONTENT`; `RETRY` and `REDUCE_DIFFICULTY` gain no parallel
+field and no second compatibility search. P7-04 resolves their exact prior
+activity through the already-approved mission/activity progression semantics.
+If that state cannot identify the prior activity deterministically, the
+implementation must surface a separate blocker rather than guess.
 
 ---
 
@@ -1609,6 +1666,7 @@ The prompt layer must implement decisions from the Learning Engine rather than i
 | Version | Date | Author | Changes |
 |---|---|---|---|
 | 1.0.0 | 2026-08-23 | Project Hippocampus Team | Initial finalized AI Learning Engine defining deterministic educational decision logic, mission-state transitions, learner-state adaptation, AI invocation rules, evidence updates, review behavior, and explainability |
+| 1.0.1 | 2026-09-29 | Project Hippocampus Team | Aligned exact reusable LearningActivity identity and Learning Engine selection authority with ADR-0006 |
 
 ---
 

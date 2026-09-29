@@ -4,7 +4,7 @@ Audience: Product, architecture, backend, frontend, AI/RAG, DevOps,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 27
-Last Updated: 2026-09-09
+Last Updated: 2026-09-29
 Owner: Project Hippocampus Team
 Prerequisites:
 - README
@@ -24,7 +24,7 @@ Scope: Decision authority, decision categories, ADR lifecycle, ADR
   Source-of-Truth freeze procedure.
 Status: Final
 Title: Decision Log / ADR Index
-Version: 1.0.4
+Version: 1.0.5
 ---
 
 # 27 - Decision Log / ADR Index
@@ -1386,6 +1386,7 @@ When ADRs exist, add an index:
 | [ADR-0003](adr/ADR-0003-learning-organization-archive-lifecycle.md) | Learning Organization Archive Lifecycle | ACCEPTED | 2026-08-30 | DOMAIN, DATA, BACKEND |
 | [ADR-0004](adr/ADR-0004-durable-text-normalization-contract.md) | Durable Text Normalization Contract | ACCEPTED | 2026-09-08 | DATA, INGESTION, DOMAIN |
 | [ADR-0005](adr/ADR-0005-exact-chunk-source-provenance-and-initial-replay-identity.md) | Exact Chunk Source Provenance and Initial Replay Identity | ACCEPTED | 2026-09-09 | DATA, INGESTION, RAG, DOMAIN |
+| [ADR-0006](adr/ADR-0006-explicit-reusable-learning-activity-identity.md) | Explicit Reusable Learning Activity Identity | ACCEPTED | 2026-09-29 | DOMAIN, BACKEND, EDUCATION |
 
 This table begins empty at initial v1 freeze unless a real pending
 decision already exists.
@@ -1433,6 +1434,16 @@ generation boundary. P3-14 does not add `chunks.chunking_version` or general
 multi-generation Chunk persistence; future replacement and re-chunking remain
 owned by IndexGeneration/reprocessing design. NATIVE and OCR transitions are
 hard Chunk boundaries rather than a new mixed extraction method.
+
+## ADR-0006 Decision Summary
+
+Learning Engine reusable-content decisions carry the exact prior
+LearningActivity identity and preserve its represented pedagogical action type.
+The application resolves that activity and
+revalidates artifact eligibility, ownership, grounding, source provenance,
+material lifecycle, and frozen mission source scope before creating a new
+LearningActivity that may reference the same validated GeneratedArtifact.
+GeneratedArtifact does not own pedagogical compatibility.
 
 ------------------------------------------------------------------------
 
@@ -1730,6 +1741,11 @@ Phase 0 — Engineering Foundation
                                                         provenance and initial
                                                         replay identity across
                                                         Documents 18 and 21
+
+  1.0.5             2026-09-29        Project           Accepted and indexed
+                                      Hippocampus Team  ADR-0006 and aligned
+                                                        explicit reusable
+                                                        LearningActivity identity
 
   ----------------------------------------------------------------------------
 

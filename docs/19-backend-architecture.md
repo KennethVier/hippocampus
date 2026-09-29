@@ -4,7 +4,7 @@ Audience: Backend, architecture, AI, QA, security, and DevOps
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 19
-Last Updated: 2026-08-24
+Last Updated: 2026-09-29
 Owner: Project Hippocampus Team
 Prerequisites:
 - 10 - AI Architecture v1.1+
@@ -37,7 +37,7 @@ Scope: Spring Boot modular-monolith structure, package/module ownership,
   security integration, observability hooks, and testing seams.
 Status: Final
 Title: Backend Architecture
-Version: 1.0.0
+Version: 1.0.1
 ---
 
 # 19 - Backend Architecture
@@ -413,11 +413,79 @@ NextLearningAction
 ├── groundingMode
 ├── retrievalScope
 ├── rationaleCode
-└── constraints
+├── constraints
+└── reuseLearningActivityId
 ```
 
 The Application layer interprets this action and invokes RAG/AI only
 when required.
+
+The conceptual contract also carries `reuseLearningActivityId UUID NULL`.
+This value is non-null exactly when `actionType` is
+`REUSE_VALIDATED_CONTENT`; it is null for every other action type. It identifies
+the exact prior persisted LearningActivity that the Learning Engine selected as
+pedagogically compatible.
+
+The persisted LearningActivity separately records its concrete
+`activity_type` and its required durable `represented_action_type`. The latter
+is the pedagogical LearningActionType used to reconstruct
+`RecentLearningActivity.activityType`; it is not an AI/provider field.
+
+For direct pedagogical actions (`UNDERSTAND`, `RETRIEVE`, `CONNECT`, `APPLY`,
+`HINT`, `PREREQUISITE_SUPPORT`, `FEEDBACK`, and `REFLECT`), materialization
+stores the underlying pedagogical action as `represented_action_type`, even
+when `visualRequired` makes the concrete `activity_type` `VISUAL`.
+
+For deterministic adaptation/orchestration actions (`RETRY`,
+`REDUCE_DIFFICULTY`, and `REUSE_VALIDATED_CONTENT`), materialization creates a
+new LearningActivity that inherits both `activity_type` and
+`represented_action_type` from the exact prior activity. `REDUCE_DIFFICULTY`
+replaces difficulty with the new engine-selected value. The orchestration
+action itself is never stored as `represented_action_type`, and
+non-materializable control actions remain outside LearningActivity. Thus a
+retried `RETRIEVE` remains represented as `RETRIEVE`, while a reduced `APPLY`
+remains represented as `APPLY`. `RETRY` may reuse the prior generated artifact
+and source provenance only after applying the P7-04 eligibility,
+authorization, grounding, and provenance checks.
+
+`reuseLearningActivityId` remains specific to `REUSE_VALIDATED_CONTENT`.
+`RETRY` and `REDUCE_DIFFICULTY` gain no new `NextLearningAction` target field;
+P7-04 resolves their exact prior activity using the already-approved
+mission/activity progression semantics, without a second compatibility search.
+If existing state cannot identify that activity deterministically,
+implementation must surface a separate blocker rather than guess.
+
+## REUSE_VALIDATED_CONTENT orchestration
+
+``` text
+Learning Engine
+    -> exact reusable LearningActivity identity
+Application
+    -> resolve exact activity
+    -> verify same mission and applicable objective/context
+    -> resolve exact GeneratedArtifact
+    -> revalidate owner, validation, reusable state, grounding, provenance,
+       frozen MaterialVersion/DocumentNode scope, and material lifecycle
+    -> open short write transaction
+    -> create new LearningActivity referencing the reused artifact and
+       inheriting the selected activity's represented_action_type
+```
+
+The application does not perform a new pedagogical compatibility search and
+does not substitute the newest same-objective content. GeneratedArtifact does
+not own pedagogical compatibility. The exact activity identity is not an
+authorization token; foreign ownership, out-of-scope provenance, ineligible
+artifacts, or deleted material fail closed.
+
+Valid reusable content does not invoke an AI/provider merely to regenerate it.
+Resolution and validation follow the existing external-call and transaction
+rules: no network wait occurs inside the short write transaction, and
+authorization/provenance are revalidated before persistence. Reuse creates a
+new activity row and does not mutate the prior activity.
+
+The new activity does not use `REUSE_VALIDATED_CONTENT` as
+`represented_action_type`; that action type describes orchestration, while the
+persisted value describes the reused pedagogical activity.
 
 ------------------------------------------------------------------------
 
@@ -2230,6 +2298,11 @@ The frontend must preserve the product rule:
                                                         SSE, validation,
                                                         security integration,
                                                         and testing seams
+
+  1.0.1             2026-09-29        Project           Aligned reusable-content
+                                      Hippocampus Team  materialization and exact
+                                                        LearningActivity identity
+                                                        with ADR-0006
 
   ----------------------------------------------------------------------------
 

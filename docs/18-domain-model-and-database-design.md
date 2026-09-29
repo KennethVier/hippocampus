@@ -4,7 +4,7 @@ Audience: Backend, architecture, database, AI, QA, security, and DevOps
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 18
-Last Updated: 2026-09-28
+Last Updated: 2026-09-29
 Owner: Project Hippocampus Team
 Prerequisites:
 - 00 - Project Vision
@@ -47,7 +47,7 @@ Scope: Core entities, aggregate boundaries, PostgreSQL schema design,
   versioning, and migration rules.
 Status: Final
 Title: Domain Model & Database Design
-Version: 1.0.3
+Version: 1.0.4
 ---
 
 # 18 - Domain Model & Database Design
@@ -979,8 +979,11 @@ id UUID PK
 study_mission_id UUID FK -> study_missions.id
 learning_objective_id UUID NULL FK -> learning_objectives.id
 activity_type VARCHAR NOT NULL
+represented_action_type VARCHAR NOT NULL
 status VARCHAR NOT NULL
 difficulty VARCHAR NULL
+question_intent VARCHAR NULL
+template_signature VARCHAR NULL
 sequence_number INT NOT NULL
 generated_artifact_id UUID NULL
 source_required BOOLEAN NOT NULL DEFAULT FALSE
@@ -988,6 +991,59 @@ started_at TIMESTAMPTZ NULL
 completed_at TIMESTAMPTZ NULL
 created_at TIMESTAMPTZ NOT NULL
 ```
+
+`activity_type` is the concrete materialized/rendered LearningActivityType.
+`represented_action_type` is the pedagogical LearningActionType represented by
+that activity for Learning Engine history and policy reconstruction. For
+example:
+
+``` text
+HINT                     -> activity_type = UNDERSTAND,
+                            represented_action_type = HINT
+PREREQUISITE_SUPPORT     -> activity_type = UNDERSTAND,
+                            represented_action_type = PREREQUISITE_SUPPORT
+visual-required UNDERSTAND
+                         -> activity_type = VISUAL,
+                            represented_action_type = UNDERSTAND
+direct RETRIEVE          -> activity_type = RETRIEVE,
+                            represented_action_type = RETRIEVE
+RETRY of RETRIEVE        -> activity_type = RETRIEVE,
+                            represented_action_type = RETRIEVE
+REDUCE_DIFFICULTY of APPLY
+                         -> activity_type = APPLY,
+                            represented_action_type = APPLY,
+                            difficulty = engine-selected reduced difficulty
+```
+
+For direct pedagogical actions (`UNDERSTAND`, `RETRIEVE`, `CONNECT`, `APPLY`,
+`HINT`, `PREREQUISITE_SUPPORT`, `FEEDBACK`, and `REFLECT`),
+`represented_action_type` is the underlying pedagogical action being
+materialized. If `visualRequired` changes the concrete `activity_type` to
+`VISUAL`, the represented action remains unchanged.
+
+For `RETRY`, `REDUCE_DIFFICULTY`, and `REUSE_VALIDATED_CONTENT`, the new
+LearningActivity inherits `activity_type` and `represented_action_type` from
+the exact prior activity being retried, adapted, or reused. A reduced activity
+uses the new difficulty selected by the Learning Engine. None of these
+orchestration actions is itself stored as `represented_action_type`.
+Non-materializable control actions remain outside LearningActivity. A `RETRY`
+may reuse generated content and source provenance only when the P7-04 artifact
+eligibility, authorization, grounding, and provenance constraints permit it.
+
+Only `REUSE_VALIDATED_CONTENT` identifies its prior activity through
+`reuseLearningActivityId`. P7-04 resolves the prior activity for `RETRY` and
+`REDUCE_DIFFICULTY` according to the already-approved mission/activity
+progression semantics; it does not perform another compatibility search or add
+a new `NextLearningAction` field. Inability to identify that prior activity
+deterministically is a separate implementation blocker.
+
+`question_intent` and `template_signature` preserve the identity of the
+materialized learning interaction needed to reconstruct recent history, enforce
+anti-repetition policy, and make exact reuse decisions. These three fields are
+learning-domain metadata and must not be hidden only in
+`GeneratedArtifact.content_payload`. Concept identity continues to come from the
+LearningObjective/LearningState relationship; LearningActivity does not
+duplicate it or store provider/model fields.
 
 Activity types:
 
@@ -1708,7 +1764,20 @@ The LLM does not directly create review dates.
 
 # 59. Generated Artifact Reuse Constraints
 
-A reusable generated artifact should match at minimum:
+Artifact reuse after a Learning Engine reuse decision requires both:
+
+1. the exact prior LearningActivity selected by the Learning Engine through
+   `reuseLearningActivityId`; and
+2. artifact-level eligibility, authorization, grounding, and provenance
+   validation.
+
+The application resolves that exact activity within the same StudyMission and
+applicable LearningObjective/context, then resolves its exact GeneratedArtifact.
+It does not search for another pedagogically compatible activity or artifact.
+Exact identity is necessary but not sufficient.
+
+A reusable generated artifact must have `reusable = true` and
+`validation_status = VALIDATED` and should match at minimum:
 
 ``` text
 task_type
@@ -1718,6 +1787,16 @@ grounding_mode
 source version(s)
 learning objective / concept
 ```
+
+The artifact owner must be the mission owner. Grounded reuse must retain
+authorized SourceReference provenance within the mission's frozen
+MaterialVersion/DocumentNode scope, reject deleted material, and satisfy all
+applicable grounding constraints. GeneratedArtifact remains AI-content
+provenance and does not own pedagogical compatibility.
+
+Reuse creates a new LearningActivity row; it never reactivates or mutates the
+selected prior activity. The new activity may reference the same validated
+GeneratedArtifact and source provenance.
 
 Personalized feedback should default to `reusable = false`.
 
@@ -2545,6 +2624,12 @@ and:
                                                         uniqueness, and
                                                         version/node
                                                         relationship integrity
+
+  1.0.4             2026-09-29        Project           Aligned durable activity
+                                      Hippocampus Team  compatibility metadata
+                                                        and exact reusable
+                                                        LearningActivity identity
+                                                        with ADR-0006
 
   -----------------------------------------------------------------------
 
