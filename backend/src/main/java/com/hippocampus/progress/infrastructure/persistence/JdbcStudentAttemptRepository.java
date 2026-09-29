@@ -19,7 +19,7 @@ import com.hippocampus.progress.port.StudentAttemptRepository;
 
 @Repository
 @Lazy
-public final class JdbcStudentAttemptRepository implements StudentAttemptRepository {
+public class JdbcStudentAttemptRepository implements StudentAttemptRepository {
     private static final String APPEND = """
             INSERT INTO student_attempts (
                 id, user_id, learning_activity_id, attempt_number, response_text,

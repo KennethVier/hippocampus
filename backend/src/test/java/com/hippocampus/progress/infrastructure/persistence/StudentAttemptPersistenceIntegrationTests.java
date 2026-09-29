@@ -14,6 +14,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
 
 import com.hippocampus.progress.domain.StudentAttempt;
 import com.hippocampus.progress.port.StudentAttemptRepository;
@@ -140,7 +141,9 @@ class StudentAttemptPersistenceIntegrationTests extends PostgresIntegrationTestS
             assertThatThrownBy(() -> repository.append(new StudentAttempt(
                     UUID.randomUUID(), fixture.foreignOwnerId(), fixture.firstActivityId(), 1,
                     null, null, BASE_TIME, "PENDING", null, null, BASE_TIME)))
-                    .isInstanceOf(IllegalArgumentException.class);
+                    .isInstanceOf(InvalidDataAccessApiUsageException.class)
+                    .hasCauseInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("learning activity does not exist or is not owned by attempt user");
             assertThat(attemptCount()).isZero();
         }
     }
@@ -282,6 +285,7 @@ class StudentAttemptPersistenceIntegrationTests extends PostgresIntegrationTestS
                 var result = statement.executeQuery("""
                         SELECT conname FROM pg_constraint
                         WHERE conrelid = 'public.student_attempts'::regclass
+                          AND contype IN ('p', 'u', 'f', 'c')
                         """)) {
             var names = new java.util.HashSet<String>();
             while (result.next()) names.add(result.getString(1));
