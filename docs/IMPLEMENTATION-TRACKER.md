@@ -1872,7 +1872,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** Database
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Keep immutable attempt history.
 - **Build:** Persist attempt_number, response payload/text, evaluation status/artifact references.
 - **How it works:** Retries create new rows, never overwrite prior attempt.
@@ -1881,7 +1881,7 @@ responsibilities remain outside P5-06.
 - **Expected result:** Attempt history is traceable.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 18
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Added Flyway V21 (`V21__create_student_attempts.sql`) and the progress-owned, framework-independent `StudentAttempt` domain model, append-only repository port, and JDBC persistence adapter. The schema preserves immutable attempt history with positive per-activity attempt numbering, restrictive foreign keys, nullable response/evaluation artifact fields, and a unique `(learning_activity_id, attempt_number)` constraint. Append authorization resolves ownership through LearningActivity and StudyMission, and history reads are owner-scoped and ordered by attempt number. User-reported focused validation passed for `StudentAttemptPersistenceIntegrationTests`, `FlywayMigrationApplicationTests`, and `HippocampusArchitectureTests`. No P7-03+ behavior, API/controller, evaluation workflow, evidence update, provider/RAG call, new dependency, or undocumented architecture deviation was introduced.
 - **Notes / blockers:** _None_
 
 ## P7-03 — Implement StartStudyMissionUseCase
