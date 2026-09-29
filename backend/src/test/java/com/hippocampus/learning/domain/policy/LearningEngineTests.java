@@ -62,6 +62,7 @@ class LearningEngineTests {
                 new LearningTimeContext(30, 0, 30),
                 sourceStrict,
                 List.of(new RecentLearningActivity(
+                        UUID.randomUUID(),
                         "cardiac-output",
                         LearningActionType.COMMUNICATE_LIMITATION.name(),
                         null,
@@ -94,6 +95,7 @@ class LearningEngineTests {
     @Test
     void correctiveScaffoldingOverridesOrdinaryProgression() {
         var failure = new RecentLearningActivity(
+                UUID.randomUUID(),
                 "cardiac-output",
                 LearningActionType.APPLY.name(),
                 null,
@@ -342,6 +344,7 @@ class LearningEngineTests {
                 templateSignature,
                 LearningActivityIntent.STANDARD);
         RecentLearningActivity priorActivity = new RecentLearningActivity(
+                UUID.randomUUID(),
                 "cardiac-output",
                 actionType.name(),
                 "CLOSURE_RESPONSE",
@@ -370,6 +373,7 @@ class LearningEngineTests {
 
     private static RecentLearningActivity failedApply(LearningDifficulty difficulty) {
         return new RecentLearningActivity(
+                UUID.randomUUID(),
                 "cardiac-output",
                 LearningActionType.APPLY.name(),
                 null,
@@ -383,6 +387,7 @@ class LearningEngineTests {
 
     private static RecentLearningActivity validatedActivity(LearningActionType actionType) {
         return new RecentLearningActivity(
+                UUID.randomUUID(),
                 "cardiac-output",
                 actionType.name(),
                 null,

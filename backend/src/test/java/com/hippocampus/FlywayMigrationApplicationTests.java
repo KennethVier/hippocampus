@@ -58,8 +58,11 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("19");
         assertSuccessfulFlywayVersion("20");
         assertSuccessfulFlywayVersion("21");
+        assertSuccessfulFlywayVersion("22");
+        assertSuccessfulFlywayVersion("23");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
+        assertLearningActivityCompatibilityColumns();
         assertSpringSessionSchema();
         assertUsersColumnsMatchContract();
         assertUsersPrimaryKey();
@@ -103,8 +106,11 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("19");
         assertSuccessfulFlywayVersion("20");
         assertSuccessfulFlywayVersion("21");
+        assertSuccessfulFlywayVersion("22");
+        assertSuccessfulFlywayVersion("23");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
+        assertLearningActivityCompatibilityColumns();
         assertSpringSessionSchema();
         assertLearningOrganizationSchema();
         assertMaterialFoundationSchema();
@@ -113,6 +119,34 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertDocumentStructureSchema();
         assertEmbeddingSchema();
         assertAiDiagnosticsSchema();
+    }
+
+    @Test
+    void v23BackfillsUnambiguousLegacyLearningActivityType() throws Exception {
+        try (var context = startMigrationApplicationAtTarget("22")) {
+            assertThat(context.isActive()).isTrue();
+        }
+        UUID activityId = insertLegacyLearningActivity("RETRIEVE");
+
+        try (var context = startMigrationApplication()) {
+            assertThat(context.isActive()).isTrue();
+        }
+
+        assertThat(learningActivityColumn(activityId, "represented_action_type"))
+                .isEqualTo("RETRIEVE");
+    }
+
+    @Test
+    void v23FailsClosedForAmbiguousLegacyVisualLearningActivity() throws Exception {
+        try (var context = startMigrationApplicationAtTarget("22")) {
+            assertThat(context.isActive()).isTrue();
+        }
+        UUID activityId = insertLegacyLearningActivity("VISUAL");
+
+        assertThatThrownBy(FlywayMigrationApplicationTests::startMigrationApplication)
+                .hasStackTraceContaining(
+                        "V23 cannot safely reconstruct represented pedagogical action for legacy VISUAL learning activities");
+        assertThat(learningActivityColumn(activityId, "activity_type")).isEqualTo("VISUAL");
     }
 
     @Test
@@ -389,6 +423,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                     "chunk_visual_links",
                     "chunks",
                     "document_nodes",
+                    "generated_artifact_sources",
                     "generated_artifacts",
                     "index_generations",
                     "learning_activities",
@@ -411,6 +446,29 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                     "user_password_credentials",
                     "users",
                     "visual_assets");
+        }
+    }
+
+    private static void assertLearningActivityCompatibilityColumns() throws SQLException {
+        try (var connection = openPostgresConnection();
+                var statement = connection.createStatement();
+                var result = statement.executeQuery("""
+                        SELECT column_name, is_nullable
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                          AND table_name = 'learning_activities'
+                          AND column_name IN (
+                              'represented_action_type', 'question_intent', 'template_signature')
+                        ORDER BY column_name
+                        """)) {
+            Map<String, String> actual = new java.util.LinkedHashMap<>();
+            while (result.next()) {
+                actual.put(result.getString("column_name"), result.getString("is_nullable"));
+            }
+            assertThat(actual).containsExactly(
+                    Map.entry("question_intent", "YES"),
+                    Map.entry("represented_action_type", "NO"),
+                    Map.entry("template_signature", "YES"));
         }
     }
 
@@ -503,6 +561,68 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 .toAbsolutePath().normalize().toString();
         return startApplicationWithFlywayAndArguments(
                 new Class<?>[0], "--hippocampus.materials.processing.pdf.ocr-executable=" + executable);
+    }
+
+    private static org.springframework.context.ConfigurableApplicationContext startMigrationApplicationAtTarget(
+            String target) {
+        return startApplicationWithFlywayAndArguments(
+                new Class<?>[0],
+                "--spring.flyway.target=" + target,
+                "--spring.jpa.hibernate.ddl-auto=none");
+    }
+
+    private static UUID insertLegacyLearningActivity(String activityType) throws SQLException {
+        UUID userId = UUID.randomUUID();
+        UUID subjectId = UUID.randomUUID();
+        UUID topicId = UUID.randomUUID();
+        UUID missionId = UUID.randomUUID();
+        UUID objectiveId = UUID.randomUUID();
+        UUID activityId = UUID.randomUUID();
+        try (var connection = openPostgresConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    INSERT INTO users (id, email, status, created_at, updated_at)
+                    VALUES ('%s', '%s@example.test', 'ACTIVE', now(), now())
+                    """.formatted(userId, userId));
+            statement.executeUpdate("""
+                    INSERT INTO subjects (id, user_id, name, status, created_at, updated_at)
+                    VALUES ('%s', '%s', 'Migration subject', 'ACTIVE', now(), now())
+                    """.formatted(subjectId, userId));
+            statement.executeUpdate("""
+                    INSERT INTO topics (id, subject_id, name, status, created_at, updated_at)
+                    VALUES ('%s', '%s', 'Migration topic', 'ACTIVE', now(), now())
+                    """.formatted(topicId, subjectId));
+            statement.executeUpdate("""
+                    INSERT INTO study_missions (
+                        id, user_id, topic_id, status, grounding_mode, created_at, updated_at)
+                    VALUES ('%s', '%s', '%s', 'ACTIVE', 'STRICT_SOURCE', now(), now())
+                    """.formatted(missionId, userId, topicId));
+            statement.executeUpdate("""
+                    INSERT INTO learning_objectives (
+                        id, study_mission_id, objective_text, status, created_at)
+                    VALUES ('%s', '%s', 'Migration objective', 'ACTIVE', now())
+                    """.formatted(objectiveId, missionId));
+            statement.executeUpdate("""
+                    INSERT INTO learning_activities (
+                        id, study_mission_id, learning_objective_id, activity_type,
+                        status, sequence_number, source_required, created_at)
+                    VALUES ('%s', '%s', '%s', '%s', 'COMPLETED', 1, false, now())
+                    """.formatted(activityId, missionId, objectiveId, activityType));
+        }
+        return activityId;
+    }
+
+    private static String learningActivityColumn(UUID activityId, String column) throws SQLException {
+        try (var connection = openPostgresConnection();
+                var statement = connection.prepareStatement(
+                        "SELECT " + column + " FROM learning_activities WHERE id = ?")) {
+            statement.setObject(1, activityId);
+            try (var result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                String value = result.getString(1);
+                assertThat(result.next()).isFalse();
+                return value;
+            }
+        }
     }
 
     private static void assertVisualAssetSchema() throws SQLException {

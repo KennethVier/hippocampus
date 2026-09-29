@@ -10,7 +10,8 @@ public record NextLearningAction(
         LearningDifficulty difficulty,
         String rationaleCode,
         boolean aiTaskRequired,
-        LearningActionConstraints constraints) {
+        LearningActionConstraints constraints,
+        UUID reuseLearningActivityId) {
 
     public NextLearningAction {
         Objects.requireNonNull(actionType, "actionType must not be null");
@@ -23,6 +24,23 @@ public record NextLearningAction(
             throw new IllegalArgumentException("rationaleCode must not be blank");
         }
         Objects.requireNonNull(constraints, "constraints must not be null");
+        if ((actionType == LearningActionType.REUSE_VALIDATED_CONTENT)
+                != (reuseLearningActivityId != null)) {
+            throw new IllegalArgumentException(
+                    "reuseLearningActivityId must be present exactly for REUSE_VALIDATED_CONTENT");
+        }
+    }
+
+    public NextLearningAction(
+            LearningActionType actionType,
+            UUID learningObjectiveId,
+            String conceptKey,
+            LearningDifficulty difficulty,
+            String rationaleCode,
+            boolean aiTaskRequired,
+            LearningActionConstraints constraints) {
+        this(actionType, learningObjectiveId, conceptKey, difficulty, rationaleCode,
+                aiTaskRequired, constraints, null);
     }
 
     public NextLearningAction(
@@ -39,7 +57,8 @@ public record NextLearningAction(
                 difficulty,
                 rationaleCode,
                 aiTaskRequired,
-                LearningActionConstraints.unconstrained());
+                LearningActionConstraints.unconstrained(),
+                null);
     }
 
     public NextLearningAction withRationale(String newRationaleCode) {
@@ -50,6 +69,7 @@ public record NextLearningAction(
                 difficulty,
                 newRationaleCode,
                 aiTaskRequired,
-                constraints);
+                constraints,
+                reuseLearningActivityId);
     }
 }

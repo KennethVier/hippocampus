@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.hippocampus.learning.domain.LearningActivity;
+import com.hippocampus.learning.domain.LearningActionType;
 import com.hippocampus.learning.domain.LearningActivityType;
 import com.hippocampus.learning.domain.LearningDifficulty;
 import com.hippocampus.learning.domain.LearningObjective;
@@ -210,12 +211,14 @@ class StudyMissionPersistenceIntegrationTests extends PostgresIntegrationTestSup
                                 "Concept 2", 2, LearningObjectiveStatus.PENDING, createdAt)),
                 List.of(
                         new LearningActivity(activityOneId, objectiveOneId,
-                                LearningActivityType.UNDERSTAND, "COMPLETED",
+                                LearningActivityType.UNDERSTAND, LearningActionType.UNDERSTAND,
+                                null, null, "COMPLETED",
                                 LearningDifficulty.FOUNDATIONAL, 1, null, true,
                                 createdAt.plusSeconds(60), createdAt.plusSeconds(120), createdAt,
                                 Set.of(fixture.sourceReferenceId())),
                         new LearningActivity(activityTwoId, objectiveTwoId,
-                                LearningActivityType.APPLY, "ACTIVE",
+                                LearningActivityType.APPLY, LearningActionType.APPLY,
+                                null, null, "ACTIVE",
                                 LearningDifficulty.APPLIED, 2, fixture.generatedArtifactId(), true,
                                 createdAt.plusSeconds(180), null, createdAt, Set.of())),
                 createdAt, createdAt.plusSeconds(180));

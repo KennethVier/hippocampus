@@ -43,7 +43,48 @@ class AiRagFailurePolicyTests {
         var retried = policy.handle(state(false, false), LearningDependencyFailure.RAG_FAILED, failedAction());
 
         assertThat(reused.actionType()).isEqualTo(LearningActionType.REUSE_VALIDATED_CONTENT);
+        assertThat(reused.reuseLearningActivityId()).isNotNull();
         assertThat(retried.actionType()).isEqualTo(LearningActionType.RETRY_DEPENDENCY);
+        assertThat(retried.reuseLearningActivityId()).isNull();
+    }
+
+    @Test
+    void selectsMostRecentExactCompatibleHistoryIdentity() {
+        UUID olderId = UUID.randomUUID();
+        UUID newestId = UUID.randomUUID();
+        var history = List.of(
+                PolicyTestFixtures.activity(
+                        olderId, LearningActionType.APPLY, LearningDifficulty.INTERMEDIATE,
+                        null, null, null, LearningActivityIntent.STANDARD, true),
+                PolicyTestFixtures.activity(
+                        newestId, LearningActionType.APPLY, LearningDifficulty.INTERMEDIATE,
+                        null, null, null, LearningActivityIntent.STANDARD, true));
+        LearningState state = PolicyTestFixtures.state(
+                MissionLifecycleState.ACTIVE, LearningStage.APPLICATION,
+                Map.of(EvidenceDimension.APPLICATION, EvidenceStrength.WEAK), history, false,
+                new SourceCapability(SourceReadiness.LIMITED, false, false, false),
+                new LearningTimeContext(30, 20, 10), strictConstraints());
+
+        var action = policy.handle(state, LearningDependencyFailure.RAG_FAILED, failedAction());
+
+        assertThat(action.reuseLearningActivityId()).isEqualTo(newestId);
+    }
+
+    @Test
+    void incompatibleHistoryDoesNotProduceReuseTarget() {
+        var history = List.of(PolicyTestFixtures.activity(
+                UUID.randomUUID(), LearningActionType.RETRIEVE, LearningDifficulty.INTERMEDIATE,
+                null, null, null, LearningActivityIntent.STANDARD, true));
+        LearningState state = PolicyTestFixtures.state(
+                MissionLifecycleState.ACTIVE, LearningStage.APPLICATION,
+                Map.of(EvidenceDimension.APPLICATION, EvidenceStrength.WEAK), history, false,
+                new SourceCapability(SourceReadiness.LIMITED, false, false, false),
+                new LearningTimeContext(30, 20, 10), strictConstraints());
+
+        var action = policy.handle(state, LearningDependencyFailure.RAG_FAILED, failedAction());
+
+        assertThat(action.actionType()).isEqualTo(LearningActionType.RETRY_DEPENDENCY);
+        assertThat(action.reuseLearningActivityId()).isNull();
     }
 
     @Test

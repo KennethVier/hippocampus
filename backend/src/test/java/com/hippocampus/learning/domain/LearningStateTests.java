@@ -76,6 +76,7 @@ class LearningStateTests {
         SourceCapability sourceCapability = new SourceCapability(SourceReadiness.READY, true, true, false);
         LearningTimeContext timeContext = new LearningTimeContext(30, 18, 12);
         RecentLearningActivity activity = new RecentLearningActivity(
+                UUID.randomUUID(),
                 "posterior-cord", "RETRIEVAL_QUESTION", "MECHANISM_RECALL",
                 LearningDifficulty.FOUNDATIONAL, sessionId);
 
@@ -196,6 +197,7 @@ class LearningStateTests {
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("readiness");
         assertThatThrownBy(() -> new RecentLearningActivity(
+                        UUID.randomUUID(),
                         "concept", "activity", null, null, UUID.randomUUID()))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("difficulty");
@@ -213,14 +215,17 @@ class LearningStateTests {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("conceptKey");
         assertThatThrownBy(() -> new RecentLearningActivity(
+                        UUID.randomUUID(),
                         " ", "RETRIEVAL", null, LearningDifficulty.FOUNDATIONAL, UUID.randomUUID()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("conceptKey");
         assertThatThrownBy(() -> new RecentLearningActivity(
+                        UUID.randomUUID(),
                         "concept", " ", null, LearningDifficulty.FOUNDATIONAL, UUID.randomUUID()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("activityType");
         assertThatThrownBy(() -> new RecentLearningActivity(
+                        UUID.randomUUID(),
                         "concept", "RETRIEVAL", " ", LearningDifficulty.FOUNDATIONAL, UUID.randomUUID()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("questionIntent");
@@ -315,6 +320,7 @@ class LearningStateTests {
 
     private static RecentLearningActivity activity() {
         return new RecentLearningActivity(
+                UUID.randomUUID(),
                 "posterior-cord",
                 "RETRIEVAL_QUESTION",
                 null,

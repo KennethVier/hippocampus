@@ -40,6 +40,24 @@ final class PolicyActions {
                 difficulty,
                 rationaleCode,
                 aiTaskRequired,
-                constraints);
+                constraints,
+                null);
+    }
+
+    static NextLearningAction reuse(
+            LearningState state,
+            LearningDifficulty difficulty,
+            String rationaleCode,
+            LearningActionConstraints constraints,
+            java.util.UUID learningActivityId) {
+        return new NextLearningAction(
+                LearningActionType.REUSE_VALIDATED_CONTENT,
+                state.learningObjectiveId(),
+                state.conceptKey(),
+                difficulty,
+                rationaleCode,
+                false,
+                constraints,
+                learningActivityId);
     }
 }

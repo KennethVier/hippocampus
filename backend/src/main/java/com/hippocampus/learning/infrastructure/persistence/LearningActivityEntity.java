@@ -5,6 +5,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.hippocampus.learning.domain.LearningActivity;
+import com.hippocampus.learning.domain.LearningActionType;
 import com.hippocampus.learning.domain.LearningActivityType;
 import com.hippocampus.learning.domain.LearningDifficulty;
 
@@ -31,6 +32,16 @@ public class LearningActivityEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "activity_type", nullable = false)
     private LearningActivityType activityType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "represented_action_type", nullable = false)
+    private LearningActionType representedActionType;
+
+    @Column(name = "question_intent")
+    private String questionIntent;
+
+    @Column(name = "template_signature")
+    private String templateSignature;
 
     @Column(name = "status", nullable = false)
     private String status;
@@ -69,6 +80,9 @@ public class LearningActivityEntity {
     void apply(LearningActivity activity) {
         learningObjectiveId = activity.learningObjectiveId();
         activityType = activity.activityType();
+        representedActionType = activity.representedActionType();
+        questionIntent = activity.questionIntent();
+        templateSignature = activity.templateSignature();
         status = activity.status();
         difficulty = activity.difficulty();
         sequenceNumber = activity.sequenceNumber();
@@ -79,7 +93,8 @@ public class LearningActivityEntity {
     }
 
     LearningActivity toDomain(Set<UUID> sourceReferenceIds) {
-        return new LearningActivity(id, learningObjectiveId, activityType, status, difficulty,
+        return new LearningActivity(id, learningObjectiveId, activityType, representedActionType,
+                questionIntent, templateSignature, status, difficulty,
                 sequenceNumber, generatedArtifactId, sourceRequired, startedAt, completedAt,
                 createdAt, sourceReferenceIds);
     }

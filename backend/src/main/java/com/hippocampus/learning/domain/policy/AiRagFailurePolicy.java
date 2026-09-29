@@ -15,6 +15,7 @@ import com.hippocampus.learning.domain.LearningState;
 import com.hippocampus.learning.domain.NextLearningAction;
 import com.hippocampus.learning.domain.SourceRequirement;
 import java.util.Objects;
+import java.util.Optional;
 
 public final class AiRagFailurePolicy {
 
@@ -33,9 +34,9 @@ public final class AiRagFailurePolicy {
             case RAG_INSUFFICIENT -> failedAction.constraints().supplementalKnowledgeAllowed()
                     ? supplementalAlternative(state, failedAction)
                     : limitation(state, failedAction, SOURCE_UNAVAILABLE);
-            case RAG_FAILED -> hasCompatibleValidatedContent(state, failedAction)
-                    ? reuseValidated(state, failedAction)
-                    : retryDependency(state, failedAction, DEPENDENCY_RETRY);
+            case RAG_FAILED -> compatibleValidatedContent(state, failedAction)
+                    .map(activity -> reuseValidated(state, failedAction, activity.learningActivityId()))
+                    .orElseGet(() -> retryDependency(state, failedAction, DEPENDENCY_RETRY));
             case AI_UNAVAILABLE -> handleAiUnavailable(state, failedAction);
             case AI_EVALUATION_FAILED -> retryDependency(state, failedAction, AI_EVALUATION_FAILED);
         };
@@ -43,8 +44,9 @@ public final class AiRagFailurePolicy {
 
     private static NextLearningAction handleAiUnavailable(
             LearningState state, NextLearningAction failedAction) {
-        if (hasCompatibleValidatedContent(state, failedAction)) {
-            return reuseValidated(state, failedAction);
+        var compatible = compatibleValidatedContent(state, failedAction);
+        if (compatible.isPresent()) {
+            return reuseValidated(state, failedAction, compatible.orElseThrow().learningActivityId());
         }
         if (failedAction.constraints().sourceRequirement() != SourceRequirement.NONE
                 && state.sourceCapability().groundedTextAvailable()) {
@@ -59,27 +61,26 @@ public final class AiRagFailurePolicy {
                 LearningActionConstraints.unconstrained());
     }
 
-    private static boolean hasCompatibleValidatedContent(
+    private static Optional<com.hippocampus.learning.domain.RecentLearningActivity> compatibleValidatedContent(
             LearningState state, NextLearningAction failedAction) {
-        return state.recentActivityHistory().stream()
-                .anyMatch(activity -> activity.conceptKey().equals(state.conceptKey())
-                        && activity.validatedContent()
+        return PolicyHistory.recentForConcept(state).stream()
+                .filter(activity -> activity.validatedContent()
                         && PolicyHistory.represents(activity, failedAction.actionType())
                         && activity.difficulty() == failedAction.difficulty()
                         && Objects.equals(activity.questionIntent(), failedAction.constraints().questionIntent())
                         && Objects.equals(activity.templateSignature(), failedAction.constraints().templateSignature())
-                        && !failedAction.constraints().visualRequired());
+                        && !failedAction.constraints().visualRequired())
+                .findFirst();
     }
 
     private static NextLearningAction reuseValidated(
-            LearningState state, NextLearningAction failedAction) {
-        return PolicyActions.action(
+            LearningState state, NextLearningAction failedAction, java.util.UUID learningActivityId) {
+        return PolicyActions.reuse(
                 state,
-                LearningActionType.REUSE_VALIDATED_CONTENT,
                 failedAction.difficulty(),
                 REUSE_VALIDATED_CONTENT,
-                false,
-                failedAction.constraints());
+                failedAction.constraints(),
+                learningActivityId);
     }
 
     private static NextLearningAction sourceOnly(
