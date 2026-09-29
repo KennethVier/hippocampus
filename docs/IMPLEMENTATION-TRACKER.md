@@ -1888,7 +1888,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** Application
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Create bounded mission from topic, time and sources.
 - **Build:** Validate ownership/readiness, freeze allowed material versions, derive objectives/initial state and first LearningEngine action.
 - **How it works:** RAG/AI called only if first action needs content.
@@ -1897,7 +1897,7 @@ responsibilities remain outside P5-06.
 - **Expected result:** Starting a mission yields first valid activity or clear limitation.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 19
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Focused validation passed: `StartStudyMissionUseCaseTests`, `StudyMissionSourceCatalogIntegrationTests`, and `HippocampusArchitectureTests` — 21 tests, 0 failures, 0 errors, 0 skipped; Maven `BUILD SUCCESS` (2026-09-29).
 - **Notes / blockers:** _None_
 
 ## P7-04 — Implement activity materialization
