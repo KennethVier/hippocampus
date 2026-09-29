@@ -57,6 +57,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("18");
         assertSuccessfulFlywayVersion("19");
         assertSuccessfulFlywayVersion("20");
+        assertSuccessfulFlywayVersion("21");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -101,6 +102,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("18");
         assertSuccessfulFlywayVersion("19");
         assertSuccessfulFlywayVersion("20");
+        assertSuccessfulFlywayVersion("21");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertSpringSessionSchema();
@@ -400,6 +402,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                     "source_references",
                     "spring_session",
                     "spring_session_attributes",
+                    "student_attempts",
                     "study_missions",
                     "subjects",
                     "subtopics",
