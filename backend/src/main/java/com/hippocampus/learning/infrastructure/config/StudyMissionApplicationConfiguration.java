@@ -11,10 +11,16 @@ import org.springframework.context.annotation.Lazy;
 
 import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.learning.application.StartStudyMissionUseCase;
+import com.hippocampus.learning.application.MaterializeLearningActivityUseCase;
+import com.hippocampus.learning.application.PersistMaterializedActivity;
 import com.hippocampus.learning.domain.LearningActionType;
 import com.hippocampus.learning.domain.LearningEngine;
 import com.hippocampus.learning.domain.LearningPolicyConfiguration;
 import com.hippocampus.learning.port.StudyMissionRepository;
+import com.hippocampus.learning.port.ActivityAiTaskPort;
+import com.hippocampus.learning.port.ActivityEvidencePort;
+import com.hippocampus.learning.port.ActivitySourceReferenceAuthorization;
+import com.hippocampus.learning.port.GeneratedArtifactRepository;
 import com.hippocampus.learning.port.StudyMissionSourceCatalog;
 import com.hippocampus.learning.port.SubtopicRepository;
 import com.hippocampus.learning.port.TopicRepository;
@@ -68,5 +74,32 @@ public class StudyMissionApplicationConfiguration {
                 missions,
                 learningEngine,
                 studyMissionClock);
+    }
+
+    @Bean
+    @Lazy
+    @ConditionalOnMissingBean
+    @ConditionalOnBean({GeneratedArtifactRepository.class, ActivitySourceReferenceAuthorization.class})
+    PersistMaterializedActivity persistMaterializedActivity(
+            StudyMissionRepository missions,
+            GeneratedArtifactRepository artifacts,
+            ActivitySourceReferenceAuthorization sourceAuthorization) {
+        return new PersistMaterializedActivity(missions, artifacts, sourceAuthorization);
+    }
+
+    @Bean
+    @Lazy
+    @ConditionalOnMissingBean
+    @ConditionalOnBean({ActivityEvidencePort.class, ActivityAiTaskPort.class,
+            PersistMaterializedActivity.class})
+    MaterializeLearningActivityUseCase materializeLearningActivityUseCase(
+            CurrentUser currentUser,
+            StudyMissionRepository missions,
+            ActivityEvidencePort evidencePort,
+            ActivityAiTaskPort aiTaskPort,
+            PersistMaterializedActivity persistence,
+            Clock studyMissionClock) {
+        return new MaterializeLearningActivityUseCase(
+                currentUser, missions, evidencePort, aiTaskPort, persistence, studyMissionClock);
     }
 }

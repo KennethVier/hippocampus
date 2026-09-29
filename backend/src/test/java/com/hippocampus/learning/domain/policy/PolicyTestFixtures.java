@@ -89,7 +89,21 @@ final class PolicyTestFixtures {
             String templateSignature,
             LearningActivityIntent repetitionIntent,
             boolean validatedContent) {
+        return activity(UUID.randomUUID(), type, difficulty, outcome, questionIntent,
+                templateSignature, repetitionIntent, validatedContent);
+    }
+
+    static RecentLearningActivity activity(
+            UUID learningActivityId,
+            LearningActionType type,
+            LearningDifficulty difficulty,
+            AttemptOutcome outcome,
+            String questionIntent,
+            String templateSignature,
+            LearningActivityIntent repetitionIntent,
+            boolean validatedContent) {
         return new RecentLearningActivity(
+                learningActivityId,
                 "cardiac-output",
                 type.name(),
                 questionIntent,

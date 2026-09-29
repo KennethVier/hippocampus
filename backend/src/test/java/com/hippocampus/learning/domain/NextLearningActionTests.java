@@ -88,6 +88,7 @@ class NextLearningActionTests {
         assertThat(json.get("rationaleCode").asText()).isEqualTo("CONNECTION_EVIDENCE_NEEDED");
         assertThat(json.get("aiTaskRequired").asBoolean()).isTrue();
         assertThat(json.get("constraints").get("sourceRequirement").asText()).isEqualTo("NONE");
+        assertThat(json.get("reuseLearningActivityId").isNull()).isTrue();
     }
 
     @Test
@@ -153,7 +154,8 @@ class NextLearningActionTests {
                 "difficulty",
                 "rationaleCode",
                 "aiTaskRequired",
-                "constraints");
+                "constraints",
+                "reuseLearningActivityId");
         assertThat(componentNames).noneMatch(name -> {
             String lowerName = name.toLowerCase();
             return lowerName.contains("prompt")
@@ -167,5 +169,28 @@ class NextLearningActionTests {
                 || type.contains("hippocampus.ai")
                 || type.contains("hippocampus.rag"));
         assertThat(NextLearningAction.class.getAnnotations()).isEmpty();
+    }
+
+    @Test
+    void enforcesExactReuseTargetInvariant() {
+        UUID objectiveId = UUID.randomUUID();
+        UUID activityId = UUID.randomUUID();
+
+        NextLearningAction reuse = new NextLearningAction(
+                LearningActionType.REUSE_VALIDATED_CONTENT, objectiveId, "concept",
+                LearningDifficulty.FOUNDATIONAL, "REUSE", false,
+                LearningActionConstraints.unconstrained(), activityId);
+
+        assertThat(reuse.reuseLearningActivityId()).isEqualTo(activityId);
+        assertThatThrownBy(() -> new NextLearningAction(
+                LearningActionType.REUSE_VALIDATED_CONTENT, objectiveId, "concept",
+                LearningDifficulty.FOUNDATIONAL, "REUSE", false,
+                LearningActionConstraints.unconstrained(), null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new NextLearningAction(
+                LearningActionType.UNDERSTAND, objectiveId, "concept",
+                LearningDifficulty.FOUNDATIONAL, "DIRECT", true,
+                LearningActionConstraints.unconstrained(), activityId))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

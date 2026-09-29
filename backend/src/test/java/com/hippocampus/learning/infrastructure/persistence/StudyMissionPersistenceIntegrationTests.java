@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.hippocampus.learning.domain.LearningActivity;
+import com.hippocampus.learning.domain.LearningActionType;
 import com.hippocampus.learning.domain.LearningActivityType;
 import com.hippocampus.learning.domain.LearningDifficulty;
 import com.hippocampus.learning.domain.LearningObjective;
@@ -210,12 +211,14 @@ class StudyMissionPersistenceIntegrationTests extends PostgresIntegrationTestSup
                                 "Concept 2", 2, LearningObjectiveStatus.PENDING, createdAt)),
                 List.of(
                         new LearningActivity(activityOneId, objectiveOneId,
-                                LearningActivityType.UNDERSTAND, "COMPLETED",
+                                LearningActivityType.UNDERSTAND, LearningActionType.UNDERSTAND,
+                                null, null, "COMPLETED",
                                 LearningDifficulty.FOUNDATIONAL, 1, null, true,
                                 createdAt.plusSeconds(60), createdAt.plusSeconds(120), createdAt,
                                 Set.of(fixture.sourceReferenceId())),
                         new LearningActivity(activityTwoId, objectiveTwoId,
-                                LearningActivityType.APPLY, "ACTIVE",
+                                LearningActivityType.APPLY, LearningActionType.APPLY,
+                                null, null, "ACTIVE",
                                 LearningDifficulty.APPLIED, 2, fixture.generatedArtifactId(), true,
                                 createdAt.plusSeconds(180), null, createdAt, Set.of())),
                 createdAt, createdAt.plusSeconds(180));
@@ -339,9 +342,10 @@ class StudyMissionPersistenceIntegrationTests extends PostgresIntegrationTestSup
         try (var connection = openPostgresConnection(); var statement = connection.createStatement()) {
             statement.executeUpdate("""
                     INSERT INTO learning_activities (
-                        id, study_mission_id, learning_objective_id, activity_type, status,
-                        sequence_number, generated_artifact_id, source_required, created_at)
-                    VALUES ('%s', '%s', '%s', 'RETRIEVE', 'PENDING', %d, %s, false, now())
+                        id, study_mission_id, learning_objective_id, activity_type,
+                        represented_action_type, status, sequence_number, generated_artifact_id,
+                        source_required, created_at)
+                    VALUES ('%s', '%s', '%s', 'RETRIEVE', 'RETRIEVE', 'PENDING', %d, %s, false, now())
                     """.formatted(activityId, missionId, objectiveId, sequence, artifact));
         }
         return activityId;

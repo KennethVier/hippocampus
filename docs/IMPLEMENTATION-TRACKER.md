@@ -1904,7 +1904,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** Application
 - **Priority:** Must
-- **Status:** Blocked
+- **Status:** Ready for Review
 - **Goal:** Turn NextLearningAction into concrete activity.
 - **Build:** For deterministic actions create directly; for AI tasks retrieve EvidencePackage, execute typed task, validate, persist artifact/activity/source refs.
 - **How it works:** Engine decides kind; AI creates bounded content.
@@ -1913,8 +1913,8 @@ responsibilities remain outside P5-06.
 - **Expected result:** Activity content is grounded and typed.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 11,18,19; ADR-0006
-- **Evidence / link:** Partial P7-04 implementation is preserved. Activity materialization exposed a durable reuse-target contract gap: Phase 6 can determine compatible validated prior content, but the current contracts do not identify the exact persisted LearningActivity selected by that decision. Resolution: ADR-0006 — Explicit Reusable Learning Activity Identity.
-- **Notes / blockers:** Implementation must not select newest/same-objective content and resumes only after ADR-0006 is accepted/merged. Empty-evidence and deleted-material review corrections remain pending alongside the reuse-contract implementation. P7-04 is not Ready for Review and is not Done.
+- **Evidence / link:** ADR-0006 implemented. V22 preserves generated-artifact provenance and V23 adds durable represented action, question intent, and template signature metadata. Learning Engine reuse emits the exact compatible LearningActivity identity; materialization resolves that identity, reconstructs represented actions, rejects required/visual empty evidence before AI, and rejects deleted or unauthorized source provenance. Final focused validation passed: `NextLearningActionTests`, `AiRagFailurePolicyTests`, `UnderstandRetrievePolicyTests`, `ApplicationPolicyTests`, `LearningEngineTests`, `LearningEngineScenarioTests`, `Phase6LearningEngineGateTests`, `MaterializeLearningActivityUseCaseTests`, `ActivityMaterializationPersistenceIntegrationTests`, `FlywayMigrationApplicationTests`, and `HippocampusArchitectureTests` — 722 tests, 0 failures, 0 errors, 0 skipped; Maven `BUILD SUCCESS`; `HippocampusArchitectureTests` passed; `git diff --check` passed. General external implementation review: **APPROVED**. Independent security review: **SECURITY PASS** (2026-09-29).
+- **Notes / blockers:** External implementation and security gates are complete. P7-04 is not Done.
 
 ## P7-05 — Implement SubmitActivityResponseUseCase
 

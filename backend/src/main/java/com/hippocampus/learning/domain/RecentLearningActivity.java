@@ -4,6 +4,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 public record RecentLearningActivity(
+        UUID learningActivityId,
         String conceptKey,
         String activityType,
         String questionIntent,
@@ -15,6 +16,7 @@ public record RecentLearningActivity(
         boolean validatedContent) {
 
     public RecentLearningActivity {
+        Objects.requireNonNull(learningActivityId, "learningActivityId must not be null");
         conceptKey = requireNonBlank(conceptKey, "conceptKey");
         activityType = requireNonBlank(activityType, "activityType");
         if (questionIntent != null && questionIntent.isBlank()) {
@@ -29,12 +31,14 @@ public record RecentLearningActivity(
     }
 
     public RecentLearningActivity(
+            UUID learningActivityId,
             String conceptKey,
             String activityType,
             String questionIntent,
             LearningDifficulty difficulty,
             UUID sessionId) {
         this(
+                learningActivityId,
                 conceptKey,
                 activityType,
                 questionIntent,

@@ -9,4 +9,6 @@ public interface StudyMissionRepository {
     StudyMission save(StudyMission mission);
 
     Optional<StudyMission> findOwnedById(UUID missionId, UUID ownerId);
+
+    Optional<StudyMission> findOwnedByIdForUpdate(UUID missionId, UUID ownerId);
 }

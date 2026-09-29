@@ -112,6 +112,12 @@ public class JpaStudyMissionRepository implements StudyMissionRepository {
         return missions.findByIdAndUserId(missionId, ownerId).map(this::toDomain);
     }
 
+    @Override
+    @Transactional
+    public Optional<StudyMission> findOwnedByIdForUpdate(UUID missionId, UUID ownerId) {
+        return missions.findByIdAndUserIdForUpdate(missionId, ownerId).map(this::toDomain);
+    }
+
     private StudyMission toDomain(StudyMissionEntity mission) {
         var missionMaterials = materials.findAllByStudyMissionIdOrderById(mission.getId()).stream()
                 .map(MissionMaterialEntity::toDomain)

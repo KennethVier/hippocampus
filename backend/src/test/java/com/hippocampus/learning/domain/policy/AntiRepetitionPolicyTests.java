@@ -66,6 +66,7 @@ class AntiRepetitionPolicyTests {
     @Test
     void allowsUnrelatedActivity() {
         RecentLearningActivity unrelated = new RecentLearningActivity(
+                UUID.randomUUID(),
                 "venous-return",
                 LearningActionType.RETRIEVE.name(),
                 "MECHANISM_RECALL",
@@ -83,6 +84,7 @@ class AntiRepetitionPolicyTests {
     @Test
     void consecutiveUnderstandActivitiesWithNullQuestionIntentAreNotSuppressed() {
         RecentLearningActivity priorUnderstand = new RecentLearningActivity(
+                UUID.randomUUID(),
                 "cardiac-output",
                 LearningActionType.UNDERSTAND.name(),
                 null,
@@ -117,6 +119,7 @@ class AntiRepetitionPolicyTests {
     @Test
     void historyRecordedAsApplicationMatchesApply() {
         RecentLearningActivity appActivity = new RecentLearningActivity(
+                UUID.randomUUID(),
                 "cardiac-output",
                 "APPLICATION",
                 "MECHANISM_APPLY",
@@ -151,6 +154,7 @@ class AntiRepetitionPolicyTests {
     @Test
     void historyRecordedAsRetrievalMatchesRetrieve() {
         RecentLearningActivity retrievalActivity = new RecentLearningActivity(
+                UUID.randomUUID(),
                 "cardiac-output",
                 "RETRIEVAL",
                 "MECHANISM_RECALL",
