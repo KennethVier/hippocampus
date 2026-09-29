@@ -239,9 +239,9 @@ class StudentAttemptPersistenceIntegrationTests extends PostgresIntegrationTestS
     private static String activityInsert(UUID activityId, UUID missionId, int sequence) {
         return """
                 INSERT INTO learning_activities (
-                    id, study_mission_id, activity_type, status, sequence_number,
-                    source_required, created_at)
-                VALUES ('%s', '%s', 'RETRIEVE', 'PENDING', %d, false, now())
+                    id, study_mission_id, activity_type, represented_action_type, status,
+                    sequence_number, source_required, created_at)
+                VALUES ('%s', '%s', 'RETRIEVE', 'RETRIEVE', 'PENDING', %d, false, now())
                 """.formatted(activityId, missionId, sequence);
     }
 

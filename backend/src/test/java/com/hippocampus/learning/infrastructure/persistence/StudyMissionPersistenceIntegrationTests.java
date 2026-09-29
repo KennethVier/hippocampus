@@ -342,9 +342,10 @@ class StudyMissionPersistenceIntegrationTests extends PostgresIntegrationTestSup
         try (var connection = openPostgresConnection(); var statement = connection.createStatement()) {
             statement.executeUpdate("""
                     INSERT INTO learning_activities (
-                        id, study_mission_id, learning_objective_id, activity_type, status,
-                        sequence_number, generated_artifact_id, source_required, created_at)
-                    VALUES ('%s', '%s', '%s', 'RETRIEVE', 'PENDING', %d, %s, false, now())
+                        id, study_mission_id, learning_objective_id, activity_type,
+                        represented_action_type, status, sequence_number, generated_artifact_id,
+                        source_required, created_at)
+                    VALUES ('%s', '%s', '%s', 'RETRIEVE', 'RETRIEVE', 'PENDING', %d, %s, false, now())
                     """.formatted(activityId, missionId, objectiveId, sequence, artifact));
         }
         return activityId;
