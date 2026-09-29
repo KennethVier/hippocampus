@@ -1904,7 +1904,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** Application
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Blocked
 - **Goal:** Turn NextLearningAction into concrete activity.
 - **Build:** For deterministic actions create directly; for AI tasks retrieve EvidencePackage, execute typed task, validate, persist artifact/activity/source refs.
 - **How it works:** Engine decides kind; AI creates bounded content.
@@ -1912,9 +1912,9 @@ responsibilities remain outside P5-06.
 - **Tests / validation:** Integration tests by activity type.
 - **Expected result:** Activity content is grounded and typed.
 - **Definition of Done:** Tests pass.
-- **Authority:** Documents 11,19
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Authority:** Documents 11,18,19; ADR-0006
+- **Evidence / link:** Partial P7-04 implementation is preserved. Activity materialization exposed a durable reuse-target contract gap: Phase 6 can determine compatible validated prior content, but the current contracts do not identify the exact persisted LearningActivity selected by that decision. Resolution: ADR-0006 — Explicit Reusable Learning Activity Identity.
+- **Notes / blockers:** Implementation must not select newest/same-objective content and resumes only after ADR-0006 is accepted/merged. Empty-evidence and deleted-material review corrections remain pending alongside the reuse-contract implementation. P7-04 is not Ready for Review and is not Done.
 
 ## P7-05 — Implement SubmitActivityResponseUseCase
 
