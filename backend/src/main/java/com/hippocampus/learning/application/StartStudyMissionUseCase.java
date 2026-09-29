@@ -41,7 +41,7 @@ import com.hippocampus.learning.port.TopicRepository;
 import com.hippocampus.shared.application.error.ApplicationNotFoundException;
 import com.hippocampus.shared.domain.error.ErrorCode;
 
-public final class StartStudyMissionUseCase {
+public class StartStudyMissionUseCase {
 
     private static final ErrorCode SOURCE_NOT_FOUND =
             new ErrorCode("STUDY_MISSION_SOURCE_NOT_FOUND");
