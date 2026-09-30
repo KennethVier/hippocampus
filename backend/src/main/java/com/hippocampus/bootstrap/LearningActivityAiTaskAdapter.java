@@ -15,6 +15,8 @@ import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.domain.AiTaskContext;
 import com.hippocampus.ai.domain.AiTaskRequest;
 import com.hippocampus.ai.domain.AiTaskType;
+import com.hippocampus.ai.domain.ConceptConnectionInput;
+import com.hippocampus.ai.domain.ConceptConnectionResult;
 import com.hippocampus.ai.domain.ExplanationInput;
 import com.hippocampus.ai.domain.ExplanationMode;
 import com.hippocampus.ai.domain.ExplanationResult;
@@ -90,6 +92,9 @@ public final class LearningActivityAiTaskAdapter implements ActivityAiTaskPort {
                         "QUESTION", AiTaskType.QUESTION_GENERATION, question.question(),
                         question, request.groundingMode(), metadata, true, false);
             }
+            case ConceptConnectionResult connection -> content(
+                    "CONCEPT_CONNECTION", AiTaskType.CONCEPT_CONNECTION, connection.relationship(),
+                    connection, request.groundingMode(), metadata, true, false);
             default -> throw new IllegalArgumentException(
                     "unsupported AI result for learning activity materialization");
         };
@@ -122,8 +127,15 @@ public final class LearningActivityAiTaskAdapter implements ActivityAiTaskPort {
                                 ? null
                                 : request.constraints().repetitionIntent().name());
             }
+            case CONNECT -> {
+                taskType = AiTaskType.CONCEPT_CONNECTION;
+                promptId = PromptId.CONCEPT_CONNECTION_V1;
+                outputContract = AiOutputContract.CONCEPT_CONNECTION;
+                taskContext = new ConceptConnectionInput(
+                        request.targetDisplayName(), request.objective(), List.of());
+            }
             default -> throw new IllegalArgumentException(
-                    request.actionType() + " is not owned by P7-07/P7-08 activity generation");
+                    request.actionType() + " is not owned by P7-07/P7-08/P7-10 activity generation");
         }
 
         return new AiTaskRequest<>(
@@ -212,6 +224,7 @@ public final class LearningActivityAiTaskAdapter implements ActivityAiTaskPort {
         return switch (taskType) {
             case EXPLANATION -> AiRequestPriority.INTERACTIVE_EXPLANATION;
             case QUESTION_GENERATION -> AiRequestPriority.INTERACTIVE_GENERATION;
+            case CONCEPT_CONNECTION -> AiRequestPriority.INTERACTIVE_GENERATION;
             default -> throw new IllegalArgumentException(taskType + " is not an activity-generation task");
         };
     }

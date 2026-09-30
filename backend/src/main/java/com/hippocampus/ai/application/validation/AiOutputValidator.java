@@ -81,6 +81,12 @@ public final class AiOutputValidator {
     }
 
     private static void validateBusinessRules(Object decoded, AiOutputContract outputContract) {
+        if (decoded instanceof ConceptConnectionResult connection
+                && connection.fromConcept().trim().equalsIgnoreCase(connection.toConcept().trim())) {
+            throw new AiSchemaValidationException(
+                    outputContract,
+                    AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION);
+        }
         if (!(decoded instanceof QuestionGenerationResult question)) {
             return;
         }
