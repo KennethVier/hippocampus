@@ -12,6 +12,7 @@ import com.hippocampus.learning.domain.LearningDifficulty;
 import com.hippocampus.learning.domain.LearningState;
 import com.hippocampus.learning.domain.NextLearningAction;
 import com.hippocampus.learning.domain.RecentLearningActivity;
+import com.hippocampus.learning.domain.RetrievalActivityType;
 
 public final class UnderstandRetrievePolicy {
 
@@ -49,6 +50,10 @@ public final class UnderstandRetrievePolicy {
                 LearningActionType.RETRIEVE,
                 difficulty,
                 READY_FOR_RETRIEVAL,
-                true);
+                true,
+                state.actionConstraints().withRetrievalActivityType(
+                        state.actionConstraints().visualRequired()
+                                ? RetrievalActivityType.IDENTIFICATION
+                                : RetrievalActivityType.SHORT_ANSWER));
     }
 }

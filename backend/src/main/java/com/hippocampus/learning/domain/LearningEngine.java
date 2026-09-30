@@ -116,6 +116,6 @@ public final class LearningEngine {
                 difficulty,
                 rationale,
                 aiTaskRequired,
-                state.actionConstraints());
+                state.actionConstraints().withoutRetrievalActivityType());
     }
 }

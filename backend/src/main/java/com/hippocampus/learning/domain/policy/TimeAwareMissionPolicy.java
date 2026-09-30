@@ -10,6 +10,7 @@ import com.hippocampus.learning.domain.LearningDifficulty;
 import com.hippocampus.learning.domain.LearningPolicyConfiguration;
 import com.hippocampus.learning.domain.LearningState;
 import com.hippocampus.learning.domain.NextLearningAction;
+import com.hippocampus.learning.domain.RetrievalActivityType;
 import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Set;
@@ -54,7 +55,10 @@ public final class TimeAwareMissionPolicy {
                     LearningDifficulty.FOUNDATIONAL,
                     TIME_LIMIT,
                     true,
-                    candidate.constraints());
+                    candidate.constraints().withRetrievalActivityType(
+                            candidate.constraints().visualRequired()
+                                    ? RetrievalActivityType.IDENTIFICATION
+                                    : RetrievalActivityType.SHORT_ANSWER));
         }
 
         if (configuration.durationFor(LearningActionType.REFLECT)

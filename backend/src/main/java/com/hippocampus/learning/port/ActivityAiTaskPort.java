@@ -27,6 +27,11 @@ public interface ActivityAiTaskPort {
             Objects.requireNonNull(groundingMode, "groundingMode must not be null");
             Objects.requireNonNull(evidence, "evidence must not be null");
             Objects.requireNonNull(constraints, "constraints must not be null");
+            if ((actionType == LearningActionType.RETRIEVE)
+                    != (constraints.retrievalActivityType() != null)) {
+                throw new IllegalArgumentException(
+                        "retrievalActivityType must be present exactly for RETRIEVE requests");
+            }
         }
     }
 
