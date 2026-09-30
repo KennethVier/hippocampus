@@ -125,6 +125,16 @@ class AiOutputValidatorTests {
     }
 
     @Test
+    void rejectsConceptConnectionBetweenTheSameTrimmedCaseInsensitiveConcept() {
+        String output = validConceptConnection().replace(
+                "\"toConcept\": \"arterial carbon dioxide\"",
+                "\"toConcept\": \"  ALVEOLAR VENTILATION  \"");
+
+        assertFailure(output, AiOutputContract.CONCEPT_CONNECTION,
+                AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION);
+    }
+
+    @Test
     void acceptsMcqWithUniqueOptionsAndMatchingCorrectOption() {
         ValidatedAiResult<?> result = validator.validate(
                 providerResult(VALID_MCQ), AiOutputContract.QUESTION_GENERATION);
@@ -243,17 +253,8 @@ class AiOutputValidatorTests {
                           "limitations": []
                         }
                         """, ResponseEvaluationResult.class),
-                Arguments.of(AiOutputContract.CONCEPT_CONNECTION, """
-                        {
-                          "fromConcept": "alveolar ventilation",
-                          "toConcept": "arterial carbon dioxide",
-                          "relationshipType": "inverse physiological relationship",
-                          "relationship": "Increasing alveolar ventilation lowers arterial carbon dioxide.",
-                          "whyItMatters": "It explains respiratory compensation and ventilatory disorders.",
-                          "sourceReferences": [],
-                          "limitations": []
-                        }
-                        """, ConceptConnectionResult.class),
+                Arguments.of(AiOutputContract.CONCEPT_CONNECTION,
+                        validConceptConnection(), ConceptConnectionResult.class),
                 Arguments.of(AiOutputContract.CONTEXTUAL_APPLICATION, """
                         {
                           "scenario": "A learner reviews a tracing showing delayed ventricular depolarization.",
@@ -278,6 +279,20 @@ class AiOutputValidatorTests {
                   "prerequisitesUsed": ["membrane potential"],
                   "sourceReferences": [],
                   "supplementalKnowledgeUsed": false,
+                  "limitations": []
+                }
+                """;
+    }
+
+    private static String validConceptConnection() {
+        return """
+                {
+                  "fromConcept": "alveolar ventilation",
+                  "toConcept": "arterial carbon dioxide",
+                  "relationshipType": "inverse physiological relationship",
+                  "relationship": "Increasing alveolar ventilation lowers arterial carbon dioxide.",
+                  "whyItMatters": "It explains respiratory compensation and ventilatory disorders.",
+                  "sourceReferences": [],
                   "limitations": []
                 }
                 """;

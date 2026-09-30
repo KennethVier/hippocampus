@@ -22,7 +22,8 @@ public final class AiTaskExecutionProperties {
     private static final Set<AiTaskType> REQUIRED_TASKS = Set.of(
             AiTaskType.EXPLANATION,
             AiTaskType.QUESTION_GENERATION,
-            AiTaskType.RESPONSE_EVALUATION);
+            AiTaskType.RESPONSE_EVALUATION,
+            AiTaskType.CONCEPT_CONNECTION);
 
     private Map<AiTaskType, TaskProperties> tasks = Map.of();
 
