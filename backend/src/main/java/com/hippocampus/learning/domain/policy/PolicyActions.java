@@ -5,7 +5,6 @@ import com.hippocampus.learning.domain.LearningActionType;
 import com.hippocampus.learning.domain.LearningDifficulty;
 import com.hippocampus.learning.domain.LearningState;
 import com.hippocampus.learning.domain.NextLearningAction;
-import com.hippocampus.learning.domain.RetrievalActivityType;
 
 final class PolicyActions {
 
@@ -34,17 +33,10 @@ final class PolicyActions {
             String rationaleCode,
             boolean aiTaskRequired,
             LearningActionConstraints constraints) {
-        LearningActionConstraints applicableConstraints;
-        if (actionType == LearningActionType.RETRIEVE && aiTaskRequired) {
-            applicableConstraints = constraints.retrievalActivityType() == null
-                    ? constraints.withRetrievalActivityType(
-                            constraints.visualRequired()
-                                    ? RetrievalActivityType.IDENTIFICATION
-                                    : RetrievalActivityType.SHORT_ANSWER)
-                    : constraints;
-        } else {
-            applicableConstraints = constraints.withoutRetrievalActivityType();
-        }
+        LearningActionConstraints applicableConstraints =
+                actionType == LearningActionType.RETRIEVE && aiTaskRequired
+                        ? constraints
+                        : constraints.withoutRetrievalActivityType();
         return new NextLearningAction(
                 actionType,
                 state.learningObjectiveId(),

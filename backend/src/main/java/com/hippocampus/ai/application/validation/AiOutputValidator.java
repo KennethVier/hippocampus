@@ -42,17 +42,18 @@ public final class AiOutputValidator {
 
         Object decoded = decode(providerResult.rawContent(), outputContract);
         validateBusinessRules(decoded, outputContract);
-        validateRequestedQuestionType(decoded, outputContract, taskContext);
+        validateRequestedQuestionContract(decoded, outputContract, taskContext);
         return new ValidatedAiResult<>(decoded);
     }
 
-    private static void validateRequestedQuestionType(
+    private static void validateRequestedQuestionContract(
             Object decoded,
             AiOutputContract outputContract,
             AiTaskContext taskContext) {
         if (decoded instanceof QuestionGenerationResult question
                 && taskContext instanceof QuestionGenerationInput request
-                && question.activityType() != request.activityType()) {
+                && (question.activityType() != request.activityType()
+                        || question.difficulty() != request.difficulty())) {
             throw new AiSchemaValidationException(
                     outputContract,
                     AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION);

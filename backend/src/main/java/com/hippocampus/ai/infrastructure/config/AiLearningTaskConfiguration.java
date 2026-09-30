@@ -7,18 +7,20 @@ import org.springframework.context.annotation.Bean;
 
 import com.hippocampus.ai.application.AiExecutionOrchestrator;
 import com.hippocampus.ai.infrastructure.learning.AiResponseEvaluationAdapter;
-import com.hippocampus.ai.infrastructure.learning.AiTaskExecutionOptions;
+import com.hippocampus.ai.infrastructure.learning.AiTaskExecutionPolicy;
 import com.hippocampus.learning.port.ResponseEvaluationPort;
 
-@AutoConfiguration(beforeName = "com.hippocampus.learning.infrastructure.config.StudyMissionApplicationConfiguration")
-@ConditionalOnBean({AiExecutionOrchestrator.class, AiTaskExecutionOptions.class})
+@AutoConfiguration(
+        after = AiExecutionOrchestratorConfiguration.class,
+        beforeName = "com.hippocampus.learning.infrastructure.config.StudyMissionApplicationConfiguration")
+@ConditionalOnBean({AiExecutionOrchestrator.class, AiTaskExecutionPolicy.class})
 public class AiLearningTaskConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(ResponseEvaluationPort.class)
     ResponseEvaluationPort responseEvaluationPort(
             AiExecutionOrchestrator orchestrator,
-            AiTaskExecutionOptions executionOptions) {
-        return new AiResponseEvaluationAdapter(orchestrator, executionOptions);
+            AiTaskExecutionPolicy executionPolicy) {
+        return new AiResponseEvaluationAdapter(orchestrator, executionPolicy);
     }
 }

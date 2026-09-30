@@ -1,5 +1,7 @@
 package com.hippocampus.learning.port;
 
+import java.util.List;
+
 import java.util.Objects;
 
 import com.hippocampus.learning.domain.LearningActionConstraints;
@@ -18,6 +20,7 @@ public interface ActivityAiTaskPort {
             LearningDifficulty difficulty,
             StudyMissionGroundingMode groundingMode,
             ActivityEvidencePort.Evidence evidence,
+            List<String> recentQuestionIntents,
             LearningActionConstraints constraints) {
 
         public Request {
@@ -26,6 +29,13 @@ public interface ActivityAiTaskPort {
             Objects.requireNonNull(actionType, "actionType must not be null");
             Objects.requireNonNull(groundingMode, "groundingMode must not be null");
             Objects.requireNonNull(evidence, "evidence must not be null");
+            recentQuestionIntents = List.copyOf(Objects.requireNonNull(
+                    recentQuestionIntents, "recentQuestionIntents must not be null"));
+            if (recentQuestionIntents.stream().anyMatch(
+                    intent -> intent == null || intent.isBlank())) {
+                throw new IllegalArgumentException(
+                        "recentQuestionIntents must not contain null or blank values");
+            }
             Objects.requireNonNull(constraints, "constraints must not be null");
             if ((actionType == LearningActionType.RETRIEVE)
                     != (constraints.retrievalActivityType() != null)) {

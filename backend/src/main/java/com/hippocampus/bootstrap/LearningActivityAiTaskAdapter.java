@@ -23,6 +23,7 @@ import com.hippocampus.ai.domain.QuestionGenerationInput;
 import com.hippocampus.ai.domain.QuestionGenerationResult;
 import com.hippocampus.ai.domain.ValidatedAiResult;
 import com.hippocampus.ai.infrastructure.learning.AiTaskExecutionOptions;
+import com.hippocampus.ai.infrastructure.learning.AiTaskExecutionPolicy;
 import com.hippocampus.learning.domain.LearningActionType;
 import com.hippocampus.learning.domain.LearningActivityIntent;
 import com.hippocampus.learning.domain.LearningDifficulty;
@@ -36,16 +37,16 @@ import com.hippocampus.rag.domain.GroundingMode;
 public final class LearningActivityAiTaskAdapter implements ActivityAiTaskPort {
 
     private final AiExecutionOrchestrator orchestrator;
-    private final AiTaskExecutionOptions executionOptions;
+    private final AiTaskExecutionPolicy executionPolicy;
     private final ObjectMapper objectMapper;
 
     public LearningActivityAiTaskAdapter(
             AiExecutionOrchestrator orchestrator,
-            AiTaskExecutionOptions executionOptions,
+            AiTaskExecutionPolicy executionPolicy,
             ObjectMapper objectMapper) {
         this.orchestrator = Objects.requireNonNull(orchestrator, "orchestrator must not be null");
-        this.executionOptions = Objects.requireNonNull(
-                executionOptions, "executionOptions must not be null");
+        this.executionPolicy = Objects.requireNonNull(
+                executionPolicy, "executionPolicy must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
     }
 
@@ -54,6 +55,7 @@ public final class LearningActivityAiTaskAdapter implements ActivityAiTaskPort {
         Objects.requireNonNull(request, "request must not be null");
         EvidencePackage evidencePackage = evidencePackage(request.evidence());
         AiTaskRequest<?> aiRequest = aiRequest(request, evidencePackage);
+        AiTaskExecutionOptions executionOptions = executionPolicy.optionsFor(aiRequest.taskType());
         ValidatedAiResult<?> validated = orchestrator.execute(
                         aiRequest,
                         priority(aiRequest.taskType()),
@@ -106,9 +108,7 @@ public final class LearningActivityAiTaskAdapter implements ActivityAiTaskPort {
                         request.targetDisplayName(),
                         map(request.constraints().retrievalActivityType()),
                         map(request.difficulty()),
-                        request.constraints().questionIntent() == null
-                                ? List.of()
-                                : List.of(request.constraints().questionIntent()),
+                        request.recentQuestionIntents(),
                         request.constraints().repetitionIntent() == LearningActivityIntent.STANDARD
                                 ? null
                                 : request.constraints().repetitionIntent().name());

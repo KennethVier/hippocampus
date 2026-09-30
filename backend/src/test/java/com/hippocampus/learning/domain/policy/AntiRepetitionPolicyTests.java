@@ -14,6 +14,7 @@ import com.hippocampus.learning.domain.LearningTimeContext;
 import com.hippocampus.learning.domain.MissionLifecycleState;
 import com.hippocampus.learning.domain.NextLearningAction;
 import com.hippocampus.learning.domain.RecentLearningActivity;
+import com.hippocampus.learning.domain.RetrievalActivityType;
 import com.hippocampus.learning.domain.SourceCapability;
 import com.hippocampus.learning.domain.SourceReadiness;
 import com.hippocampus.learning.domain.SourceRequirement;
@@ -198,6 +199,7 @@ class AntiRepetitionPolicyTests {
                         true,
                         "MECHANISM_RECALL",
                         "template-a",
-                        intent));
+                        intent,
+                        RetrievalActivityType.SHORT_ANSWER));
     }
 }

@@ -1952,7 +1952,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Support Understand activity.
 - **Build:** Use EvidencePackage + objective + learner context → structured explanation/key points/source refs.
 - **How it works:** Supplemental knowledge classified explicitly.
@@ -1961,14 +1961,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Explanation is source-grounded and learner-appropriate.
 - **Definition of Done:** Tests/eval pass.
 - **Authority:** Documents 07,12,15
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Implemented production explanation execution through ADR-0008 task-specific runtime configuration, the existing Provider Router and `AiExecutionOrchestrator`, authorized/frozen-scope RAG retrieval, canonical source-reference materialization, `RagActivityEvidencePayload`, and `LearningActivityAiTaskAdapter`. The production bean graph now supplies `ActivityEvidencePort`, `ActivityAiTaskPort`, and `MaterializeLearningActivityUseCase` when their required configured provider, AI, RAG, persistence, and validation dependencies are present. Enabled AI runtime configuration fails closed for missing/incomplete task policy, absent evaluation-approved eligible routes, or an eligible route whose provider adapter is unavailable. User reported the focused 71-test validation command passes after the two stale ADR-0007 test fixtures were corrected; the two modified test methods also passed agent-run focused validation with 2 tests, 0 failures, and 0 errors.
+- **Notes / blockers:** Implementation and focused user validation are complete. External implementation re-review and the independent security gate remain required; P7-07 is not Done.
 
 ## P7-08 — Implement retrieval-question task end-to-end
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Support active retrieval activity.
 - **Build:** Generate structured short-answer/MCQ/identification question with expected evidence, no answer leakage.
 - **How it works:** Backend controls activity type/difficulty.
@@ -1977,14 +1977,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Question tests target intended concept and sources.
 - **Definition of Done:** Eval pass.
 - **Authority:** Documents 03,07
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Implemented production question generation through ADR-0008 task-specific configured routing without hard-coded model IDs, provider priority, routing preference, or token budgets. ADR-0007 now fails closed: `NextLearningAction` and `PolicyActions` no longer insert retrieval types, while `UnderstandRetrievePolicy`, `TimeAwareMissionPolicy`, `ConnectionPolicy`, and `ApplicationPolicy` explicitly select `IDENTIFICATION` for visual-required retrieval and `SHORT_ANSWER` otherwise. `AiOutputValidator` rejects generated difficulty or activity-type mismatches through the existing business-rule/schema failure path. `ActivityAiTaskPort.Request` carries immutable prior retrieval-question intents derived from already-authorized mission activity history for the same learning objective, newest first and bounded to the v1 three-activity anti-repetition window; the candidate question intent remains separate. User reported the focused 71-test validation command passes after explicit retrieval types were added only to the two stale test fixtures; agent-run validation of those two changed methods passed with 2 tests, 0 failures, and 0 errors.
+- **Notes / blockers:** Implementation and focused user validation are complete. External implementation re-review and the independent security gate remain required; P7-08 is not Done.
 
 ## P7-09 — Implement response-evaluation task end-to-end
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Provide formative feedback without false scoring.
 - **Build:** Evaluate student response against expected evidence, return correctness dimensions/missing reasoning/misconception candidate/feedback contract.
 - **How it works:** Learning Engine/progress later interprets; AI doesn't set mastery.
@@ -1993,8 +1993,8 @@ responsibilities remain outside P5-06.
 - **Expected result:** Evaluation is nuanced and structured.
 - **Definition of Done:** Golden eval pass.
 - **Authority:** Documents 11,15
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Implemented production response-evaluation composition using ADR-0008 task-specific `RESPONSE_EVALUATION` execution options and the existing `INTERACTIVE_EVALUATION` priority, Provider Router, orchestrator, structured-output validation, diagnostics, request management, and bounded P7-09 response-evaluation adapter contract. The completed production graph supplies `ResponseEvaluationPort` and therefore `SubmitActivityResponseUseCase` when the required configured AI and persistence dependencies are available. Runtime configuration remains provider-neutral and evaluation-gated, and no Learning Engine authority, P7-05 submission authority, transaction boundary, or Phase 8 evidence persistence was changed. User reported the focused 71-test validation command passes after the two unrelated stale ADR-0007 fixtures were corrected; the changed fixture methods passed agent-run focused validation with 2 tests, 0 failures, and 0 errors.
+- **Notes / blockers:** Implementation and focused user validation are complete. External implementation re-review and the independent security gate remain required; P7-09 is not Done.
 
 ## P7-10 — Implement concept-connection task
 

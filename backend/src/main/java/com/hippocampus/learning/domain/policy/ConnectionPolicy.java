@@ -11,6 +11,7 @@ import com.hippocampus.learning.domain.LearningActionType;
 import com.hippocampus.learning.domain.LearningDifficulty;
 import com.hippocampus.learning.domain.LearningState;
 import com.hippocampus.learning.domain.NextLearningAction;
+import com.hippocampus.learning.domain.RetrievalActivityType;
 import java.util.Optional;
 
 public final class ConnectionPolicy {
@@ -33,7 +34,11 @@ public final class ConnectionPolicy {
                     LearningActionType.RETRIEVE,
                     LearningDifficulty.FOUNDATIONAL,
                     RETRIEVAL_GAP,
-                    true));
+                    true,
+                    state.actionConstraints().withRetrievalActivityType(
+                            state.actionConstraints().visualRequired()
+                                    ? RetrievalActivityType.IDENTIFICATION
+                                    : RetrievalActivityType.SHORT_ANSWER)));
         }
         if (!state.evidence().isAtLeast(EvidenceDimension.CONNECTION, EvidenceStrength.DEVELOPING)) {
             String rationale = state.evidence().strengthOf(EvidenceDimension.CONNECTION) == EvidenceStrength.WEAK

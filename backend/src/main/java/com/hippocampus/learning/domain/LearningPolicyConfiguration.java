@@ -13,6 +13,8 @@ public record LearningPolicyConfiguration(
         int duplicateHistoryWindow,
         Map<LearningActionType, Integer> activityDurationMinutes) {
 
+    public static final int V1_DUPLICATE_HISTORY_WINDOW = 3;
+
     public LearningPolicyConfiguration {
         if (hintAfterAttempt < 1
                 || simplerExplanationAfterAttempt <= hintAfterAttempt

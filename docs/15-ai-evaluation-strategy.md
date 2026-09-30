@@ -1971,6 +1971,17 @@ These should derive from Documents 00--15 rather than redefining them.
 
 ------------------------------------------------------------------------
 
+## ADR-0008 Alignment (2026-09-30)
+
+Evaluation approval is an explicit per-task candidate property. Merely
+configuring a provider/model does not approve it. Runtime routing requires the
+candidate to support the task, be explicitly evaluation-approved for that task,
+and report available provider, quota, and rate-limit capacity. Model or routing
+changes therefore require the applicable evaluation evidence before deployment
+configuration may mark the task approved.
+
+------------------------------------------------------------------------
+
 # 91. Revision History
 
   ------------------------------------------------------------------------

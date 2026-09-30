@@ -1388,6 +1388,7 @@ When ADRs exist, add an index:
 | [ADR-0005](adr/ADR-0005-exact-chunk-source-provenance-and-initial-replay-identity.md) | Exact Chunk Source Provenance and Initial Replay Identity | ACCEPTED | 2026-09-09 | DATA, INGESTION, RAG, DOMAIN |
 | [ADR-0006](adr/ADR-0006-explicit-reusable-learning-activity-identity.md) | Explicit Reusable Learning Activity Identity | ACCEPTED | 2026-09-29 | DOMAIN, BACKEND, EDUCATION |
 | [ADR-0007](adr/ADR-0007-explicit-retrieval-activity-type-selection.md) | Explicit Retrieval Activity Type Selection | ACCEPTED | 2026-09-30 | DOMAIN, BACKEND, AI, EDUCATION |
+| [ADR-0008](adr/ADR-0008-evaluation-gated-configured-ai-task-routing.md) | Evaluation-Gated Configured AI Task Routing | ACCEPTED | 2026-09-30 | ARCHITECTURE, BACKEND, AI, OPERATIONS |
 
 This table begins empty at initial v1 freeze unless a real pending
 decision already exists.
@@ -1454,6 +1455,18 @@ retrieval uses `IDENTIFICATION`, and all other initial v1 retrieval uses
 `SHORT_ANSWER`. AI integration maps the value exactly to the AI-domain
 `ActivityType` and rejects generated output with a different type. AI/provider
 adapters and models do not select or default the question format.
+
+## ADR-0008 Decision Summary
+
+Concrete AI chat model identifiers, prompt budgets, routing preferences, and
+provider/model candidates are explicit task-specific deployment configuration
+for explanation, question generation, and response evaluation. Configuration
+does not imply evaluation approval. The existing Provider Router remains the
+single selection algorithm and routes only candidates that support the task,
+are explicitly evaluation-approved, and have available provider, quota, and
+rate-limit capacity. Enabled runtime configuration fails closed when required
+task policy is incomplete or an eligible route references an unavailable
+provider adapter.
 
 ------------------------------------------------------------------------
 
@@ -1761,6 +1774,10 @@ Phase 0 — Engineering Foundation
                                       Hippocampus Team  ADR-0007 explicit
                                                         retrieval activity type
                                                         selection
+
+  1.0.7             2026-09-30        Project           Accepted and indexed
+                                      Hippocampus Team  ADR-0008 evaluation-gated
+                                                        configured AI task routing
 
   ----------------------------------------------------------------------------
 

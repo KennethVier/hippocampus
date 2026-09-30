@@ -45,7 +45,7 @@ public record NextLearningAction(
             boolean aiTaskRequired,
             LearningActionConstraints constraints) {
         this(actionType, learningObjectiveId, conceptKey, difficulty, rationaleCode,
-                aiTaskRequired, legacyCompatibleConstraints(actionType, aiTaskRequired, constraints), null);
+                aiTaskRequired, constraints, null);
     }
 
     public NextLearningAction(
@@ -69,21 +69,5 @@ public record NextLearningAction(
                 aiTaskRequired,
                 constraints,
                 reuseLearningActivityId);
-    }
-
-    private static LearningActionConstraints legacyCompatibleConstraints(
-            LearningActionType actionType,
-            boolean aiTaskRequired,
-            LearningActionConstraints constraints) {
-        Objects.requireNonNull(constraints, "constraints must not be null");
-        if (actionType != LearningActionType.RETRIEVE
-                || !aiTaskRequired
-                || constraints.retrievalActivityType() != null) {
-            return constraints;
-        }
-        return constraints.withRetrievalActivityType(
-                constraints.visualRequired()
-                        ? RetrievalActivityType.IDENTIFICATION
-                        : RetrievalActivityType.SHORT_ANSWER);
     }
 }

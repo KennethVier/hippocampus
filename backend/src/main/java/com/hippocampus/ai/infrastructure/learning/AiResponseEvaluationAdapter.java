@@ -36,14 +36,14 @@ public final class AiResponseEvaluationAdapter implements ResponseEvaluationPort
                     0, 0, List.of(), List.of(), Set.of(), Set.of(), RetrievalQuality.INSUFFICIENT));
 
     private final AiExecutionOrchestrator orchestrator;
-    private final AiTaskExecutionOptions executionOptions;
+    private final AiTaskExecutionPolicy executionPolicy;
 
     public AiResponseEvaluationAdapter(
             AiExecutionOrchestrator orchestrator,
-            AiTaskExecutionOptions executionOptions) {
+            AiTaskExecutionPolicy executionPolicy) {
         this.orchestrator = Objects.requireNonNull(orchestrator, "orchestrator must not be null");
-        this.executionOptions = Objects.requireNonNull(
-                executionOptions, "executionOptions must not be null");
+        this.executionPolicy = Objects.requireNonNull(
+                executionPolicy, "executionPolicy must not be null");
     }
 
     @Override
@@ -63,6 +63,8 @@ public final class AiResponseEvaluationAdapter implements ResponseEvaluationPort
                 GroundingMode.GENERAL_KNOWLEDGE,
                 AiOutputContract.RESPONSE_EVALUATION);
 
+        AiTaskExecutionOptions executionOptions = executionPolicy.optionsFor(
+                AiTaskType.RESPONSE_EVALUATION);
         ValidatedAiResult<?> validated = orchestrator.execute(
                         aiRequest,
                         AiRequestPriority.INTERACTIVE_EVALUATION,

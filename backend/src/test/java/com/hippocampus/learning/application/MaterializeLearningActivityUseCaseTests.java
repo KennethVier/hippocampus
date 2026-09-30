@@ -29,6 +29,7 @@ import com.hippocampus.learning.domain.LearningObjectiveStatus;
 import com.hippocampus.learning.domain.LearningStage;
 import com.hippocampus.learning.domain.MissionMaterial;
 import com.hippocampus.learning.domain.NextLearningAction;
+import com.hippocampus.learning.domain.RetrievalActivityType;
 import com.hippocampus.learning.domain.SourceRequirement;
 import com.hippocampus.learning.domain.StudyMission;
 import com.hippocampus.learning.domain.StudyMissionGroundingMode;
@@ -92,7 +93,19 @@ class MaterializeLearningActivityUseCaseTests {
 
     @Test
     void retrieveAiActionPreservesDifficultyAndSourceRequirement() {
-        var result = execute(action(LearningActionType.RETRIEVE, LearningDifficulty.APPLIED, true));
+        var constraints = new LearningActionConstraints(
+                SourceRequirement.REQUIRED,
+                false,
+                false,
+                null,
+                null,
+                LearningActivityIntent.STANDARD,
+                RetrievalActivityType.SHORT_ANSWER);
+        var result = execute(action(
+                LearningActionType.RETRIEVE,
+                LearningDifficulty.APPLIED,
+                true,
+                constraints));
 
         assertThat(result.activity().activityType()).isEqualTo(LearningActivityType.RETRIEVE);
         assertThat(result.activity().difficulty()).isEqualTo(LearningDifficulty.APPLIED);
