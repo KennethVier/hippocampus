@@ -7,10 +7,12 @@ import java.util.Set;
 import com.hippocampus.ai.application.provider.ProviderExecutionResult;
 import com.hippocampus.ai.domain.ActivityType;
 import com.hippocampus.ai.domain.AiOutputContract;
+import com.hippocampus.ai.domain.AiTaskContext;
 import com.hippocampus.ai.domain.ConceptConnectionResult;
 import com.hippocampus.ai.domain.ContextualApplicationResult;
 import com.hippocampus.ai.domain.ExplanationResult;
 import com.hippocampus.ai.domain.QuestionGenerationResult;
+import com.hippocampus.ai.domain.QuestionGenerationInput;
 import com.hippocampus.ai.domain.QuestionOption;
 import com.hippocampus.ai.domain.ResponseEvaluationResult;
 import com.hippocampus.ai.domain.ValidatedAiResult;
@@ -28,12 +30,33 @@ public final class AiOutputValidator {
     public ValidatedAiResult<?> validate(
             ProviderExecutionResult providerResult,
             AiOutputContract outputContract) {
+        return validate(providerResult, outputContract, null);
+    }
+
+    public ValidatedAiResult<?> validate(
+            ProviderExecutionResult providerResult,
+            AiOutputContract outputContract,
+            AiTaskContext taskContext) {
         Objects.requireNonNull(providerResult, "providerResult must not be null");
         Objects.requireNonNull(outputContract, "outputContract must not be null");
 
         Object decoded = decode(providerResult.rawContent(), outputContract);
         validateBusinessRules(decoded, outputContract);
+        validateRequestedQuestionType(decoded, outputContract, taskContext);
         return new ValidatedAiResult<>(decoded);
+    }
+
+    private static void validateRequestedQuestionType(
+            Object decoded,
+            AiOutputContract outputContract,
+            AiTaskContext taskContext) {
+        if (decoded instanceof QuestionGenerationResult question
+                && taskContext instanceof QuestionGenerationInput request
+                && question.activityType() != request.activityType()) {
+            throw new AiSchemaValidationException(
+                    outputContract,
+                    AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION);
+        }
     }
 
     private Object decode(String rawOutput, AiOutputContract outputContract) {

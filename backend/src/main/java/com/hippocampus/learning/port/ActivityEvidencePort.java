@@ -35,7 +35,14 @@ public interface ActivityEvidencePort {
         }
     }
 
-    record Evidence(Set<UUID> sourceReferenceIds) {
+    interface EvidencePayload {
+    }
+
+    record Evidence(Set<UUID> sourceReferenceIds, EvidencePayload payload) {
+        public Evidence(Set<UUID> sourceReferenceIds) {
+            this(sourceReferenceIds, null);
+        }
+
         public Evidence {
             sourceReferenceIds = Set.copyOf(Objects.requireNonNull(
                     sourceReferenceIds, "sourceReferenceIds must not be null"));
