@@ -4,7 +4,7 @@ Audience: Product, architecture, backend, frontend, AI/RAG, DevOps,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 27
-Last Updated: 2026-09-29
+Last Updated: 2026-09-30
 Owner: Project Hippocampus Team
 Prerequisites:
 - README
@@ -24,7 +24,7 @@ Scope: Decision authority, decision categories, ADR lifecycle, ADR
   Source-of-Truth freeze procedure.
 Status: Final
 Title: Decision Log / ADR Index
-Version: 1.0.5
+Version: 1.0.6
 ---
 
 # 27 - Decision Log / ADR Index
@@ -1281,7 +1281,7 @@ Where useful, code comments may reference ADR numbers.
 Example:
 
 ``` java
-// ADR-0007: retrieval ownership filtering occurs before vector ranking.
+// ADR-0005: exact source provenance survives retrieval and generation.
 ```
 
 Do this only for non-obvious architectural decisions.
@@ -1387,6 +1387,8 @@ When ADRs exist, add an index:
 | [ADR-0004](adr/ADR-0004-durable-text-normalization-contract.md) | Durable Text Normalization Contract | ACCEPTED | 2026-09-08 | DATA, INGESTION, DOMAIN |
 | [ADR-0005](adr/ADR-0005-exact-chunk-source-provenance-and-initial-replay-identity.md) | Exact Chunk Source Provenance and Initial Replay Identity | ACCEPTED | 2026-09-09 | DATA, INGESTION, RAG, DOMAIN |
 | [ADR-0006](adr/ADR-0006-explicit-reusable-learning-activity-identity.md) | Explicit Reusable Learning Activity Identity | ACCEPTED | 2026-09-29 | DOMAIN, BACKEND, EDUCATION |
+| [ADR-0007](adr/ADR-0007-explicit-retrieval-activity-type-selection.md) | Explicit Retrieval Activity Type Selection | ACCEPTED | 2026-09-30 | DOMAIN, BACKEND, AI, EDUCATION |
+| [ADR-0008](adr/ADR-0008-evaluation-gated-configured-ai-task-routing.md) | Evaluation-Gated Configured AI Task Routing | ACCEPTED | 2026-09-30 | ARCHITECTURE, BACKEND, AI, OPERATIONS |
 
 This table begins empty at initial v1 freeze unless a real pending
 decision already exists.
@@ -1444,6 +1446,27 @@ revalidates artifact eligibility, ownership, grounding, source provenance,
 material lifecycle, and frozen mission source scope before creating a new
 LearningActivity that may reference the same validated GeneratedArtifact.
 GeneratedArtifact does not own pedagogical compatibility.
+
+## ADR-0007 Decision Summary
+
+The deterministic Learning Engine explicitly selects a learning-owned
+`RetrievalActivityType` for every AI-backed retrieval: visual-required
+retrieval uses `IDENTIFICATION`, and all other initial v1 retrieval uses
+`SHORT_ANSWER`. AI integration maps the value exactly to the AI-domain
+`ActivityType` and rejects generated output with a different type. AI/provider
+adapters and models do not select or default the question format.
+
+## ADR-0008 Decision Summary
+
+Concrete AI chat model identifiers, prompt budgets, routing preferences, and
+provider/model candidates are explicit task-specific deployment configuration
+for explanation, question generation, and response evaluation. Configuration
+does not imply evaluation approval. The existing Provider Router remains the
+single selection algorithm and routes only candidates that support the task,
+are explicitly evaluation-approved, and have available provider, quota, and
+rate-limit capacity. Enabled runtime configuration fails closed when required
+task policy is incomplete or an eligible route references an unavailable
+provider adapter.
 
 ------------------------------------------------------------------------
 
@@ -1746,6 +1769,15 @@ Phase 0 — Engineering Foundation
                                       Hippocampus Team  ADR-0006 and aligned
                                                         explicit reusable
                                                         LearningActivity identity
+
+  1.0.6             2026-09-30        Project           Accepted and indexed
+                                      Hippocampus Team  ADR-0007 explicit
+                                                        retrieval activity type
+                                                        selection
+
+  1.0.7             2026-09-30        Project           Accepted and indexed
+                                      Hippocampus Team  ADR-0008 evaluation-gated
+                                                        configured AI task routing
 
   ----------------------------------------------------------------------------
 

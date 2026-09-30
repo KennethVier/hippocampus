@@ -1657,6 +1657,21 @@ LLM.
 
 ------------------------------------------------------------------------
 
+## ADR-0008 Alignment (2026-09-30)
+
+P7 runtime routing is task-specific, deployment-configured, provider-neutral,
+and evaluation-gated. `EXPLANATION`, `QUESTION_GENERATION`, and
+`RESPONSE_EVALUATION` each resolve an explicit token budget, routing preference,
+and configured candidates through the existing Provider Router. Configuration
+alone does not grant evaluation approval, and no application default selects a
+chat model, provider priority, or routing preference. Invalid or incomplete
+enabled runtime configuration fails closed.
+
+The v1 prompt-budget preflight estimator uses rendered UTF-8 byte length only;
+provider-reported usage remains authoritative for diagnostics and evaluation.
+
+------------------------------------------------------------------------
+
 # 44. Revision History
 
   ------------------------------------------------------------------------

@@ -63,7 +63,10 @@ class NextLearningActionTests {
                 "posterior-cord",
                 LearningDifficulty.APPLIED,
                 "READY_FOR_APPLICATION",
-                true);
+                true,
+                LearningActionConstraints.unconstrained()
+                        .withRetrievalActivityType(RetrievalActivityType.SHORT_ANSWER),
+                null);
 
         assertThat(first).isEqualTo(equal).hasSameHashCodeAs(equal).isNotEqualTo(different);
     }

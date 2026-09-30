@@ -29,6 +29,11 @@ public record NextLearningAction(
             throw new IllegalArgumentException(
                     "reuseLearningActivityId must be present exactly for REUSE_VALIDATED_CONTENT");
         }
+        boolean generatesRetrievalQuestion = actionType == LearningActionType.RETRIEVE && aiTaskRequired;
+        if (generatesRetrievalQuestion != (constraints.retrievalActivityType() != null)) {
+            throw new IllegalArgumentException(
+                    "retrievalActivityType must be present exactly for AI-backed RETRIEVE actions");
+        }
     }
 
     public NextLearningAction(
@@ -50,15 +55,8 @@ public record NextLearningAction(
             LearningDifficulty difficulty,
             String rationaleCode,
             boolean aiTaskRequired) {
-        this(
-                actionType,
-                learningObjectiveId,
-                conceptKey,
-                difficulty,
-                rationaleCode,
-                aiTaskRequired,
-                LearningActionConstraints.unconstrained(),
-                null);
+        this(actionType, learningObjectiveId, conceptKey, difficulty, rationaleCode,
+                aiTaskRequired, LearningActionConstraints.unconstrained());
     }
 
     public NextLearningAction withRationale(String newRationaleCode) {

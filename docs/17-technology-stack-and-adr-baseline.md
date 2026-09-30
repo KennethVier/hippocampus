@@ -1783,6 +1783,18 @@ and:
 
 ------------------------------------------------------------------------
 
+## ADR-0008 Alignment (2026-09-30)
+
+Exact Gemini and Ollama chat model identifiers remain deployment/runtime
+configuration rather than architecture constants. P7 execution configuration is
+required independently for explanation, question generation, and response
+evaluation, including explicit prompt budgets, routing preferences, and
+evaluation-gated candidates. Existing provider configuration continues to own
+adapter activation and credentials; task-routing `modelId` values come from the
+task execution configuration.
+
+------------------------------------------------------------------------
+
 # 55. Revision History
 
   -----------------------------------------------------------------------------

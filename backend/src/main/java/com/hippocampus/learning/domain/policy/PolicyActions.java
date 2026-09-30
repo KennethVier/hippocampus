@@ -33,6 +33,10 @@ final class PolicyActions {
             String rationaleCode,
             boolean aiTaskRequired,
             LearningActionConstraints constraints) {
+        LearningActionConstraints applicableConstraints =
+                actionType == LearningActionType.RETRIEVE && aiTaskRequired
+                        ? constraints
+                        : constraints.withoutRetrievalActivityType();
         return new NextLearningAction(
                 actionType,
                 state.learningObjectiveId(),
@@ -40,7 +44,7 @@ final class PolicyActions {
                 difficulty,
                 rationaleCode,
                 aiTaskRequired,
-                constraints,
+                applicableConstraints,
                 null);
     }
 
@@ -57,7 +61,7 @@ final class PolicyActions {
                 difficulty,
                 rationaleCode,
                 false,
-                constraints,
+                constraints.withoutRetrievalActivityType(),
                 learningActivityId);
     }
 }

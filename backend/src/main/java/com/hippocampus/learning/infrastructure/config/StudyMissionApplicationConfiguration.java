@@ -60,7 +60,10 @@ public class StudyMissionApplicationConfiguration {
         durations.put(LearningActionType.CONNECT, 8);
         durations.put(LearningActionType.APPLY, 16);
         durations.put(LearningActionType.REFLECT, 2);
-        return new LearningEngine(new LearningPolicyConfiguration(2, 3, 4, 5, 2, 3, durations));
+        return new LearningEngine(new LearningPolicyConfiguration(
+                2, 3, 4, 5, 2,
+                LearningPolicyConfiguration.V1_DUPLICATE_HISTORY_WINDOW,
+                durations));
     }
 
     @Bean

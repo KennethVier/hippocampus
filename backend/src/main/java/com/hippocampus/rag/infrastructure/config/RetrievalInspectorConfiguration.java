@@ -15,7 +15,6 @@ import com.hippocampus.rag.application.BuildRetrievalScope;
 import com.hippocampus.rag.application.HybridCandidateMerger;
 import com.hippocampus.rag.application.InspectRetrieval;
 import com.hippocampus.rag.application.RetrievalInspectorLimits;
-import com.hippocampus.rag.infrastructure.persistence.JdbcActiveIndexGenerationRepository;
 import com.hippocampus.rag.port.ActiveIndexGenerationRepository;
 import com.hippocampus.rag.port.EmbeddingPort;
 import com.hippocampus.rag.port.LexicalSearchRepository;
@@ -29,11 +28,6 @@ import com.hippocampus.rag.port.VectorSearchRepository;
         VectorSearchRepository.class})
 @EnableConfigurationProperties(RetrievalInspectorProperties.class)
 public class RetrievalInspectorConfiguration {
-
-    @Bean
-    ActiveIndexGenerationRepository activeIndexGenerationRepository(JdbcClient jdbc) {
-        return new JdbcActiveIndexGenerationRepository(jdbc);
-    }
 
     @Bean
     InspectRetrieval inspectRetrieval(BuildRetrievalScope buildScope, LexicalSearchRepository lexicalSearch,

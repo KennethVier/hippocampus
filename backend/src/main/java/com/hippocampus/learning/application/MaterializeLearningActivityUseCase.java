@@ -2,6 +2,8 @@ package com.hippocampus.learning.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -11,6 +13,7 @@ import com.hippocampus.learning.domain.LearningActionType;
 import com.hippocampus.learning.domain.LearningActivity;
 import com.hippocampus.learning.domain.LearningActivityType;
 import com.hippocampus.learning.domain.LearningObjective;
+import com.hippocampus.learning.domain.LearningPolicyConfiguration;
 import com.hippocampus.learning.domain.NextLearningAction;
 import com.hippocampus.learning.domain.SourceRequirement;
 import com.hippocampus.learning.domain.StudyMission;
@@ -112,6 +115,7 @@ public class MaterializeLearningActivityUseCase {
         ActivityAiTaskPort.ValidatedContent content = aiTaskPort.execute(new ActivityAiTaskPort.Request(
                 objective.objectiveText(), displayName(objective, action), action.actionType(),
                 action.difficulty(), mission.groundingMode(), evidence,
+                recentQuestionIntents(mission, objective),
                 action.constraints()));
         if (content.validationStatus() != ActivityAiTaskPort.ValidationStatus.VALIDATED) {
             throw failure(ActivityMaterializationException.Reason.INVALID_AI_CONTENT,
@@ -135,6 +139,18 @@ public class MaterializeLearningActivityUseCase {
             return action.conceptKey();
         }
         return objective.objectiveText();
+    }
+
+    private static List<String> recentQuestionIntents(
+            StudyMission mission, LearningObjective objective) {
+        return mission.activities().stream()
+                .filter(activity -> objective.id().equals(activity.learningObjectiveId()))
+                .filter(activity -> activity.representedActionType() == LearningActionType.RETRIEVE)
+                .filter(activity -> activity.questionIntent() != null)
+                .sorted(Comparator.comparingInt(LearningActivity::sequenceNumber).reversed())
+                .limit(LearningPolicyConfiguration.V1_DUPLICATE_HISTORY_WINDOW)
+                .map(LearningActivity::questionIntent)
+                .toList();
     }
 
     private static LearningActivity priorActivity(StudyMission mission, NextLearningAction action) {

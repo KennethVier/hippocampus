@@ -8,7 +8,19 @@ public record LearningActionConstraints(
         boolean supplementalKnowledgeAllowed,
         String questionIntent,
         String templateSignature,
-        LearningActivityIntent repetitionIntent) {
+        LearningActivityIntent repetitionIntent,
+        RetrievalActivityType retrievalActivityType) {
+
+    public LearningActionConstraints(
+            SourceRequirement sourceRequirement,
+            boolean visualRequired,
+            boolean supplementalKnowledgeAllowed,
+            String questionIntent,
+            String templateSignature,
+            LearningActivityIntent repetitionIntent) {
+        this(sourceRequirement, visualRequired, supplementalKnowledgeAllowed, questionIntent,
+                templateSignature, repetitionIntent, null);
+    }
 
     public LearningActionConstraints {
         Objects.requireNonNull(sourceRequirement, "sourceRequirement must not be null");
@@ -31,7 +43,8 @@ public record LearningActionConstraints(
                 true,
                 null,
                 null,
-                LearningActivityIntent.STANDARD);
+                LearningActivityIntent.STANDARD,
+                null);
     }
 
     public LearningActionConstraints withoutSourceDependency() {
@@ -41,7 +54,8 @@ public record LearningActionConstraints(
                 supplementalKnowledgeAllowed,
                 questionIntent,
                 templateSignature,
-                repetitionIntent);
+                repetitionIntent,
+                retrievalActivityType);
     }
 
     public LearningActionConstraints withRepetitionIntent(LearningActivityIntent intent) {
@@ -51,6 +65,32 @@ public record LearningActionConstraints(
                 supplementalKnowledgeAllowed,
                 questionIntent,
                 templateSignature,
-                intent);
+                intent,
+                retrievalActivityType);
+    }
+
+    public LearningActionConstraints withRetrievalActivityType(RetrievalActivityType activityType) {
+        return new LearningActionConstraints(
+                sourceRequirement,
+                visualRequired,
+                supplementalKnowledgeAllowed,
+                questionIntent,
+                templateSignature,
+                repetitionIntent,
+                Objects.requireNonNull(activityType, "activityType must not be null"));
+    }
+
+    public LearningActionConstraints withoutRetrievalActivityType() {
+        if (retrievalActivityType == null) {
+            return this;
+        }
+        return new LearningActionConstraints(
+                sourceRequirement,
+                visualRequired,
+                supplementalKnowledgeAllowed,
+                questionIntent,
+                templateSignature,
+                repetitionIntent,
+                null);
     }
 }

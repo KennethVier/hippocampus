@@ -33,6 +33,7 @@ import com.hippocampus.learning.domain.LearningObjectiveStatus;
 import com.hippocampus.learning.domain.LearningStage;
 import com.hippocampus.learning.domain.MissionMaterial;
 import com.hippocampus.learning.domain.NextLearningAction;
+import com.hippocampus.learning.domain.RetrievalActivityType;
 import com.hippocampus.learning.domain.SourceRequirement;
 import com.hippocampus.learning.domain.StudyMission;
 import com.hippocampus.learning.domain.StudyMissionGroundingMode;
@@ -114,13 +115,14 @@ class ActivityMaterializationPersistenceIntegrationTests extends PostgresIntegra
             PersistMaterializedActivity persistence = context.getBean(PersistMaterializedActivity.class);
 
             assertMaterializedRoundTrip(
-                    fixture, repository, persistence, LearningActionType.HINT, false,
+                    fixture, repository, persistence, LearningActionType.HINT, false, null,
                     LearningActivityType.UNDERSTAND);
             assertMaterializedRoundTrip(
-                    fixture, repository, persistence, LearningActionType.PREREQUISITE_SUPPORT, false,
+                    fixture, repository, persistence, LearningActionType.PREREQUISITE_SUPPORT, false, null,
                     LearningActivityType.UNDERSTAND);
             assertMaterializedRoundTrip(
                     fixture, repository, persistence, LearningActionType.RETRIEVE, true,
+                    RetrievalActivityType.IDENTIFICATION,
                     LearningActivityType.VISUAL);
         }
     }
@@ -301,14 +303,17 @@ class ActivityMaterializationPersistenceIntegrationTests extends PostgresIntegra
     }
 
     private static NextLearningAction action(
-            UUID objectiveId, LearningActionType actionType, boolean visualRequired) {
+            UUID objectiveId,
+            LearningActionType actionType,
+            boolean visualRequired,
+            RetrievalActivityType retrievalActivityType) {
         return new NextLearningAction(
                 actionType, objectiveId, "preload",
                 LearningDifficulty.INTERMEDIATE, "test", true,
                 new LearningActionConstraints(
                         SourceRequirement.REQUIRED, visualRequired, false,
                         "mechanism", "activity-v1",
-                        LearningActivityIntent.STANDARD));
+                        LearningActivityIntent.STANDARD, retrievalActivityType));
     }
 
     private static NextLearningAction reuseAction(UUID objectiveId, UUID activityId) {
@@ -327,6 +332,7 @@ class ActivityMaterializationPersistenceIntegrationTests extends PostgresIntegra
             PersistMaterializedActivity persistence,
             LearningActionType representedActionType,
             boolean visualRequired,
+            RetrievalActivityType retrievalActivityType,
             LearningActivityType expectedActivityType) {
         StudyMission mission = initialMission(fixture);
         repository.save(mission);
@@ -334,7 +340,8 @@ class ActivityMaterializationPersistenceIntegrationTests extends PostgresIntegra
                 fixture, repository, persistence, Set.of(fixture.sourceReferenceId()));
         var result = materializer.execute(new MaterializeLearningActivityUseCase.Command(
                 mission.id(), action(
-                        mission.objectives().getFirst().id(), representedActionType, visualRequired)));
+                        mission.objectives().getFirst().id(), representedActionType, visualRequired,
+                        retrievalActivityType)));
 
         LearningActivity reloaded = activity(
                 repository.findOwnedById(mission.id(), fixture.ownerId()).orElseThrow(),
