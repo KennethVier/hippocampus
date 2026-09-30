@@ -9,6 +9,7 @@ import static com.hippocampus.learning.domain.LearningRationaleCodes.RETRIEVAL_G
 
 import com.hippocampus.learning.domain.EvidenceDimension;
 import com.hippocampus.learning.domain.EvidenceStrength;
+import com.hippocampus.learning.domain.ApplicationActivityLevel;
 import com.hippocampus.learning.domain.LearningActionType;
 import com.hippocampus.learning.domain.LearningDifficulty;
 import com.hippocampus.learning.domain.LearningPolicyConfiguration;
@@ -89,7 +90,16 @@ public final class ApplicationPolicy {
                 LearningActionType.APPLY,
                 difficulty,
                 APPLICATION_READY,
-                true);
+                true,
+                state.actionConstraints().withApplicationActivityLevel(levelFor(difficulty)));
+    }
+
+    private static ApplicationActivityLevel levelFor(LearningDifficulty difficulty) {
+        return switch (difficulty) {
+            case FOUNDATIONAL -> ApplicationActivityLevel.DIRECT;
+            case INTERMEDIATE -> ApplicationActivityLevel.GUIDED;
+            case APPLIED -> ApplicationActivityLevel.MECHANISM_TO_FINDING;
+        };
     }
 
     private static LearningDifficulty reduce(LearningDifficulty difficulty) {

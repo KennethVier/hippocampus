@@ -34,6 +34,11 @@ public record NextLearningAction(
             throw new IllegalArgumentException(
                     "retrievalActivityType must be present exactly for AI-backed RETRIEVE actions");
         }
+        boolean generatesApplication = actionType == LearningActionType.APPLY && aiTaskRequired;
+        if (generatesApplication != (constraints.applicationActivityLevel() != null)) {
+            throw new IllegalArgumentException(
+                    "applicationActivityLevel must be present exactly for AI-backed APPLY actions");
+        }
     }
 
     public NextLearningAction(

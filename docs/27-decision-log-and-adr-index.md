@@ -4,7 +4,7 @@ Audience: Product, architecture, backend, frontend, AI/RAG, DevOps,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 27
-Last Updated: 2026-09-30
+Last Updated: 2026-10-01
 Owner: Project Hippocampus Team
 Prerequisites:
 - README
@@ -24,7 +24,7 @@ Scope: Decision authority, decision categories, ADR lifecycle, ADR
   Source-of-Truth freeze procedure.
 Status: Final
 Title: Decision Log / ADR Index
-Version: 1.0.6
+Version: 1.0.8
 ---
 
 # 27 - Decision Log / ADR Index
@@ -1389,6 +1389,7 @@ When ADRs exist, add an index:
 | [ADR-0006](adr/ADR-0006-explicit-reusable-learning-activity-identity.md) | Explicit Reusable Learning Activity Identity | ACCEPTED | 2026-09-29 | DOMAIN, BACKEND, EDUCATION |
 | [ADR-0007](adr/ADR-0007-explicit-retrieval-activity-type-selection.md) | Explicit Retrieval Activity Type Selection | ACCEPTED | 2026-09-30 | DOMAIN, BACKEND, AI, EDUCATION |
 | [ADR-0008](adr/ADR-0008-evaluation-gated-configured-ai-task-routing.md) | Evaluation-Gated Configured AI Task Routing | ACCEPTED | 2026-09-30 | ARCHITECTURE, BACKEND, AI, OPERATIONS |
+| [ADR-0009](adr/ADR-0009-explicit-application-level-selection.md) | Explicit Application Level Selection | ACCEPTED | 2026-10-01 | DOMAIN, BACKEND, AI, EDUCATION |
 
 This table begins empty at initial v1 freeze unless a real pending
 decision already exists.
@@ -1460,13 +1461,24 @@ adapters and models do not select or default the question format.
 
 Concrete AI chat model identifiers, prompt budgets, routing preferences, and
 provider/model candidates are explicit task-specific deployment configuration
-for explanation, question generation, and response evaluation. Configuration
-does not imply evaluation approval. The existing Provider Router remains the
+for explanation, question generation, response evaluation, concept connection,
+and contextual application. Configuration does not imply evaluation approval.
+The existing Provider Router remains the
 single selection algorithm and routes only candidates that support the task,
 are explicitly evaluation-approved, and have available provider, quota, and
 rate-limit capacity. Enabled runtime configuration fails closed when required
 task policy is incomplete or an eligible route references an unavailable
 provider adapter.
+
+## ADR-0009 Decision Summary
+
+The deterministic Learning Engine explicitly selects a learning-owned
+`ApplicationActivityLevel` for every AI-backed application: foundational maps
+to `DIRECT`, intermediate to `GUIDED`, and applied to
+`MECHANISM_TO_FINDING`. `SHORT_CASE` remains supported but is not selected by
+the initial v1 policy. AI integration maps the value exactly and rejects a
+generated application whose difficulty is incompatible with the Learning
+Engine request.
 
 ------------------------------------------------------------------------
 
@@ -1778,6 +1790,11 @@ Phase 0 — Engineering Foundation
   1.0.7             2026-09-30        Project           Accepted and indexed
                                       Hippocampus Team  ADR-0008 evaluation-gated
                                                         configured AI task routing
+
+  1.0.8             2026-10-01        Project           Accepted and indexed
+                                      Hippocampus Team  ADR-0009 explicit
+                                                        application level
+                                                        selection
 
   ----------------------------------------------------------------------------
 

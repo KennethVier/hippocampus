@@ -23,7 +23,8 @@ public final class AiTaskExecutionProperties {
             AiTaskType.EXPLANATION,
             AiTaskType.QUESTION_GENERATION,
             AiTaskType.RESPONSE_EVALUATION,
-            AiTaskType.CONCEPT_CONNECTION);
+            AiTaskType.CONCEPT_CONNECTION,
+            AiTaskType.CONTEXTUAL_APPLICATION);
 
     private Map<AiTaskType, TaskProperties> tasks = Map.of();
 

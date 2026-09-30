@@ -9,7 +9,20 @@ public record LearningActionConstraints(
         String questionIntent,
         String templateSignature,
         LearningActivityIntent repetitionIntent,
-        RetrievalActivityType retrievalActivityType) {
+        RetrievalActivityType retrievalActivityType,
+        ApplicationActivityLevel applicationActivityLevel) {
+
+    public LearningActionConstraints(
+            SourceRequirement sourceRequirement,
+            boolean visualRequired,
+            boolean supplementalKnowledgeAllowed,
+            String questionIntent,
+            String templateSignature,
+            LearningActivityIntent repetitionIntent,
+            RetrievalActivityType retrievalActivityType) {
+        this(sourceRequirement, visualRequired, supplementalKnowledgeAllowed, questionIntent,
+                templateSignature, repetitionIntent, retrievalActivityType, null);
+    }
 
     public LearningActionConstraints(
             SourceRequirement sourceRequirement,
@@ -19,7 +32,7 @@ public record LearningActionConstraints(
             String templateSignature,
             LearningActivityIntent repetitionIntent) {
         this(sourceRequirement, visualRequired, supplementalKnowledgeAllowed, questionIntent,
-                templateSignature, repetitionIntent, null);
+                templateSignature, repetitionIntent, null, null);
     }
 
     public LearningActionConstraints {
@@ -44,6 +57,7 @@ public record LearningActionConstraints(
                 null,
                 null,
                 LearningActivityIntent.STANDARD,
+                null,
                 null);
     }
 
@@ -55,7 +69,8 @@ public record LearningActionConstraints(
                 questionIntent,
                 templateSignature,
                 repetitionIntent,
-                retrievalActivityType);
+                retrievalActivityType,
+                applicationActivityLevel);
     }
 
     public LearningActionConstraints withRepetitionIntent(LearningActivityIntent intent) {
@@ -66,7 +81,8 @@ public record LearningActionConstraints(
                 questionIntent,
                 templateSignature,
                 intent,
-                retrievalActivityType);
+                retrievalActivityType,
+                applicationActivityLevel);
     }
 
     public LearningActionConstraints withRetrievalActivityType(RetrievalActivityType activityType) {
@@ -77,7 +93,8 @@ public record LearningActionConstraints(
                 questionIntent,
                 templateSignature,
                 repetitionIntent,
-                Objects.requireNonNull(activityType, "activityType must not be null"));
+                Objects.requireNonNull(activityType, "activityType must not be null"),
+                applicationActivityLevel);
     }
 
     public LearningActionConstraints withoutRetrievalActivityType() {
@@ -91,6 +108,34 @@ public record LearningActionConstraints(
                 questionIntent,
                 templateSignature,
                 repetitionIntent,
+                null,
+                applicationActivityLevel);
+    }
+
+    public LearningActionConstraints withApplicationActivityLevel(ApplicationActivityLevel activityLevel) {
+        return new LearningActionConstraints(
+                sourceRequirement,
+                visualRequired,
+                supplementalKnowledgeAllowed,
+                questionIntent,
+                templateSignature,
+                repetitionIntent,
+                retrievalActivityType,
+                Objects.requireNonNull(activityLevel, "activityLevel must not be null"));
+    }
+
+    public LearningActionConstraints withoutApplicationActivityLevel() {
+        if (applicationActivityLevel == null) {
+            return this;
+        }
+        return new LearningActionConstraints(
+                sourceRequirement,
+                visualRequired,
+                supplementalKnowledgeAllowed,
+                questionIntent,
+                templateSignature,
+                repetitionIntent,
+                retrievalActivityType,
                 null);
     }
 }

@@ -42,6 +42,11 @@ public interface ActivityAiTaskPort {
                 throw new IllegalArgumentException(
                         "retrievalActivityType must be present exactly for RETRIEVE requests");
             }
+            if ((actionType == LearningActionType.APPLY)
+                    != (constraints.applicationActivityLevel() != null)) {
+                throw new IllegalArgumentException(
+                        "applicationActivityLevel must be present exactly for APPLY requests");
+            }
         }
     }
 

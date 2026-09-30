@@ -32,3 +32,5 @@ documentation patches.
 | [ADR-0005](ADR-0005-exact-chunk-source-provenance-and-initial-replay-identity.md) | Exact Chunk Source Provenance and Initial Replay Identity | ACCEPTED | 2026-09-09 |
 | [ADR-0006](ADR-0006-explicit-reusable-learning-activity-identity.md) | Explicit Reusable Learning Activity Identity | ACCEPTED | 2026-09-29 |
 | [ADR-0007](ADR-0007-explicit-retrieval-activity-type-selection.md) | Explicit Retrieval Activity Type Selection | ACCEPTED | 2026-09-30 |
+| [ADR-0008](ADR-0008-evaluation-gated-configured-ai-task-routing.md) | Evaluation-Gated Configured AI Task Routing | ACCEPTED | 2026-09-30 |
+| [ADR-0009](ADR-0009-explicit-application-level-selection.md) | Explicit Application Level Selection | ACCEPTED | 2026-10-01 |

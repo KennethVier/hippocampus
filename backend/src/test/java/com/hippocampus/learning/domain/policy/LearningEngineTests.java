@@ -8,6 +8,7 @@ import static com.hippocampus.learning.domain.LearningRationaleCodes.TIME_LIMIT;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.hippocampus.learning.domain.AttemptOutcome;
+import com.hippocampus.learning.domain.ApplicationActivityLevel;
 import com.hippocampus.learning.domain.EvidenceDimension;
 import com.hippocampus.learning.domain.EvidenceStrength;
 import com.hippocampus.learning.domain.LearningActionConstraints;
@@ -407,7 +408,7 @@ class LearningEngineTests {
                 LearningDifficulty.INTERMEDIATE,
                 "FAILED",
                 true,
-                constraints);
+                constraints.withApplicationActivityLevel(ApplicationActivityLevel.GUIDED));
     }
 
     private static LearningState state(

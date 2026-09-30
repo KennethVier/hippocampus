@@ -1,12 +1,12 @@
 ---
 Document ID: 11
 Title: AI Learning Engine
-Version: 1.0.2
+Version: 1.0.3
 Status: Final
 Owner: Project Hippocampus Team
 Authors: Project Hippocampus Team
 Created: 2026-08-23
-Last Updated: 2026-09-30
+Last Updated: 2026-10-01
 Purpose: Define how Hippocampus decides the next educational action using deterministic learning rules, learner context, Study Mission state, learning evidence, source readiness, time constraints, and bounded AI assistance.
 Scope: Learning-state evaluation, mission-state transitions, next-action policy, rule precedence, AI task invocation, retries, adaptation, evidence updates, anti-repetition behavior, time-aware decisions, review decisions, failure paths, and explainability.
 Audience: Product, AI, backend, architecture, QA, UX, and medical-education contributors.
@@ -1598,6 +1598,15 @@ The following decisions are approved for v1:
     The v1 policy does not infer from difficulty or question intent, randomize,
     rotate, select by subject, or delegate format selection to AI. `MCQ` and
     `EXPLANATION` remain representable but are not automatically selected.
+24. For an AI-backed `APPLY` action, the Learning Engine explicitly selects
+    `ApplicationActivityLevel`: `DIRECT` for `FOUNDATIONAL`, `GUIDED` for
+    `INTERMEDIATE`, and `MECHANISM_TO_FINDING` for `APPLIED` difficulty. Other
+    actions carry no application activity level. `SHORT_CASE` remains
+    representable but is not automatically selected. The AI adapter and model
+    do not infer or override application complexity. Generated difficulty must
+    match the Learning Engine request: `FOUNDATIONAL` maps to
+    `FOUNDATIONAL_APPLIED`; `INTERMEDIATE` and `APPLIED` map to
+    `INTERMEDIATE_APPLIED`.
 
 ---
 
@@ -1674,6 +1683,7 @@ The prompt layer must implement decisions from the Learning Engine rather than i
 | 1.0.0 | 2026-08-23 | Project Hippocampus Team | Initial finalized AI Learning Engine defining deterministic educational decision logic, mission-state transitions, learner-state adaptation, AI invocation rules, evidence updates, review behavior, and explainability |
 | 1.0.1 | 2026-09-29 | Project Hippocampus Team | Aligned exact reusable LearningActivity identity and Learning Engine selection authority with ADR-0006 |
 | 1.0.2 | 2026-09-30 | Project Hippocampus Team | Added explicit deterministic retrieval activity type selection aligned with ADR-0007 |
+| 1.0.3 | 2026-10-01 | Project Hippocampus Team | Added explicit deterministic application activity level selection and output-difficulty mapping aligned with ADR-0009 |
 
 ---
 

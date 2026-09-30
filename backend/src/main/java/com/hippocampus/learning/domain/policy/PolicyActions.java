@@ -33,10 +33,15 @@ final class PolicyActions {
             String rationaleCode,
             boolean aiTaskRequired,
             LearningActionConstraints constraints) {
-        LearningActionConstraints applicableConstraints =
-                actionType == LearningActionType.RETRIEVE && aiTaskRequired
-                        ? constraints
-                        : constraints.withoutRetrievalActivityType();
+        boolean generatesRetrieval = actionType == LearningActionType.RETRIEVE && aiTaskRequired;
+        boolean generatesApplication = actionType == LearningActionType.APPLY && aiTaskRequired;
+        LearningActionConstraints applicableConstraints = constraints;
+        if (!generatesRetrieval) {
+            applicableConstraints = applicableConstraints.withoutRetrievalActivityType();
+        }
+        if (!generatesApplication) {
+            applicableConstraints = applicableConstraints.withoutApplicationActivityLevel();
+        }
         return new NextLearningAction(
                 actionType,
                 state.learningObjectiveId(),
@@ -61,7 +66,7 @@ final class PolicyActions {
                 difficulty,
                 rationaleCode,
                 false,
-                constraints.withoutRetrievalActivityType(),
+                constraints.withoutRetrievalActivityType().withoutApplicationActivityLevel(),
                 learningActivityId);
     }
 }

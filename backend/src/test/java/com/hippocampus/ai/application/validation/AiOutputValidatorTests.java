@@ -135,6 +135,26 @@ class AiOutputValidatorTests {
     }
 
     @Test
+    void rejectsContextualApplicationWithoutRequiredReasoning() {
+        String output = validContextualApplication().replace(
+                "\"requiredReasoning\": [\"Relate ventricular conduction velocity to the specialized fibers\"]",
+                "\"requiredReasoning\": []");
+
+        assertFailure(output, AiOutputContract.CONTEXTUAL_APPLICATION,
+                AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION);
+    }
+
+    @Test
+    void rejectsContextualApplicationWithoutFeedbackPoints() {
+        String output = validContextualApplication().replace(
+                "\"feedbackPoints\": [\"They rapidly distribute depolarization through the ventricles\"]",
+                "\"feedbackPoints\": []");
+
+        assertFailure(output, AiOutputContract.CONTEXTUAL_APPLICATION,
+                AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION);
+    }
+
+    @Test
     void acceptsMcqWithUniqueOptionsAndMatchingCorrectOption() {
         ValidatedAiResult<?> result = validator.validate(
                 providerResult(VALID_MCQ), AiOutputContract.QUESTION_GENERATION);
@@ -255,19 +275,8 @@ class AiOutputValidatorTests {
                         """, ResponseEvaluationResult.class),
                 Arguments.of(AiOutputContract.CONCEPT_CONNECTION,
                         validConceptConnection(), ConceptConnectionResult.class),
-                Arguments.of(AiOutputContract.CONTEXTUAL_APPLICATION, """
-                        {
-                          "scenario": "A learner reviews a tracing showing delayed ventricular depolarization.",
-                          "question": "Which conduction structure normally distributes the impulse rapidly?",
-                          "targetConcept": "Purkinje fibers",
-                          "requiredReasoning": ["Relate ventricular conduction velocity to the specialized fibers"],
-                          "expectedAnswer": "Purkinje fibers",
-                          "feedbackPoints": ["They rapidly distribute depolarization through the ventricles"],
-                          "difficulty": "FOUNDATIONAL_APPLIED",
-                          "sourceReferences": [],
-                          "limitations": []
-                        }
-                        """, ContextualApplicationResult.class));
+                Arguments.of(AiOutputContract.CONTEXTUAL_APPLICATION,
+                        validContextualApplication(), ContextualApplicationResult.class));
     }
 
     private static String validExplanation() {
@@ -292,6 +301,22 @@ class AiOutputValidatorTests {
                   "relationshipType": "inverse physiological relationship",
                   "relationship": "Increasing alveolar ventilation lowers arterial carbon dioxide.",
                   "whyItMatters": "It explains respiratory compensation and ventilatory disorders.",
+                  "sourceReferences": [],
+                  "limitations": []
+                }
+                """;
+    }
+
+    private static String validContextualApplication() {
+        return """
+                {
+                  "scenario": "A learner reviews a tracing showing delayed ventricular depolarization.",
+                  "question": "Which conduction structure normally distributes the impulse rapidly?",
+                  "targetConcept": "Purkinje fibers",
+                  "requiredReasoning": ["Relate ventricular conduction velocity to the specialized fibers"],
+                  "expectedAnswer": "Purkinje fibers",
+                  "feedbackPoints": ["They rapidly distribute depolarization through the ventricles"],
+                  "difficulty": "FOUNDATIONAL_APPLIED",
                   "sourceReferences": [],
                   "limitations": []
                 }

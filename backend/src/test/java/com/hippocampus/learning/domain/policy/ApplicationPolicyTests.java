@@ -5,6 +5,7 @@ import static com.hippocampus.learning.domain.LearningRationaleCodes.APPLICATION
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.hippocampus.learning.domain.AttemptOutcome;
+import com.hippocampus.learning.domain.ApplicationActivityLevel;
 import com.hippocampus.learning.domain.EvidenceDimension;
 import com.hippocampus.learning.domain.EvidenceStrength;
 import com.hippocampus.learning.domain.LearningActionConstraints;
@@ -48,6 +49,8 @@ class ApplicationPolicyTests {
 
         assertThat(action.actionType()).isEqualTo(LearningActionType.APPLY);
         assertThat(action.difficulty()).isEqualTo(LearningDifficulty.FOUNDATIONAL);
+        assertThat(action.constraints().applicationActivityLevel())
+                .isEqualTo(ApplicationActivityLevel.DIRECT);
     }
 
     @Test
@@ -64,9 +67,26 @@ class ApplicationPolicyTests {
 
         assertThat(isolated.actionType()).isEqualTo(LearningActionType.APPLY);
         assertThat(isolated.difficulty()).isEqualTo(LearningDifficulty.APPLIED);
+        assertThat(isolated.constraints().applicationActivityLevel())
+                .isEqualTo(ApplicationActivityLevel.MECHANISM_TO_FINDING);
         assertThat(repeated.actionType()).isEqualTo(LearningActionType.REDUCE_DIFFICULTY);
         assertThat(repeated.difficulty()).isEqualTo(LearningDifficulty.INTERMEDIATE);
         assertThat(repeated.rationaleCode()).isEqualTo(APPLICATION_SCAFFOLDED);
+    }
+
+    @Test
+    void selectsGuidedApplicationForIntermediateDifficulty() {
+        RecentLearningActivity failure = PolicyTestFixtures.activity(
+                LearningActionType.APPLY, LearningDifficulty.INTERMEDIATE, AttemptOutcome.INCORRECT);
+
+        var action = policy.select(state(Map.of(
+                EvidenceDimension.UNDERSTANDING, EvidenceStrength.STRONG,
+                EvidenceDimension.RECALL, EvidenceStrength.STRONG,
+                EvidenceDimension.APPLICATION, EvidenceStrength.WEAK), List.of(failure), false));
+
+        assertThat(action.difficulty()).isEqualTo(LearningDifficulty.INTERMEDIATE);
+        assertThat(action.constraints().applicationActivityLevel())
+                .isEqualTo(ApplicationActivityLevel.GUIDED);
     }
 
     @Test
