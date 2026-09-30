@@ -2000,7 +2000,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Generate bounded relationship activity.
 - **Build:** Create connection explanation/question linking relevant concepts using evidence.
 - **How it works:** Engine decides when connection is needed.
@@ -2009,24 +2009,24 @@ responsibilities remain outside P5-06.
 - **Expected result:** Connections are medically relevant and source-grounded.
 - **Definition of Done:** Eval pass.
 - **Authority:** Documents 03,11
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** PR #210; merged head `56429f8b70f433f0dfb17a7b852575f8ef60ee9b`; merge SHA `68d2c28d89a0a175acc38e9f6c011de63f37fec5`; merged 2026-09-30. User-owned `node scripts/validation/validate.mjs backend` PASS. `backend-clean-verify` PASS; `git-diff-check` PASS; GitHub Actions quality run #591 PASS; `backend-quality` PASS; `frontend-quality` PASS; `auth-e2e` PASS; `security` job PASS; Phase 1–6 gates PASS; external implementation review APPROVED; task/contract-level concept-connection semantic evaluation PASS; independent security review SECURITY PASS; Critical 0 / High 0 / Medium 0.
+- **Notes / blockers:** `CONCEPT_CONNECTION` provider/model approval remains an operational evaluation requirement before a real provider/model is enabled for `evaluationApprovedTasks`. Routing fails closed until that approval exists, so this does not block Ready for Review. P7-10 is not Done.
 
 ## P7-11 — Implement application-scenario task
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** In Progress
 - **Goal:** Generate practical scaffolded medical scenario.
-- **Build:** Create age-appropriate scenario focused on target concept with expected reasoning and safety/educational framing.
+- **Build:** Create learner-appropriate scenario focused on target concept with expected reasoning and safety/educational framing.
 - **How it works:** Not patient-specific advice.
 - **Dependencies:** AI infra
 - **Tests / validation:** Scenario plausibility/difficulty/support tests.
 - **Expected result:** Student can apply foundational knowledge meaningfully.
 - **Definition of Done:** Eval pass.
 - **Authority:** Documents 03,07,15
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Implemented ADR-0009 learning-owned application-level selection, AI-backed `APPLY` contextual-application execution, complete validated payload materialization, deterministic output validation, and evaluation-gated runtime routing configuration requirements. External review, user validation, semantic evaluation, and independent security review remain pending.
+- **Notes / blockers:** Implementation complete; external review/user validation/eval/security pending. Do not mark Done.
 
 ## P7-12 — Build Study Mission route and ActivityRenderer
 

@@ -20,7 +20,8 @@ deployment choice a permanent architecture constant.
 
 Concrete AI chat model identifiers and routing candidates are deployment/runtime
 configuration. Runtime execution configuration is task-specific for
-`EXPLANATION`, `QUESTION_GENERATION`, and `RESPONSE_EVALUATION`. Each task
+`EXPLANATION`, `QUESTION_GENERATION`, `RESPONSE_EVALUATION`,
+`CONCEPT_CONNECTION`, and `CONTEXTUAL_APPLICATION`. Each task
 supplies a prompt token budget, a `ProviderRoutingPreference`, and one or more
 existing `ProviderRoutingCandidate` values.
 
@@ -55,9 +56,9 @@ hippocampus:
               routing-priority: <required>
 ```
 
-`QUESTION_GENERATION` and `RESPONSE_EVALUATION` use the same task-specific
-shape. No model identifier, routing preference, provider priority, or token
-budget receives an application default.
+The other required tasks use the same task-specific shape. No model identifier,
+routing preference, provider priority, or token budget receives an application
+default.
 
 When AI runtime is enabled, missing/incomplete task configuration, absence of
 an eligible evaluation-approved route, or an eligible route referencing an
@@ -84,7 +85,7 @@ remains fail closed.
 
 # Consequences
 
-- Runtime deployments must configure all three P7 task policies explicitly.
+- Runtime deployments must configure all five implemented P7 task policies explicitly.
 - A configured model is not routable until its task is explicitly
   evaluation-approved and all availability flags permit routing.
 - Model and routing changes are configuration and evaluation changes, not

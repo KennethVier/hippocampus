@@ -19,31 +19,47 @@ import com.hippocampus.ai.infrastructure.learning.AiTaskExecutionPolicy;
 class AiTaskExecutionPropertiesTests {
 
     @Test
-    void requiresConceptConnectionTaskConfiguration() {
+    void requiresContextualApplicationTaskConfiguration() {
         AiTaskExecutionProperties properties = propertiesForRequiredTasks();
         Map<AiTaskType, AiTaskExecutionProperties.TaskProperties> tasks =
                 new EnumMap<>(properties.getTasks());
-        tasks.remove(AiTaskType.CONCEPT_CONNECTION);
+        tasks.remove(AiTaskType.CONTEXTUAL_APPLICATION);
         properties.setTasks(tasks);
 
         assertThatThrownBy(() -> properties.toPolicy(Set.of(ProviderId.GEMINI)))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("missing task configuration for CONCEPT_CONNECTION");
+                .hasMessageContaining("missing task configuration for CONTEXTUAL_APPLICATION");
     }
 
     @Test
-    void mapsConceptConnectionTaskConfigurationIntoExecutionPolicy() {
+    void mapsContextualApplicationTaskConfigurationIntoExecutionPolicy() {
         AiTaskExecutionPolicy policy = propertiesForRequiredTasks().toPolicy(Set.of(ProviderId.GEMINI));
 
-        AiTaskExecutionOptions options = policy.optionsFor(AiTaskType.CONCEPT_CONNECTION);
+        AiTaskExecutionOptions options = policy.optionsFor(AiTaskType.CONTEXTUAL_APPLICATION);
         assertThat(options.tokenBudget().maxContextTokens()).isEqualTo(2_000);
         assertThat(options.tokenBudget().reservedOutputTokens()).isEqualTo(300);
         assertThat(options.routingPreference()).isEqualTo(ProviderRoutingPreference.COST_THEN_LATENCY);
         assertThat(options.routingCandidates()).singleElement().satisfies(candidate -> {
             assertThat(candidate.providerId()).isEqualTo(ProviderId.GEMINI);
             assertThat(candidate.modelId()).isEqualTo("configured-model");
-            assertThat(candidate.evaluationApprovedTasks()).contains(AiTaskType.CONCEPT_CONNECTION);
+            assertThat(candidate.evaluationApprovedTasks()).contains(AiTaskType.CONTEXTUAL_APPLICATION);
         });
+    }
+
+    @Test
+    void rejectsContextualApplicationWithoutEvaluationApprovedEligibleRoute() {
+        AiTaskExecutionProperties properties = propertiesForRequiredTasks();
+        AiTaskExecutionProperties.TaskProperties task = taskProperties(AiTaskType.CONTEXTUAL_APPLICATION);
+        task.getCandidates().getFirst().setEvaluationApprovedTasks(Set.of());
+        Map<AiTaskType, AiTaskExecutionProperties.TaskProperties> tasks =
+                new EnumMap<>(properties.getTasks());
+        tasks.put(AiTaskType.CONTEXTUAL_APPLICATION, task);
+        properties.setTasks(tasks);
+
+        assertThatThrownBy(() -> properties.toPolicy(Set.of(ProviderId.GEMINI)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(
+                        "no evaluation-approved eligible route is configured for CONTEXTUAL_APPLICATION");
     }
 
     private static AiTaskExecutionProperties propertiesForRequiredTasks() {
@@ -54,7 +70,8 @@ class AiTaskExecutionPropertiesTests {
                 AiTaskType.EXPLANATION,
                 AiTaskType.QUESTION_GENERATION,
                 AiTaskType.RESPONSE_EVALUATION,
-                AiTaskType.CONCEPT_CONNECTION)) {
+                AiTaskType.CONCEPT_CONNECTION,
+                AiTaskType.CONTEXTUAL_APPLICATION)) {
             tasks.put(taskType, taskProperties(taskType));
         }
         properties.setTasks(tasks);

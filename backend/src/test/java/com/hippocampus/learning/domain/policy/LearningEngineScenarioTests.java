@@ -13,6 +13,7 @@ import static com.hippocampus.learning.domain.LearningRationaleCodes.VISUAL_UNRE
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.hippocampus.learning.domain.AttemptOutcome;
+import com.hippocampus.learning.domain.ApplicationActivityLevel;
 import com.hippocampus.learning.domain.EvidenceDimension;
 import com.hippocampus.learning.domain.EvidenceStrength;
 import com.hippocampus.learning.domain.LearningActionConstraints;
@@ -649,7 +650,7 @@ class LearningEngineScenarioTests {
                 LearningDifficulty.INTERMEDIATE,
                 "FAILED_ACTION",
                 true,
-                constraints);
+                constraints.withApplicationActivityLevel(ApplicationActivityLevel.GUIDED));
     }
 
     private static LearningActionConstraints noSourceConstraints() {

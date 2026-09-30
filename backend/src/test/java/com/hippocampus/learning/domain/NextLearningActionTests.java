@@ -49,14 +49,18 @@ class NextLearningActionTests {
                 "posterior-cord",
                 LearningDifficulty.APPLIED,
                 "READY_FOR_APPLICATION",
-                true);
+                true,
+                LearningActionConstraints.unconstrained()
+                        .withApplicationActivityLevel(ApplicationActivityLevel.MECHANISM_TO_FINDING));
         NextLearningAction equal = new NextLearningAction(
                 LearningActionType.APPLY,
                 objectiveId,
                 "posterior-cord",
                 LearningDifficulty.APPLIED,
                 "READY_FOR_APPLICATION",
-                true);
+                true,
+                LearningActionConstraints.unconstrained()
+                        .withApplicationActivityLevel(ApplicationActivityLevel.MECHANISM_TO_FINDING));
         NextLearningAction different = new NextLearningAction(
                 LearningActionType.RETRIEVE,
                 objectiveId,
@@ -195,5 +199,40 @@ class NextLearningActionTests {
                 LearningDifficulty.FOUNDATIONAL, "DIRECT", true,
                 LearningActionConstraints.unconstrained(), activityId))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void enforcesExactApplicationActivityLevelInvariant() {
+        UUID objectiveId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> new NextLearningAction(
+                LearningActionType.APPLY, objectiveId, "concept",
+                LearningDifficulty.FOUNDATIONAL, "APPLY", true,
+                LearningActionConstraints.unconstrained()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("applicationActivityLevel");
+        assertThatThrownBy(() -> new NextLearningAction(
+                LearningActionType.UNDERSTAND, objectiveId, "concept",
+                LearningDifficulty.FOUNDATIONAL, "UNDERSTAND", true,
+                LearningActionConstraints.unconstrained()
+                        .withApplicationActivityLevel(ApplicationActivityLevel.DIRECT)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("applicationActivityLevel");
+    }
+
+    @Test
+    void preservesAndClearsApplicationActivityLevelAcrossConstraintTransformations() {
+        LearningActionConstraints constraints = LearningActionConstraints.unconstrained()
+                .withApplicationActivityLevel(ApplicationActivityLevel.GUIDED);
+
+        assertThat(constraints.withoutSourceDependency().applicationActivityLevel())
+                .isEqualTo(ApplicationActivityLevel.GUIDED);
+        assertThat(constraints.withRepetitionIntent(LearningActivityIntent.CORRECTIVE_RETRY)
+                .applicationActivityLevel()).isEqualTo(ApplicationActivityLevel.GUIDED);
+        assertThat(constraints.withRetrievalActivityType(RetrievalActivityType.SHORT_ANSWER)
+                .applicationActivityLevel()).isEqualTo(ApplicationActivityLevel.GUIDED);
+        assertThat(constraints.withoutRetrievalActivityType().applicationActivityLevel())
+                .isEqualTo(ApplicationActivityLevel.GUIDED);
+        assertThat(constraints.withoutApplicationActivityLevel().applicationActivityLevel()).isNull();
     }
 }

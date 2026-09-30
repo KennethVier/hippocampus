@@ -11,12 +11,16 @@ import com.hippocampus.ai.application.prompt.PromptId;
 import com.hippocampus.ai.application.request.AiRequestPriority;
 import com.hippocampus.ai.application.validation.AiSchemaValidationException;
 import com.hippocampus.ai.domain.ActivityType;
+import com.hippocampus.ai.domain.ApplicationDifficulty;
+import com.hippocampus.ai.domain.ApplicationLevel;
 import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.domain.AiTaskContext;
 import com.hippocampus.ai.domain.AiTaskRequest;
 import com.hippocampus.ai.domain.AiTaskType;
 import com.hippocampus.ai.domain.ConceptConnectionInput;
 import com.hippocampus.ai.domain.ConceptConnectionResult;
+import com.hippocampus.ai.domain.ContextualApplicationInput;
+import com.hippocampus.ai.domain.ContextualApplicationResult;
 import com.hippocampus.ai.domain.ExplanationInput;
 import com.hippocampus.ai.domain.ExplanationMode;
 import com.hippocampus.ai.domain.ExplanationResult;
@@ -29,6 +33,7 @@ import com.hippocampus.ai.infrastructure.learning.AiTaskExecutionOptions;
 import com.hippocampus.ai.infrastructure.learning.AiTaskExecutionPolicy;
 import com.hippocampus.learning.domain.LearningActionType;
 import com.hippocampus.learning.domain.LearningActivityIntent;
+import com.hippocampus.learning.domain.ApplicationActivityLevel;
 import com.hippocampus.learning.domain.LearningDifficulty;
 import com.hippocampus.learning.domain.RetrievalActivityType;
 import com.hippocampus.learning.domain.StudyMissionGroundingMode;
@@ -95,6 +100,17 @@ public final class LearningActivityAiTaskAdapter implements ActivityAiTaskPort {
             case ConceptConnectionResult connection -> content(
                     "CONCEPT_CONNECTION", AiTaskType.CONCEPT_CONNECTION, connection.relationship(),
                     connection, request.groundingMode(), metadata, true, false);
+            case ContextualApplicationResult application -> {
+                if (application.difficulty() != mapApplicationDifficulty(request.difficulty())) {
+                    throw new AiSchemaValidationException(
+                            AiOutputContract.CONTEXTUAL_APPLICATION,
+                            AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION);
+                }
+                yield content(
+                        "CONTEXTUAL_APPLICATION", AiTaskType.CONTEXTUAL_APPLICATION,
+                        application.scenario(), application, request.groundingMode(), metadata,
+                        true, false);
+            }
             default -> throw new IllegalArgumentException(
                     "unsupported AI result for learning activity materialization");
         };
@@ -134,8 +150,17 @@ public final class LearningActivityAiTaskAdapter implements ActivityAiTaskPort {
                 taskContext = new ConceptConnectionInput(
                         request.targetDisplayName(), request.objective(), List.of());
             }
+            case APPLY -> {
+                taskType = AiTaskType.CONTEXTUAL_APPLICATION;
+                promptId = PromptId.CONTEXTUAL_APPLICATION_V1;
+                outputContract = AiOutputContract.CONTEXTUAL_APPLICATION;
+                taskContext = new ContextualApplicationInput(
+                        request.targetDisplayName(),
+                        request.objective(),
+                        map(request.constraints().applicationActivityLevel()));
+            }
             default -> throw new IllegalArgumentException(
-                    request.actionType() + " is not owned by P7-07/P7-08/P7-10 activity generation");
+                    request.actionType() + " is not owned by P7-07 through P7-11 activity generation");
         }
 
         return new AiTaskRequest<>(
@@ -225,6 +250,7 @@ public final class LearningActivityAiTaskAdapter implements ActivityAiTaskPort {
             case EXPLANATION -> AiRequestPriority.INTERACTIVE_EXPLANATION;
             case QUESTION_GENERATION -> AiRequestPriority.INTERACTIVE_GENERATION;
             case CONCEPT_CONNECTION -> AiRequestPriority.INTERACTIVE_GENERATION;
+            case CONTEXTUAL_APPLICATION -> AiRequestPriority.INTERACTIVE_GENERATION;
             default -> throw new IllegalArgumentException(taskType + " is not an activity-generation task");
         };
     }
@@ -236,6 +262,24 @@ public final class LearningActivityAiTaskAdapter implements ActivityAiTaskPort {
             case MCQ -> ActivityType.MCQ;
             case IDENTIFICATION -> ActivityType.IDENTIFICATION;
             case EXPLANATION -> ActivityType.EXPLANATION;
+        };
+    }
+
+    public static ApplicationLevel map(ApplicationActivityLevel activityLevel) {
+        Objects.requireNonNull(activityLevel, "applicationActivityLevel must not be null");
+        return switch (activityLevel) {
+            case DIRECT -> ApplicationLevel.DIRECT;
+            case GUIDED -> ApplicationLevel.GUIDED;
+            case MECHANISM_TO_FINDING -> ApplicationLevel.MECHANISM_TO_FINDING;
+            case SHORT_CASE -> ApplicationLevel.SHORT_CASE;
+        };
+    }
+
+    static ApplicationDifficulty mapApplicationDifficulty(LearningDifficulty difficulty) {
+        Objects.requireNonNull(difficulty, "application difficulty must not be null");
+        return switch (difficulty) {
+            case FOUNDATIONAL -> ApplicationDifficulty.FOUNDATIONAL_APPLIED;
+            case INTERMEDIATE, APPLIED -> ApplicationDifficulty.INTERMEDIATE_APPLIED;
         };
     }
 }

@@ -4,6 +4,7 @@ import static com.hippocampus.learning.domain.LearningRationaleCodes.ACCIDENTAL_
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.hippocampus.learning.domain.EvidenceDimension;
+import com.hippocampus.learning.domain.ApplicationActivityLevel;
 import com.hippocampus.learning.domain.EvidenceStrength;
 import com.hippocampus.learning.domain.LearningActionConstraints;
 import com.hippocampus.learning.domain.LearningActionType;
@@ -144,7 +145,8 @@ class AntiRepetitionPolicyTests {
                         false,
                         "MECHANISM_APPLY",
                         "template-b",
-                        LearningActivityIntent.STANDARD));
+                        LearningActivityIntent.STANDARD)
+                        .withApplicationActivityLevel(ApplicationActivityLevel.DIRECT));
 
         var adjusted = policy.adjust(state(List.of(appActivity)), applyCandidate);
 

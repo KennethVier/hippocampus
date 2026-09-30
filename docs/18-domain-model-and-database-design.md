@@ -4,7 +4,7 @@ Audience: Backend, architecture, database, AI, QA, security, and DevOps
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 18
-Last Updated: 2026-09-30
+Last Updated: 2026-10-01
 Owner: Project Hippocampus Team
 Prerequisites:
 - 00 - Project Vision
@@ -47,7 +47,7 @@ Scope: Core entities, aggregate boundaries, PostgreSQL schema design,
   versioning, and migration rules.
 Status: Final
 Title: Domain Model & Database Design
-Version: 1.0.5
+Version: 1.0.6
 ---
 
 # 18 - Domain Model & Database Design
@@ -1052,6 +1052,15 @@ null for actions that do not generate retrieval questions. This is a transient
 Learning Engine/application contract mapped explicitly to the AI-domain
 activity type; it does not add a `learning_activities` column because the
 generated artifact payload already retains the generated question structure.
+
+`LearningActionConstraints` also carries nullable `applicationActivityLevel`
+using the learning-owned values `DIRECT`, `GUIDED`, `MECHANISM_TO_FINDING`, and
+`SHORT_CASE`. It is non-null exactly for an AI-backed `APPLY` action and null
+for other actions. This transient Learning Engine/application contract maps
+explicitly to the AI-domain application level and does not add a database
+column. The complete validated contextual-application result, including its
+difficulty, reasoning, expected answer, feedback, provenance, and limitations,
+is retained in the generated artifact payload.
 
 Activity types:
 
@@ -2642,6 +2651,11 @@ and:
   1.0.5             2026-09-30        Project           Aligned explicit
                                       Hippocampus Team  retrieval activity type
                                                         selection with ADR-0007
+
+  1.0.6             2026-10-01        Project           Aligned explicit
+                                      Hippocampus Team  application activity
+                                                        level selection with
+                                                        ADR-0009
 
   -----------------------------------------------------------------------
 

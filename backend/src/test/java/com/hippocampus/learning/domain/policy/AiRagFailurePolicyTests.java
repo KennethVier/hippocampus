@@ -3,6 +3,7 @@ package com.hippocampus.learning.domain.policy;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.hippocampus.learning.domain.EvidenceDimension;
+import com.hippocampus.learning.domain.ApplicationActivityLevel;
 import com.hippocampus.learning.domain.EvidenceStrength;
 import com.hippocampus.learning.domain.LearningActionConstraints;
 import com.hippocampus.learning.domain.LearningActionType;
@@ -136,7 +137,7 @@ class AiRagFailurePolicyTests {
                 LearningDifficulty.INTERMEDIATE,
                 "FAILED_ACTION",
                 true,
-                strictConstraints());
+                strictConstraints().withApplicationActivityLevel(ApplicationActivityLevel.GUIDED));
     }
 
     private static LearningActionConstraints strictConstraints() {

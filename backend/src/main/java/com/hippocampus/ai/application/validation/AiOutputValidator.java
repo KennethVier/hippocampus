@@ -87,6 +87,15 @@ public final class AiOutputValidator {
                     outputContract,
                     AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION);
         }
+        if (decoded instanceof ContextualApplicationResult application
+                && (application.requiredReasoning().isEmpty()
+                        || application.requiredReasoning().stream().anyMatch(String::isBlank)
+                        || application.feedbackPoints().isEmpty()
+                        || application.feedbackPoints().stream().anyMatch(String::isBlank))) {
+            throw new AiSchemaValidationException(
+                    outputContract,
+                    AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION);
+        }
         if (!(decoded instanceof QuestionGenerationResult question)) {
             return;
         }

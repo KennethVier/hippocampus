@@ -263,6 +263,7 @@ class LearningStateTests {
                 LearningDifficulty.class,
                 AttemptOutcome.class,
                 LearningActivityIntent.class,
+                ApplicationActivityLevel.class,
                 SourceRequirement.class,
                 LearningActionConstraints.class,
                 LearningDependencyFailure.class,

@@ -4,6 +4,7 @@ import static com.hippocampus.learning.domain.LearningRationaleCodes.TIME_LIMIT;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.hippocampus.learning.domain.EvidenceDimension;
+import com.hippocampus.learning.domain.ApplicationActivityLevel;
 import com.hippocampus.learning.domain.EvidenceStrength;
 import com.hippocampus.learning.domain.LearningActionConstraints;
 import com.hippocampus.learning.domain.LearningActionType;
@@ -84,6 +85,11 @@ class TimeAwareMissionPolicyTests {
     }
 
     private static NextLearningAction candidate(LearningActionType type) {
+        LearningActionConstraints constraints = LearningActionConstraints.unconstrained();
+        if (type == LearningActionType.APPLY) {
+            constraints = constraints.withApplicationActivityLevel(
+                    ApplicationActivityLevel.MECHANISM_TO_FINDING);
+        }
         return new NextLearningAction(
                 type,
                 java.util.UUID.fromString("00000000-0000-0000-0000-000000000002"),
@@ -91,7 +97,7 @@ class TimeAwareMissionPolicyTests {
                 LearningDifficulty.APPLIED,
                 "CANDIDATE",
                 true,
-                LearningActionConstraints.unconstrained());
+                constraints);
     }
 
     @Test

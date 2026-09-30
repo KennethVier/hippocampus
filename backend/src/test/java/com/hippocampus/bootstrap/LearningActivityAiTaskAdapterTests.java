@@ -27,12 +27,17 @@ import com.hippocampus.ai.application.validation.AiSchemaValidationException;
 import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.domain.AiTaskRequest;
 import com.hippocampus.ai.domain.AiTaskType;
+import com.hippocampus.ai.domain.ApplicationDifficulty;
+import com.hippocampus.ai.domain.ApplicationLevel;
 import com.hippocampus.ai.domain.ConceptConnectionInput;
 import com.hippocampus.ai.domain.ConceptConnectionResult;
+import com.hippocampus.ai.domain.ContextualApplicationInput;
+import com.hippocampus.ai.domain.ContextualApplicationResult;
 import com.hippocampus.ai.domain.ExplanationResult;
 import com.hippocampus.ai.domain.ValidatedAiResult;
 import com.hippocampus.ai.infrastructure.learning.AiTaskExecutionOptions;
 import com.hippocampus.ai.infrastructure.learning.AiTaskExecutionPolicy;
+import com.hippocampus.learning.domain.ApplicationActivityLevel;
 import com.hippocampus.learning.domain.LearningActionConstraints;
 import com.hippocampus.learning.domain.LearningActionType;
 import com.hippocampus.learning.domain.LearningActivityIntent;
@@ -56,6 +61,7 @@ class LearningActivityAiTaskAdapterTests {
         AiTaskExecutionOptions options = executionOptions();
         when(executionPolicy.optionsFor(AiTaskType.EXPLANATION)).thenReturn(options);
         when(executionPolicy.optionsFor(AiTaskType.CONCEPT_CONNECTION)).thenReturn(options);
+        when(executionPolicy.optionsFor(AiTaskType.CONTEXTUAL_APPLICATION)).thenReturn(options);
         adapter = new LearningActivityAiTaskAdapter(
                 orchestrator, executionPolicy, new ObjectMapper());
     }
@@ -131,6 +137,89 @@ class LearningActivityAiTaskAdapterTests {
         assertThat(content.reusable()).isTrue();
     }
 
+    @Test
+    void executesApplyAsValidatedReusableContextualApplication() throws Exception {
+        ContextualApplicationResult application = new ContextualApplicationResult(
+                "A learner links posterior cord injury to impaired wrist extension.",
+                "What mechanism explains the wrist drop?",
+                "Radial nerve",
+                List.of("The radial nerve arises from the posterior cord", "It supplies wrist extensors"),
+                "Posterior cord injury can impair the radial nerve and wrist extension.",
+                List.of("Connect the nerve origin to its motor function"),
+                ApplicationDifficulty.FOUNDATIONAL_APPLIED,
+                List.of("source-1"),
+                List.of("Educational scenario only"));
+        ValidatedAiResult<?> validated = new ValidatedAiResult<>(
+                application,
+                new ValidatedAiResult.ExecutionMetadata(
+                        "GEMINI", "test-model", "test-version", "CONTEXTUAL_APPLICATION_V1", "1"));
+        when(orchestrator.execute(any(), any(), any(), anyList(), any()))
+                .thenReturn(CompletableFuture.completedFuture(validated));
+
+        ActivityAiTaskPort.ValidatedContent content = adapter.execute(applicationRequest());
+
+        ArgumentCaptor<AiTaskRequest<?>> requestCaptor = ArgumentCaptor.forClass(AiTaskRequest.class);
+        verify(orchestrator).execute(
+                requestCaptor.capture(),
+                org.mockito.ArgumentMatchers.eq(AiRequestPriority.INTERACTIVE_GENERATION),
+                any(), anyList(), any());
+        AiTaskRequest<?> aiRequest = requestCaptor.getValue();
+        assertThat(aiRequest.taskType()).isEqualTo(AiTaskType.CONTEXTUAL_APPLICATION);
+        assertThat(aiRequest.promptVersion()).isEqualTo("CONTEXTUAL_APPLICATION_V1");
+        assertThat(aiRequest.outputContract()).isEqualTo(AiOutputContract.CONTEXTUAL_APPLICATION);
+        assertThat(aiRequest.taskContext()).isEqualTo(new ContextualApplicationInput(
+                "Radial nerve", "Apply posterior cord anatomy", ApplicationLevel.DIRECT));
+        assertThat(content.artifactType()).isEqualTo("CONTEXTUAL_APPLICATION");
+        assertThat(content.taskType()).isEqualTo("CONTEXTUAL_APPLICATION");
+        assertThat(content.contentText()).isEqualTo(application.scenario());
+        assertThat(content.contentPayload()).isEqualTo(new ObjectMapper().writeValueAsString(application));
+        assertThat(content.groundingMode()).isEqualTo("STRICT_SOURCE");
+        assertThat(content.classification()).isEqualTo("SOURCE_GROUNDED_GENERATED");
+        assertThat(content.validationStatus()).isEqualTo(ActivityAiTaskPort.ValidationStatus.VALIDATED);
+        assertThat(content.reusable()).isTrue();
+    }
+
+    @Test
+    void mapsEveryLearningOwnedApplicationLevelExactly() {
+        assertThat(LearningActivityAiTaskAdapter.map(ApplicationActivityLevel.DIRECT))
+                .isEqualTo(ApplicationLevel.DIRECT);
+        assertThat(LearningActivityAiTaskAdapter.map(ApplicationActivityLevel.GUIDED))
+                .isEqualTo(ApplicationLevel.GUIDED);
+        assertThat(LearningActivityAiTaskAdapter.map(ApplicationActivityLevel.MECHANISM_TO_FINDING))
+                .isEqualTo(ApplicationLevel.MECHANISM_TO_FINDING);
+        assertThat(LearningActivityAiTaskAdapter.map(ApplicationActivityLevel.SHORT_CASE))
+                .isEqualTo(ApplicationLevel.SHORT_CASE);
+    }
+
+    @Test
+    void mapsLearningDifficultyToExpectedApplicationDifficultyExactly() {
+        assertThat(LearningActivityAiTaskAdapter.mapApplicationDifficulty(LearningDifficulty.FOUNDATIONAL))
+                .isEqualTo(ApplicationDifficulty.FOUNDATIONAL_APPLIED);
+        assertThat(LearningActivityAiTaskAdapter.mapApplicationDifficulty(LearningDifficulty.INTERMEDIATE))
+                .isEqualTo(ApplicationDifficulty.INTERMEDIATE_APPLIED);
+        assertThat(LearningActivityAiTaskAdapter.mapApplicationDifficulty(LearningDifficulty.APPLIED))
+                .isEqualTo(ApplicationDifficulty.INTERMEDIATE_APPLIED);
+    }
+
+    @Test
+    void rejectsContextualApplicationWithDifficultyDifferentFromLearningEngineRequest() {
+        ContextualApplicationResult application = new ContextualApplicationResult(
+                "Scenario", "Question", "Radial nerve", List.of("Reasoning"),
+                "Expected answer", List.of("Feedback"), ApplicationDifficulty.INTERMEDIATE_APPLIED,
+                List.of(), List.of());
+        ValidatedAiResult<?> validated = new ValidatedAiResult<>(
+                application,
+                new ValidatedAiResult.ExecutionMetadata(
+                        "GEMINI", "test-model", null, "CONTEXTUAL_APPLICATION_V1", "1"));
+        when(orchestrator.execute(any(), any(), any(), anyList(), any()))
+                .thenReturn(CompletableFuture.completedFuture(validated));
+
+        assertThatThrownBy(() -> adapter.execute(applicationRequest()))
+                .isInstanceOf(AiSchemaValidationException.class)
+                .satisfies(failure -> assertThat(((AiSchemaValidationException) failure).reason())
+                        .isEqualTo(AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION));
+    }
+
     private void stubSupplementalExplanation() {
         ExplanationResult explanation = new ExplanationResult(
                 "Cardiac output", "Supplemental explanation", List.of(), List.of(),
@@ -172,11 +261,28 @@ class LearningActivityAiTaskAdapterTests {
                 evidence, List.of(), constraints);
     }
 
+    private static ActivityAiTaskPort.Request applicationRequest() {
+        LearningActionConstraints constraints = new LearningActionConstraints(
+                SourceRequirement.REQUIRED, false, false,
+                null, null, LearningActivityIntent.STANDARD)
+                .withApplicationActivityLevel(ApplicationActivityLevel.DIRECT);
+        EvidencePackage evidencePackage = mock(EvidencePackage.class);
+        when(evidencePackage.groundingMode()).thenReturn(GroundingMode.STRICT_SOURCE);
+        ActivityEvidencePort.Evidence evidence = new ActivityEvidencePort.Evidence(
+                Set.of(), new RagActivityEvidencePayload(evidencePackage));
+        return new ActivityAiTaskPort.Request(
+                "Apply posterior cord anatomy", "Radial nerve", LearningActionType.APPLY,
+                LearningDifficulty.FOUNDATIONAL, StudyMissionGroundingMode.STRICT_SOURCE,
+                evidence, List.of(), constraints);
+    }
+
     private static AiTaskExecutionOptions executionOptions() {
         ProviderRoutingCandidate candidate = new ProviderRoutingCandidate(
                 ProviderId.GEMINI, "test-model",
-                Set.of(AiTaskType.EXPLANATION, AiTaskType.CONCEPT_CONNECTION),
-                Set.of(AiTaskType.EXPLANATION, AiTaskType.CONCEPT_CONNECTION),
+                Set.of(AiTaskType.EXPLANATION, AiTaskType.CONCEPT_CONNECTION,
+                        AiTaskType.CONTEXTUAL_APPLICATION),
+                Set.of(AiTaskType.EXPLANATION, AiTaskType.CONCEPT_CONNECTION,
+                        AiTaskType.CONTEXTUAL_APPLICATION),
                 true, true, true, 0, 0, 0);
         return new AiTaskExecutionOptions(
                 new PromptTokenBudget(1_000, 100), List.of(candidate),

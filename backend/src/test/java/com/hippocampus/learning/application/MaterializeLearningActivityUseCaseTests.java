@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.hippocampus.identity.domain.AuthenticatedUser;
+import com.hippocampus.learning.domain.ApplicationActivityLevel;
 import com.hippocampus.learning.domain.LearningActionConstraints;
 import com.hippocampus.learning.domain.LearningActionType;
 import com.hippocampus.learning.domain.LearningActivity;
@@ -450,9 +451,13 @@ class MaterializeLearningActivityUseCaseTests {
 
     private static NextLearningAction action(
             LearningActionType type, LearningDifficulty difficulty, boolean aiRequired) {
-        return action(type, difficulty, aiRequired, new LearningActionConstraints(
+        LearningActionConstraints constraints = new LearningActionConstraints(
                 SourceRequirement.REQUIRED, false, false, null, null,
-                LearningActivityIntent.STANDARD));
+                LearningActivityIntent.STANDARD);
+        if (type == LearningActionType.APPLY && aiRequired) {
+            constraints = constraints.withApplicationActivityLevel(ApplicationActivityLevel.DIRECT);
+        }
+        return action(type, difficulty, aiRequired, constraints);
     }
 
     private static NextLearningAction action(
