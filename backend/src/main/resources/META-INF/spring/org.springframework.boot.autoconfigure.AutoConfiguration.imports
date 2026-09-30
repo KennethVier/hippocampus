@@ -20,6 +20,8 @@ com.hippocampus.materials.infrastructure.config.TextNormalizationConfiguration
 com.hippocampus.materials.infrastructure.config.ChunkingConfiguration
 com.hippocampus.materials.infrastructure.config.SourceReferenceConfiguration
 com.hippocampus.ai.infrastructure.config.AiOutputValidationConfiguration
+com.hippocampus.ai.infrastructure.config.AiLearningTaskConfiguration
+com.hippocampus.bootstrap.LearningAiCompositionConfiguration
 com.hippocampus.rag.infrastructure.config.EmbeddingProcessingConfiguration
 com.hippocampus.rag.infrastructure.config.LexicalSearchConfiguration
 com.hippocampus.rag.infrastructure.config.VectorSearchConfiguration
