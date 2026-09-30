@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hippocampus.ai.application.AiExecutionOrchestrator;
 import com.hippocampus.ai.application.prompt.PromptId;
 import com.hippocampus.ai.application.request.AiRequestPriority;
+import com.hippocampus.ai.application.validation.AiSchemaValidationException;
 import com.hippocampus.ai.domain.ActivityType;
 import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.domain.AiTaskContext;
@@ -67,10 +68,18 @@ public final class LearningActivityAiTaskAdapter implements ActivityAiTaskPort {
                 validated.executionMetadata(), "validated AI result has no execution metadata");
 
         return switch (validated.result()) {
-            case ExplanationResult explanation -> content(
-                    "EXPLANATION", AiTaskType.EXPLANATION, explanation.explanation(),
-                    explanation, request.groundingMode(), metadata, true,
-                    explanation.supplementalKnowledgeUsed());
+            case ExplanationResult explanation -> {
+                if (explanation.supplementalKnowledgeUsed()
+                        && !request.constraints().supplementalKnowledgeAllowed()) {
+                    throw new AiSchemaValidationException(
+                            AiOutputContract.EXPLANATION,
+                            AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION);
+                }
+                yield content(
+                        "EXPLANATION", AiTaskType.EXPLANATION, explanation.explanation(),
+                        explanation, request.groundingMode(), metadata, true,
+                        explanation.supplementalKnowledgeUsed());
+            }
             case QuestionGenerationResult question -> {
                 ActivityType requestedType = map(request.constraints().retrievalActivityType());
                 if (question.activityType() != requestedType) {
