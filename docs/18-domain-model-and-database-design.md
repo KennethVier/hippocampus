@@ -4,7 +4,7 @@ Audience: Backend, architecture, database, AI, QA, security, and DevOps
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 18
-Last Updated: 2026-09-29
+Last Updated: 2026-09-30
 Owner: Project Hippocampus Team
 Prerequisites:
 - 00 - Project Vision
@@ -47,7 +47,7 @@ Scope: Core entities, aggregate boundaries, PostgreSQL schema design,
   versioning, and migration rules.
 Status: Final
 Title: Domain Model & Database Design
-Version: 1.0.4
+Version: 1.0.5
 ---
 
 # 18 - Domain Model & Database Design
@@ -1044,6 +1044,14 @@ learning-domain metadata and must not be hidden only in
 `GeneratedArtifact.content_payload`. Concept identity continues to come from the
 LearningObjective/LearningState relationship; LearningActivity does not
 duplicate it or store provider/model fields.
+
+`LearningActionConstraints` also carries nullable `retrievalActivityType` using
+the learning-owned values `SHORT_ANSWER`, `MCQ`, `IDENTIFICATION`, and
+`EXPLANATION`. It is non-null exactly for an AI-backed `RETRIEVE` action and
+null for actions that do not generate retrieval questions. This is a transient
+Learning Engine/application contract mapped explicitly to the AI-domain
+activity type; it does not add a `learning_activities` column because the
+generated artifact payload already retains the generated question structure.
 
 Activity types:
 
@@ -2630,6 +2638,10 @@ and:
                                                         and exact reusable
                                                         LearningActivity identity
                                                         with ADR-0006
+
+  1.0.5             2026-09-30        Project           Aligned explicit
+                                      Hippocampus Team  retrieval activity type
+                                                        selection with ADR-0007
 
   -----------------------------------------------------------------------
 

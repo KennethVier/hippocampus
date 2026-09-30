@@ -1,12 +1,12 @@
 ---
 Document ID: 11
 Title: AI Learning Engine
-Version: 1.0.1
+Version: 1.0.2
 Status: Final
 Owner: Project Hippocampus Team
 Authors: Project Hippocampus Team
 Created: 2026-08-23
-Last Updated: 2026-09-29
+Last Updated: 2026-09-30
 Purpose: Define how Hippocampus decides the next educational action using deterministic learning rules, learner context, Study Mission state, learning evidence, source readiness, time constraints, and bounded AI assistance.
 Scope: Learning-state evaluation, mission-state transitions, next-action policy, rule precedence, AI task invocation, retries, adaptation, evidence updates, anti-repetition behavior, time-aware decisions, review decisions, failure paths, and explainability.
 Audience: Product, AI, backend, architecture, QA, UX, and medical-education contributors.
@@ -1592,6 +1592,12 @@ The following decisions are approved for v1:
 20. The Learning Engine should be testable largely without live LLM calls.
 21. Educational thresholds should be configurable where appropriate.
 22. The engine should minimize unnecessary AI usage to support cost and concurrency goals.
+23. For an AI-backed `RETRIEVE` action, the Learning Engine explicitly selects
+    `RetrievalActivityType`: `IDENTIFICATION` when visual content is required,
+    otherwise `SHORT_ANSWER`. Other actions carry no retrieval activity type.
+    The v1 policy does not infer from difficulty or question intent, randomize,
+    rotate, select by subject, or delegate format selection to AI. `MCQ` and
+    `EXPLANATION` remain representable but are not automatically selected.
 
 ---
 
@@ -1667,6 +1673,7 @@ The prompt layer must implement decisions from the Learning Engine rather than i
 |---|---|---|---|
 | 1.0.0 | 2026-08-23 | Project Hippocampus Team | Initial finalized AI Learning Engine defining deterministic educational decision logic, mission-state transitions, learner-state adaptation, AI invocation rules, evidence updates, review behavior, and explainability |
 | 1.0.1 | 2026-09-29 | Project Hippocampus Team | Aligned exact reusable LearningActivity identity and Learning Engine selection authority with ADR-0006 |
+| 1.0.2 | 2026-09-30 | Project Hippocampus Team | Added explicit deterministic retrieval activity type selection aligned with ADR-0007 |
 
 ---
 
