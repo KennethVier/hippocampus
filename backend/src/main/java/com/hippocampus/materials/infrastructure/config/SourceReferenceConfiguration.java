@@ -12,7 +12,6 @@ import com.hippocampus.materials.application.CreateSourceReferences;
 import com.hippocampus.materials.application.ResolveSourceReference;
 import com.hippocampus.materials.infrastructure.persistence.AuthorizedStudyMissionSourcePresentationRepository;
 import com.hippocampus.materials.infrastructure.persistence.JdbcSourceReferenceRepository;
-import com.hippocampus.materials.port.MaterialRepository;
 import com.hippocampus.materials.port.SourceReferenceRepository;
 
 @AutoConfiguration(
@@ -36,9 +35,7 @@ public class SourceReferenceConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(MaterialRepository.class)
-    StudyMissionSourcePresentationRepository studyMissionSourcePresentationRepository(
-            SourceReferenceRepository references, MaterialRepository materials) {
-        return new AuthorizedStudyMissionSourcePresentationRepository(references, materials);
+    StudyMissionSourcePresentationRepository studyMissionSourcePresentationRepository(JdbcClient jdbc) {
+        return new AuthorizedStudyMissionSourcePresentationRepository(jdbc);
     }
 }
