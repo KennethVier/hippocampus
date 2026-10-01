@@ -7,12 +7,16 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import com.hippocampus.identity.port.CurrentUser;
+import com.hippocampus.learning.port.StudyMissionSourcePresentationRepository;
 import com.hippocampus.materials.application.CreateSourceReferences;
 import com.hippocampus.materials.application.ResolveSourceReference;
+import com.hippocampus.materials.infrastructure.persistence.AuthorizedStudyMissionSourcePresentationRepository;
 import com.hippocampus.materials.infrastructure.persistence.JdbcSourceReferenceRepository;
 import com.hippocampus.materials.port.SourceReferenceRepository;
 
-@AutoConfiguration(after = JdbcClientAutoConfiguration.class)
+@AutoConfiguration(
+        after = JdbcClientAutoConfiguration.class,
+        afterName = "com.hippocampus.materials.infrastructure.config.MaterialManagementPersistenceConfiguration")
 @ConditionalOnBean({JdbcClient.class, CurrentUser.class})
 public class SourceReferenceConfiguration {
     @Bean
@@ -28,5 +32,10 @@ public class SourceReferenceConfiguration {
     @Bean
     ResolveSourceReference resolveSourceReference(CurrentUser currentUser, SourceReferenceRepository references) {
         return new ResolveSourceReference(currentUser, references);
+    }
+
+    @Bean
+    StudyMissionSourcePresentationRepository studyMissionSourcePresentationRepository(JdbcClient jdbc) {
+        return new AuthorizedStudyMissionSourcePresentationRepository(jdbc);
     }
 }
