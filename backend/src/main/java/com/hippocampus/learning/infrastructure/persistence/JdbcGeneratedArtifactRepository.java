@@ -111,6 +111,23 @@ public class JdbcGeneratedArtifactRepository implements GeneratedArtifactReposit
     }
 
     @Override
+    public Optional<GeneratedArtifact> findOwnedById(UUID artifactId, UUID ownerId) {
+        Objects.requireNonNull(artifactId, "artifactId must not be null");
+        Objects.requireNonNull(ownerId, "ownerId must not be null");
+        return jdbc.sql("""
+                SELECT id, user_id, artifact_type, task_type, content_text,
+                       content_payload::text AS content_payload, grounding_mode,
+                       classification, prompt_id, prompt_version, provider, model,
+                       model_version, validation_status, reusable, created_at
+                FROM generated_artifacts
+                WHERE id = :artifactId AND user_id = :ownerId
+                """)
+                .param("artifactId", artifactId)
+                .param("ownerId", ownerId)
+                .query(MAPPER).optional();
+    }
+
+    @Override
     public Set<UUID> findSourceReferenceIds(UUID artifactId) {
         Objects.requireNonNull(artifactId, "artifactId must not be null");
         return Set.copyOf(jdbc.sql("""

@@ -14,6 +14,11 @@ public interface GeneratedArtifactRepository {
 
     Optional<GeneratedArtifact> findById(UUID artifactId);
 
+    default Optional<GeneratedArtifact> findOwnedById(UUID artifactId, UUID ownerId) {
+        Objects.requireNonNull(ownerId, "ownerId must not be null");
+        return findById(artifactId).filter(artifact -> ownerId.equals(artifact.userId()));
+    }
+
     Set<UUID> findSourceReferenceIds(UUID artifactId);
 
     record GeneratedArtifact(

@@ -12,6 +12,7 @@ import org.springframework.context.annotation.Lazy;
 import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.learning.application.StartStudyMissionUseCase;
 import com.hippocampus.learning.application.ChangeStudyMissionStatusUseCase;
+import com.hippocampus.learning.application.GetStudyMissionUseCase;
 import com.hippocampus.learning.application.MaterializeLearningActivityUseCase;
 import com.hippocampus.learning.application.PersistActivityResponse;
 import com.hippocampus.learning.application.PersistMaterializedActivity;
@@ -26,13 +27,16 @@ import com.hippocampus.learning.port.ActivityEvidencePort;
 import com.hippocampus.learning.port.ActivitySourceReferenceAuthorization;
 import com.hippocampus.learning.port.ActivityResponseContractRepository;
 import com.hippocampus.learning.port.GeneratedArtifactRepository;
+import com.hippocampus.learning.port.GeneratedActivityContentDecoder;
 import com.hippocampus.learning.port.ResponseEvaluationPort;
 import com.hippocampus.learning.port.StudyMissionSourceCatalog;
+import com.hippocampus.learning.port.StudyMissionSourcePresentationRepository;
 import com.hippocampus.learning.port.SubtopicRepository;
 import com.hippocampus.learning.port.TopicRepository;
 import com.hippocampus.progress.port.StudentAttemptRepository;
 
-@AutoConfiguration
+@AutoConfiguration(afterName =
+        "com.hippocampus.materials.infrastructure.config.SourceReferenceConfiguration")
 @ConditionalOnBean({
         CurrentUser.class,
         TopicRepository.class,
@@ -158,5 +162,23 @@ public class StudyMissionApplicationConfiguration {
             Clock studyMissionClock) {
         return new ChangeStudyMissionStatusUseCase(
                 currentUser, missions, stateMachine, studyMissionClock);
+    }
+
+    @Bean
+    @Lazy
+    @ConditionalOnMissingBean
+    @ConditionalOnBean({
+            GeneratedArtifactRepository.class,
+            GeneratedActivityContentDecoder.class,
+            StudyMissionSourcePresentationRepository.class
+    })
+    GetStudyMissionUseCase getStudyMissionUseCase(
+            CurrentUser currentUser,
+            StudyMissionRepository missions,
+            GeneratedArtifactRepository artifacts,
+            GeneratedActivityContentDecoder contentDecoder,
+            StudyMissionSourcePresentationRepository sourcePresentations) {
+        return new GetStudyMissionUseCase(
+                currentUser, missions, artifacts, contentDecoder, sourcePresentations);
     }
 }

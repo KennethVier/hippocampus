@@ -2016,7 +2016,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** In Progress
+- **Status:** Ready for Review
 - **Goal:** Generate practical scaffolded medical scenario.
 - **Build:** Create learner-appropriate scenario focused on target concept with expected reasoning and safety/educational framing.
 - **How it works:** Not patient-specific advice.
@@ -2025,14 +2025,14 @@ responsibilities remain outside P5-06.
 - **Expected result:** Student can apply foundational knowledge meaningfully.
 - **Definition of Done:** Eval pass.
 - **Authority:** Documents 03,07,15
-- **Evidence / link:** Implemented ADR-0009 learning-owned application-level selection, AI-backed `APPLY` contextual-application execution, complete validated payload materialization, deterministic output validation, and evaluation-gated runtime routing configuration requirements. External review, user validation, semantic evaluation, and independent security review remain pending.
-- **Notes / blockers:** Implementation complete; external review/user validation/eval/security pending. Do not mark Done.
+- **Evidence / link:** Implemented ADR-0009 learning-owned application-level selection, AI-backed `APPLY` contextual-application execution, complete validated payload materialization, deterministic output validation, and evaluation-gated runtime routing configuration requirements. PR #211; reviewed head `aa67391e667e9601d1d3a0ab63c01a5d21ed815f`; merge SHA `d84bf1fc4d2ab4e6de586925508a26c6ee82a901`; merged 2026-10-01 local project date context (GitHub `merged_at` 2026-09-30T17:09:08Z). Focused tests: 48 passed, 0 failures/errors/skipped. `node scripts/validation/validate.mjs backend`: PASS. `backend-clean-verify`: PASS. `git-diff-check`: PASS. GitHub Actions quality run #593: PASS. External implementation review: APPROVED. P7-11 task/contract-level semantic application evaluation: PASS. Independent security review: SECURITY PASS; Critical 0 / High 0 / Medium 0.
+- **Notes / blockers:** Do not mark Done. Provider/model `CONTEXTUAL_APPLICATION` approval remains operationally separate and routing remains fail closed.
 
 ## P7-12 — Build Study Mission route and ActivityRenderer
 
 - **Workstream:** Frontend
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Blocked
 - **Goal:** Create core product experience.
 - **Build:** Implement /missions/:id, typed union renderer for explanation/retrieval/connection/application/feedback/reflection, source panel and actions.
 - **How it works:** Frontend renders backend contract; never parses raw provider semantics.
@@ -2041,8 +2041,8 @@ responsibilities remain outside P5-06.
 - **Expected result:** One coherent guided flow replaces feature menu.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 20
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Evidence / link:** Dependency inspection confirmed the current `StudyMission` transport exposes lifecycle mutations only (`pause`, `resume`, `stop`) and no mission read projection.
+- **Notes / blockers:** Required Mission Presentation API is missing. The current StudyMission transport exposes lifecycle mutations only and cannot provide the typed current-activity/source contract required by the Study Mission route and ActivityRenderer. Frontend implementation must not invent or parse raw AI provider semantics.
 
 ## P7-13 — Implement mission submit/resume/conflict UX
 
