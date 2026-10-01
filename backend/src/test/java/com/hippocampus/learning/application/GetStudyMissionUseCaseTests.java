@@ -187,6 +187,30 @@ class GetStudyMissionUseCaseTests {
     }
 
     @Test
+    void validGeneratedVisualActivityReturnsNullContentWithoutExposingProviderInternals() {
+        // Valid VISUAL activity: validated artifact, allowed classification, source IDs match,
+        // authorized sources. Expect type=VISUAL, content=null, classification preserved,
+        // authorized sources returned. No provider/model/prompt/raw payload exposed.
+        missions.current = mission(activity(LearningActivityType.VISUAL));
+        artifacts.put(artifact("VISUAL", "VISUAL_GENERATION", "{\"visualPayload\":\"PRIVATE\"}"));
+        artifacts.sources = Set.of(SOURCE_ID);
+
+        GetStudyMissionUseCase.CurrentActivity activity = useCase.execute(MISSION_ID).currentActivity();
+
+        assertThat(activity.type()).isEqualTo("VISUAL");
+        assertThat(activity.content()).isNull();
+        assertThat(activity.classification()).isEqualTo("SOURCE_GROUNDED_GENERATED");
+        assertThat(activity.sources()).singleElement().satisfies(source -> {
+            assertThat(source.sourceReferenceId()).isEqualTo(SOURCE_ID);
+            assertThat(source.materialTitle()).isEqualTo("Upper Limb Lecture");
+        });
+        // No provider internals exposed via the CurrentActivity record
+        assertThat(activity.toString()).doesNotContain(
+                "PRIVATE_PROVIDER", "PRIVATE_MODEL", "PRIVATE_MODEL_VERSION",
+                "prompt", "visualPayload", "PRIVATE");
+    }
+
+    @Test
     void unauthorizedOrStaleSourcePresentationFailsClosed() {
         missions.current = mission(activity(LearningActivityType.VISUAL, null));
         sources.authorized = false;

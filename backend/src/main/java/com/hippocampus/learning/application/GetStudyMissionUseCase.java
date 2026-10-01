@@ -97,6 +97,13 @@ public class GetStudyMissionUseCase {
             throw notFound();
         }
 
+        if (activity.activityType() == LearningActivityType.VISUAL) {
+            return new CurrentActivity(
+                    activity.id(), discriminator(activity.activityType()), activity.status(),
+                    activity.difficulty() == null ? null : activity.difficulty().name(),
+                    artifact.classification(), null, sources);
+        }
+
         GeneratedActivityContentDecoder.DecodedContent decoded;
         try {
             decoded = contentDecoder.decode(

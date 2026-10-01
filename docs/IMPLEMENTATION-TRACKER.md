@@ -2032,7 +2032,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** Frontend
 - **Priority:** Must
-- **Status:** Not Starte
+- **Status:** Not Started
 - **Goal:** Create core product experience.
 - **Build:** Implement /missions/:id, typed union renderer for explanation/retrieval/connection/application/feedback/reflection, source panel and actions.
 - **How it works:** Frontend renders backend contract; never parses raw provider semantics.

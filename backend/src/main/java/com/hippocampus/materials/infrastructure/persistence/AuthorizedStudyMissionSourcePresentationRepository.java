@@ -45,7 +45,6 @@ public final class AuthorizedStudyMissionSourcePresentationRepository
                 return Optional.empty();
             }
             var material = materials.findVisibleOwnedById(reference.materialId(), ownerId)
-                    .filter(value -> reference.materialVersionId().equals(value.activeVersionId()))
                     .orElse(null);
             if (material == null) {
                 return Optional.empty();
