@@ -2032,7 +2032,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** Frontend
 - **Priority:** Must
-- **Status:** Blocked
+- **Status:** Not Starte
 - **Goal:** Create core product experience.
 - **Build:** Implement /missions/:id, typed union renderer for explanation/retrieval/connection/application/feedback/reflection, source panel and actions.
 - **How it works:** Frontend renders backend contract; never parses raw provider semantics.
@@ -2041,8 +2041,10 @@ responsibilities remain outside P5-06.
 - **Expected result:** One coherent guided flow replaces feature menu.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 20
-- **Evidence / link:** Dependency inspection confirmed the current `StudyMission` transport exposes lifecycle mutations only (`pause`, `resume`, `stop`) and no mission read projection.
-- **Notes / blockers:** Required Mission Presentation API is missing. The current StudyMission transport exposes lifecycle mutations only and cannot provide the typed current-activity/source contract required by the Study Mission route and ActivityRenderer. Frontend implementation must not invent or parse raw AI provider semantics.
+- **Evidence / link:** Mission Presentation API dependency implemented in PR #212 with an
+owner-scoped, learner-safe current-activity and source projection.
+- **Notes / blockers:** Mission Presentation API dependency resolved. P7-12 frontend implementation
+has not started.
 
 ## P7-13 — Implement mission submit/resume/conflict UX
 
