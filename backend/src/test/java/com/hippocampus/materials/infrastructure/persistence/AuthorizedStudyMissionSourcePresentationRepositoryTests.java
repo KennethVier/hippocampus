@@ -51,13 +51,13 @@ class AuthorizedStudyMissionSourcePresentationRepositoryTests extends PostgresIn
     @Test
     void frozenV1RemainsReadableAfterV2BecomesActive() {
         UUID owner = insertUser("owner");
-        MaterialFixture material = insertMaterial(owner, "Anatomy Lecture", "ACTIVE", 10);
+        MaterialFixture material = insertMaterial(owner, "Anatomy Lecture", "ACTIVE", 20);
         UUID node = insertNode(material.v1(), "Posterior Cord");
         UUID chunk = insertChunk(material.v1(), node, 14, 14, true);
         UUID sourceRefId = insertSourceReference(material.id(), material.v1(), node, chunk, null, 14, "Posterior Cord");
 
         // Advance material to V2
-        UUID v2 = insertVersion(material.id(), 2, 10);
+        UUID v2 = insertVersion(material.id(), 2, 20);
         jdbc.sql("UPDATE materials SET active_version_id = ? WHERE id = ?").params(v2, material.id()).update();
 
         // Mission freezes V1
