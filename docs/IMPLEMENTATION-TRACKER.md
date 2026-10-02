@@ -2068,7 +2068,7 @@ review and the independent security gate remain required; P7-12 is not Done.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 20
 - **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Notes / blockers:** Mission Interaction API prerequisite is in PR #214. Frontend implementation has not started. ADR-0010 proposes explicit presentation-only UNDERSTAND completion and response-bearing Understanding Check semantics. ADR acceptance and implementation remain required before P7-13 can proceed.
 
 ## P7-14 — Phase 7 First Hippocampus gate
 

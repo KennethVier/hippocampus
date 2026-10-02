@@ -1796,6 +1796,11 @@ Phase 0 — Engineering Foundation
                                                         application level
                                                         selection
 
+  1.0.9             2026-10-02        Project           Accepted and indexed
+                                      Hippocampus Team  ADR-0010 presentation-only
+                                                        UNDERSTAND progression
+                                                        and evidence
+
   ----------------------------------------------------------------------------
 
 ------------------------------------------------------------------------

@@ -29,7 +29,7 @@ An explanation may be materialized as a `LearningActivity` represented by `UNDER
 
 The current interaction API allows continuation only after the current activity has been completed.
 
-At the same time, the Learning Engine requires sufficient `UNDERSTANDING` evidence before normal retrieval progression. Current mission learning state reconstruction derives competence evidence from evaluated `StudentAttempt` outcomes.
+At the same time, the Learning Engine requires sufficient `UNDERSTANDING` evidence before normal retrieval progression. Current mission learning-state reconstruction derives competence evidence from evaluated `StudentAttempt` outcomes.
 
 This creates an invalid possible shortcut:
 
@@ -120,7 +120,7 @@ The intended flow is:
 ```text
 UNDERSTAND presentation
 → learner completes presentation
-→ understanding check
+→ Understanding Check
 → evaluated learner response
 → UNDERSTANDING evidence
 → normal retrieval
@@ -188,9 +188,13 @@ Provider output remains untrusted and cannot directly modify learning state.
 
 ## Understanding evidence
 
-Only an evaluated learner response associated with an Understanding Check may establish `UNDERSTANDING` evidence.
+Presentation completion alone never establishes `UNDERSTANDING` evidence.
 
-The existing initial outcome-to-strength semantics remain:
+An Understanding Check provides the explicit response-bearing evidence path required after a presentation-only `UNDERSTAND` activity when sufficient understanding evidence does not already exist.
+
+Evaluated response-bearing learning activities that are already owned by the learning model as `UNDERSTAND`, `HINT`, or `PREREQUISITE_SUPPORT` may continue contributing to `EvidenceDimension.UNDERSTANDING` according to their existing semantics.
+
+The existing initial outcome-to-strength mapping remains:
 
 ```text
 CORRECT
@@ -203,9 +207,11 @@ INCORRECT
 → INSUFFICIENT
 ```
 
-Presentation completion itself does not participate in this mapping.
+ADR-0010 does not redefine existing `HINT` or `PREREQUISITE_SUPPORT` evidence semantics.
 
-A future change to these thresholds or evidence-strength rules requires a separate approved decision when materially significant.
+Its purpose is to ensure that passive presentation completion is never treated as competence evidence.
+
+A future material change to these thresholds or evidence-strength rules requires a separate approved decision.
 
 ## Recall remains a separate evidence dimension
 
@@ -261,7 +267,7 @@ without depending on provider/model inference.
 
 If implementation requires a new learning action, activity intent, represented pedagogical identity, or equivalent typed learning-domain value to preserve this distinction, that is permitted by this ADR.
 
-## Failed or partial understanding checks
+## Failed or partial Understanding Checks
 
 An attempted Understanding Check does not guarantee advancement.
 
@@ -273,7 +279,7 @@ Possible actions may include:
 targeted UNDERSTAND
 HINT
 PREREQUISITE_SUPPORT
-another understanding check
+another Understanding Check
 ```
 
 depending on existing deterministic policies and learner state.
@@ -394,7 +400,7 @@ submit evaluated response
 
 The frontend will require separate user interactions for these semantics.
 
-Existing progression thresholds remain authoritative unless explicitly changed by a future accepted decision.
+Existing progression thresholds and existing response-bearing `UNDERSTAND`, `HINT`, and `PREREQUISITE_SUPPORT` evidence behavior remain authoritative unless explicitly changed by a future accepted decision.
 
 # Persistence Impact
 
@@ -435,6 +441,8 @@ Learner-response content remains subject to existing response-size, validation, 
 
 Provider output remains untrusted and cannot create authoritative learning evidence without validated application/domain processing.
 
+No new provider authority is introduced.
+
 # Educational/Product Impact
 
 Study Missions preserve the distinction between:
@@ -447,7 +455,7 @@ assessment evidence
 
 A learner may move past an explanation without the application claiming that understanding has already been demonstrated.
 
-Before normal retrieval progression, Hippocampus obtains active learner evidence through an Understanding Check.
+Before normal retrieval progression, Hippocampus obtains active learner evidence through an Understanding Check when the presentation itself has not produced sufficient response-bearing understanding evidence.
 
 This maintains the product principle that learning evidence corresponds to real student activity.
 
@@ -479,15 +487,16 @@ Implementation must include coverage for at least:
 
 1. completing a presentation does not create a `StudentAttempt`;
 2. presentation completion does not create `UNDERSTANDING` evidence;
-3. the next backend-selected operation can be an Understanding Check;
+3. the next backend-selected operation can be an Understanding Check when understanding evidence remains insufficient;
 4. evaluated Understanding Check outcomes map to the existing understanding evidence strengths;
-5. `PARTIAL` or `INCORRECT` checks do not automatically advance;
-6. ordinary retrieval remains responsible for recall evidence;
-7. stale duplicate presentation completion is rejected without duplicate progression;
-8. two-tab completion cannot create duplicate next activities;
-9. refresh/resume restores the authoritative current activity;
-10. cross-user IDs fail closed without enumeration;
-11. frontend interaction cannot directly set evidence or next action.
+5. existing response-bearing `UNDERSTAND`, `HINT`, and `PREREQUISITE_SUPPORT` semantics remain valid;
+6. `PARTIAL` or `INCORRECT` checks do not automatically advance;
+7. ordinary retrieval remains responsible for recall evidence;
+8. stale duplicate presentation completion is rejected without duplicate progression;
+9. two-tab completion cannot create duplicate next activities;
+10. refresh/resume restores the authoritative current activity;
+11. cross-user IDs fail closed without enumeration;
+12. frontend interaction cannot directly set evidence or next action.
 
 # Alternatives Rejected
 
