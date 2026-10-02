@@ -2073,6 +2073,8 @@ Critical 0 / High 0 / Medium 0.
 - **Authority:** Documents 20
 - **Evidence / link:** _To be recorded during implementation_
 - **Notes / blockers:** Mission Interaction API prerequisite is in PR #214. Frontend implementation has not started.
+Independent security review identified SEC-001: unbounded learner-response request resource consumption.
+Remediation implemented; user validation and security re-review pending.
 Presentation-only activity completion / UNDERSTAND evidence-to-retrieval progression requires an explicit Document 27 decision before P7-13 implementation can proceed.
 
 ## P7-14 — Phase 7 First Hippocampus gate

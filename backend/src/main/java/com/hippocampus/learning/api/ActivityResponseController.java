@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.hippocampus.learning.application.SubmitActivityResponseUseCase;
 
+import jakarta.validation.Valid;
+
 @RestController
 @ConditionalOnBean(SubmitActivityResponseUseCase.class)
 public class ActivityResponseController {
@@ -24,7 +26,7 @@ public class ActivityResponseController {
     ActivitySubmissionResponse submit(
             @PathVariable UUID missionId,
             @PathVariable UUID activityId,
-            @RequestBody ActivityResponseRequest request) {
+            @Valid @RequestBody ActivityResponseRequest request) {
         return ActivitySubmissionResponse.from(submitResponse.execute(
                 new SubmitActivityResponseUseCase.Command(
                         missionId, activityId, request.responseText(), null, request.selectedOption())));
