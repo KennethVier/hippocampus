@@ -2032,7 +2032,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** Frontend
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Create core product experience.
 - **Build:** Implement /missions/:id, typed union renderer for explanation/retrieval/connection/application/feedback/reflection, source panel and actions.
 - **How it works:** Frontend renders backend contract; never parses raw provider semantics.
@@ -2050,9 +2050,13 @@ coverage. The stale generic static-route smoke case using non-UUID `example-miss
 focused app-router coverage now uses a valid UUID and endpoint-specific valid Mission Presentation
 response, proving the actual router renders the Study Mission page and current activity. User-owned
 frontend validation passed: lint PASS, typecheck PASS, and test PASS (220 tests passed). Production UUID validation,
-safe 404 behavior, and learner-safe API behavior remain unchanged.
-- **Notes / blockers:** Implementation and user validation are complete. External implementation
-review and the independent security gate remain required; P7-12 is not Done.
+safe 404 behavior, and learner-safe API behavior remain unchanged. PR #213; reviewed head:
+`38c060b439a5f940d8a311e83af460828ced9e90`; merge SHA:
+`f11096587c574dd235357bb3a5d511ecaf71e8df`; merged: 2026-10-02. Quality run #602: PASS;
+`backend-quality`: PASS; `frontend-quality`: PASS; `auth-e2e`: PASS; security CI: PASS;
+external implementation review: APPROVED; independent security review: SECURITY PASS;
+Critical 0 / High 0 / Medium 0.
+- **Notes / blockers:** _None_
 
 ## P7-13 — Implement mission submit/resume/conflict UX
 
@@ -2068,7 +2072,8 @@ review and the independent security gate remain required; P7-12 is not Done.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 20
 - **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** _None_
+- **Notes / blockers:** Mission Interaction API prerequisite is in PR #214. Frontend implementation has not started.
+Presentation-only activity completion / UNDERSTAND evidence-to-retrieval progression requires an explicit Document 27 decision before P7-13 implementation can proceed.
 
 ## P7-14 — Phase 7 First Hippocampus gate
 
