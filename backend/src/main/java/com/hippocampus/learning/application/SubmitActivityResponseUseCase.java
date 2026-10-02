@@ -1,11 +1,7 @@
 package com.hippocampus.learning.application;
 
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.EnumMap;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -13,26 +9,12 @@ import java.util.UUID;
 
 import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.learning.domain.AttemptOutcome;
-import com.hippocampus.learning.domain.EvidenceDimension;
-import com.hippocampus.learning.domain.EvidenceStrength;
-import com.hippocampus.learning.domain.LearningActionConstraints;
 import com.hippocampus.learning.domain.LearningActionType;
 import com.hippocampus.learning.domain.LearningActivity;
-import com.hippocampus.learning.domain.LearningActivityIntent;
 import com.hippocampus.learning.domain.LearningEngine;
-import com.hippocampus.learning.domain.LearningEvidenceSnapshot;
-import com.hippocampus.learning.domain.LearningObjective;
 import com.hippocampus.learning.domain.LearningStage;
-import com.hippocampus.learning.domain.LearningState;
-import com.hippocampus.learning.domain.LearningTimeContext;
-import com.hippocampus.learning.domain.MissionLifecycleState;
 import com.hippocampus.learning.domain.NextLearningAction;
-import com.hippocampus.learning.domain.RecentLearningActivity;
-import com.hippocampus.learning.domain.SourceCapability;
-import com.hippocampus.learning.domain.SourceReadiness;
-import com.hippocampus.learning.domain.SourceRequirement;
 import com.hippocampus.learning.domain.StudyMission;
-import com.hippocampus.learning.domain.StudyMissionGroundingMode;
 import com.hippocampus.learning.domain.StudyMissionStatus;
 import com.hippocampus.learning.port.ActivityResponseContractRepository;
 import com.hippocampus.learning.port.ResponseEvaluationPort;
@@ -52,6 +34,7 @@ public class SubmitActivityResponseUseCase {
     private final ActivityResponseContractRepository contracts;
     private final ResponseEvaluationPort responseEvaluation;
     private final LearningEngine learningEngine;
+    private final StudyMissionLearningStateAssembler learningStateAssembler;
     private final PersistActivityResponse persistence;
     private final Clock clock;
 
@@ -62,6 +45,7 @@ public class SubmitActivityResponseUseCase {
             ActivityResponseContractRepository contracts,
             ResponseEvaluationPort responseEvaluation,
             LearningEngine learningEngine,
+            StudyMissionLearningStateAssembler learningStateAssembler,
             PersistActivityResponse persistence,
             Clock clock) {
         this.currentUser = Objects.requireNonNull(currentUser, "currentUser must not be null");
@@ -71,6 +55,8 @@ public class SubmitActivityResponseUseCase {
         this.responseEvaluation = Objects.requireNonNull(
                 responseEvaluation, "responseEvaluation must not be null");
         this.learningEngine = Objects.requireNonNull(learningEngine, "learningEngine must not be null");
+        this.learningStateAssembler = Objects.requireNonNull(
+                learningStateAssembler, "learningStateAssembler must not be null");
         this.persistence = Objects.requireNonNull(persistence, "persistence must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
@@ -104,7 +90,8 @@ public class SubmitActivityResponseUseCase {
         }
         Instant now = clock.instant();
         NextLearningAction nextAction = learningEngine.decide(
-                learningState(mission, activity, attemptHistory, evaluation.outcome(), now));
+                learningStateAssembler.assembleForSubmission(
+                        mission, activity, attemptHistory, evaluation.outcome(), now));
         StudentAttempt attempt = new StudentAttempt(
                 UUID.randomUUID(), userId, activity.id(), maxAttempt + 1,
                 command.responseText(), command.responsePayload(), now,
@@ -199,129 +186,6 @@ public class SubmitActivityResponseUseCase {
         return activity;
     }
 
-    private static LearningState learningState(
-            StudyMission mission,
-            LearningActivity current,
-            Map<UUID, List<StudentAttempt>> attempts,
-            AttemptOutcome currentOutcome,
-            Instant now) {
-        Map<UUID, LearningObjective> objectivesById = new java.util.LinkedHashMap<>();
-        for (LearningObjective objective : mission.objectives()) {
-            objectivesById.put(objective.id(), objective);
-        }
-        LearningObjective currentObjective = objectiveFor(
-                objectivesById, current, "The current activity has no valid learning objective.");
-        EnumMap<EvidenceDimension, EvidenceStrength> evidence = new EnumMap<>(EvidenceDimension.class);
-        List<RecentLearningActivity> recent = new ArrayList<>();
-        mission.activities().stream()
-                .sorted(Comparator.comparingInt(LearningActivity::sequenceNumber).reversed())
-                .forEach(activity -> {
-                    LearningObjective activityObjective = activity.id().equals(current.id())
-                            ? currentObjective
-                            : objectiveFor(
-                                    objectivesById,
-                                    activity,
-                                    "A mission activity has no valid learning objective.");
-                    List<StudentAttempt> historicalAttempts = attempts.getOrDefault(activity.id(), List.of());
-                    historicalAttempts.stream()
-                            .sorted(Comparator.comparingInt(StudentAttempt::attemptNumber).reversed())
-                            .forEach(attempt -> addHistory(
-                                    recent, evidence, mission, currentObjective, activityObjective, activity,
-                                    outcome(attempt.evaluationStatus())));
-                    if (activity.id().equals(current.id())) {
-                        addHistory(
-                                recent, evidence, mission, currentObjective, activityObjective,
-                                activity, currentOutcome);
-                    }
-                });
-        int available = mission.availableTimeMinutes() == null ? 0 : mission.availableTimeMinutes();
-        int age = mission.startedAt() == null ? 0
-                : Math.max(0, Math.toIntExact(Math.min(Integer.MAX_VALUE,
-                        Duration.between(mission.startedAt(), now).toMinutes())));
-        int remaining = Math.max(0, available - age);
-        return new LearningState(
-                mission.id(), currentObjective.id(), conceptKey(currentObjective), MissionLifecycleState.ACTIVE,
-                mission.learningState(), new LearningEvidenceSnapshot(evidence),
-                sourceCapability(mission), new LearningTimeContext(available, remaining, age),
-                recent, false, constraintsFor(mission.groundingMode()));
-    }
-
-    private static LearningObjective objectiveFor(
-            Map<UUID, LearningObjective> objectivesById,
-            LearningActivity activity,
-            String failureMessage) {
-        LearningObjective objective = objectivesById.get(activity.learningObjectiveId());
-        if (objective == null) {
-            throw failure(ActivityResponseException.Reason.ACTIVITY_NOT_CURRENT, failureMessage);
-        }
-        return objective;
-    }
-
-    private static void addHistory(
-            List<RecentLearningActivity> recent,
-            Map<EvidenceDimension, EvidenceStrength> evidence,
-            StudyMission mission,
-            LearningObjective currentObjective,
-            LearningObjective activityObjective,
-            LearningActivity activity,
-            AttemptOutcome outcome) {
-        EvidenceDimension dimension = dimensionFor(activity.representedActionType());
-        if (activityObjective.id().equals(currentObjective.id()) && dimension != null) {
-            EvidenceStrength strength = strengthFor(outcome);
-            evidence.merge(dimension, strength, (left, right) -> left.compareTo(right) >= 0 ? left : right);
-        }
-        if (activity.difficulty() != null) {
-            recent.add(activity.toRecentLearningActivity(
-                    conceptKey(activityObjective), mission.id(), outcome,
-                    LearningActivityIntent.STANDARD, activity.generatedArtifactId() != null));
-        }
-    }
-
-    private static AttemptOutcome outcome(String status) {
-        try {
-            return AttemptOutcome.valueOf(status);
-        } catch (IllegalArgumentException invalidStatus) {
-            return AttemptOutcome.INCORRECT;
-        }
-    }
-
-    private static EvidenceStrength strengthFor(AttemptOutcome outcome) {
-        return switch (outcome) {
-            case CORRECT -> EvidenceStrength.DEVELOPING;
-            case PARTIAL -> EvidenceStrength.WEAK;
-            case INCORRECT -> EvidenceStrength.INSUFFICIENT;
-        };
-    }
-
-    private static EvidenceDimension dimensionFor(LearningActionType actionType) {
-        return switch (actionType) {
-            case UNDERSTAND, HINT, PREREQUISITE_SUPPORT -> EvidenceDimension.UNDERSTANDING;
-            case RETRIEVE -> EvidenceDimension.RECALL;
-            case CONNECT -> EvidenceDimension.CONNECTION;
-            case APPLY -> EvidenceDimension.APPLICATION;
-            default -> null;
-        };
-    }
-
-    private static SourceCapability sourceCapability(StudyMission mission) {
-        boolean available = !mission.materials().isEmpty();
-        return new SourceCapability(
-                available ? SourceReadiness.READY : SourceReadiness.INSUFFICIENT,
-                available, false, false);
-    }
-
-    private static LearningActionConstraints constraintsFor(StudyMissionGroundingMode mode) {
-        return switch (mode) {
-            case STRICT_SOURCE -> new LearningActionConstraints(
-                    SourceRequirement.REQUIRED, false, false, null, null,
-                    LearningActivityIntent.STANDARD);
-            case SOURCE_FIRST -> new LearningActionConstraints(
-                    SourceRequirement.REQUIRED, false, true, null, null,
-                    LearningActivityIntent.STANDARD);
-            case GENERAL_KNOWLEDGE -> LearningActionConstraints.unconstrained();
-        };
-    }
-
     private static LearningStage stageFor(NextLearningAction action, LearningStage current) {
         return switch (action.actionType()) {
             case UNDERSTAND, HINT, PREREQUISITE_SUPPORT -> LearningStage.UNDERSTANDING;
@@ -334,10 +198,6 @@ public class SubmitActivityResponseUseCase {
             case START, RESUME, PAUSE, STOP, SOURCE_ONLY, COMMUNICATE_LIMITATION,
                     RETRY_DEPENDENCY -> current;
         };
-    }
-
-    private static String conceptKey(LearningObjective objective) {
-        return firstNonBlank(objective.conceptKey(), objective.objectiveText());
     }
 
     private static String firstNonBlank(String first, String second) {
@@ -381,5 +241,59 @@ public class SubmitActivityResponseUseCase {
             LearningActivity activity,
             StudyMission mission,
             Evaluation evaluation,
-            NextLearningAction nextAction) {}
+            NextLearningAction nextAction) {
+
+        public UUID missionId() {
+            return mission.id();
+        }
+
+        public UUID activityId() {
+            return activity.id();
+        }
+
+        public String outcome() {
+            return evaluation.outcome().name();
+        }
+
+        public List<String> correctConcepts() {
+            return List.copyOf(evaluation.correctConcepts());
+        }
+
+        public List<String> missingConcepts() {
+            return List.copyOf(evaluation.missingConcepts());
+        }
+
+        public List<String> misconceptions() {
+            return List.copyOf(evaluation.misconceptions());
+        }
+
+        public String feedback() {
+            return evaluation.feedback();
+        }
+
+        public String missionStatus() {
+            return mission.status().name();
+        }
+
+        public String stage() {
+            return mission.learningState().name();
+        }
+
+        public Instant updatedAt() {
+            return mission.updatedAt();
+        }
+
+        public boolean continuationAvailable() {
+            return mission.status() == StudyMissionStatus.ACTIVE
+                    && isMaterializable(nextAction.actionType());
+        }
+
+        private static boolean isMaterializable(LearningActionType actionType) {
+            return switch (actionType) {
+                case START, RESUME, PAUSE, STOP, SOURCE_ONLY, COMMUNICATE_LIMITATION,
+                        RETRY_DEPENDENCY, COMPLETE -> false;
+                default -> true;
+            };
+        }
+    }
 }

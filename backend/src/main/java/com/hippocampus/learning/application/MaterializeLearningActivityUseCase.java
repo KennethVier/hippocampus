@@ -55,6 +55,11 @@ public class MaterializeLearningActivityUseCase {
         UUID userId = currentUser.authenticatedUser().userId();
         StudyMission mission = missions.findOwnedById(command.missionId(), userId)
                 .orElseThrow(MaterializeLearningActivityUseCase::missionNotFound);
+        if (command.expectedCurrentActivityId() != null
+                && !Objects.equals(command.expectedCurrentActivityId(), mission.currentActivityId())) {
+            throw failure(ActivityMaterializationException.Reason.STALE_MISSION,
+                    "The mission changed before the next activity could be prepared.");
+        }
         verifyMission(mission);
         LearningObjective objective = mission.objectives().stream()
                 .filter(candidate -> candidate.id().equals(command.action().learningObjectiveId()))
@@ -245,7 +250,15 @@ public class MaterializeLearningActivityUseCase {
         return new ActivityMaterializationException(reason, message);
     }
 
-    public record Command(UUID missionId, NextLearningAction action) {
+    public record Command(
+            UUID missionId,
+            NextLearningAction action,
+            UUID expectedCurrentActivityId) {
+
+        public Command(UUID missionId, NextLearningAction action) {
+            this(missionId, action, null);
+        }
+
         public Command {
             Objects.requireNonNull(missionId, "missionId must not be null");
             Objects.requireNonNull(action, "action must not be null");

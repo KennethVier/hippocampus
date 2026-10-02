@@ -61,7 +61,8 @@ class SubmitActivityResponseUseCaseTests {
         var persistence = new PersistActivityResponse(missions, attempts);
         useCase = new SubmitActivityResponseUseCase(
                 () -> new AuthenticatedUser(USER_ID), missions, attempts, contracts, evaluation,
-                engine(), persistence, Clock.fixed(NOW, ZoneOffset.UTC));
+                engine(), new StudyMissionLearningStateAssembler(), persistence,
+                Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
