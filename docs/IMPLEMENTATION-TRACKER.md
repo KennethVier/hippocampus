@@ -2068,7 +2068,7 @@ review and the independent security gate remain required; P7-12 is not Done.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 20
 - **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** Mission Interaction API prerequisite is in PR #214. Frontend implementation has not started. ADR-0010 has passed external decision review and is accepted, but ADR merge/alignment and implementation are still required before P7-13 frontend work starts.
+- **Notes / blockers:** Mission Interaction API prerequisite is in PR #214. Frontend implementation has not started. Independent security review identified SEC-001: unbounded learner-response request resource consumption. Remediation implemented; user validation and security re-review pending. ADR-0010 has passed external decision review and is accepted, but ADR merge/alignment and implementation are still required before P7-13 frontend work starts.
 
 ## P7-14 — Phase 7 First Hippocampus gate
 

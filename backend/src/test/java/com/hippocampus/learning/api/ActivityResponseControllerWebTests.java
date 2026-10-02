@@ -3,6 +3,7 @@ package com.hippocampus.learning.api;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -49,13 +50,17 @@ import com.hippocampus.learning.domain.StudyMission;
 import com.hippocampus.learning.domain.StudyMissionGroundingMode;
 import com.hippocampus.learning.domain.StudyMissionStatus;
 import com.hippocampus.learning.infrastructure.config.StudyMissionApplicationConfiguration;
+import com.hippocampus.learning.infrastructure.web.ActivityResponseBodySizeFilter;
 import com.hippocampus.learning.port.ResponseEvaluationPort;
 import com.hippocampus.progress.domain.StudentAttempt;
 import com.hippocampus.shared.application.error.ApplicationNotFoundException;
 import com.hippocampus.shared.domain.error.ErrorCode;
 
 @WebMvcTest(ActivityResponseController.class)
-@Import(ActivityResponseControllerWebTests.TestInfrastructure.class)
+@Import({
+        ActivityResponseControllerWebTests.TestInfrastructure.class,
+        ActivityResponseBodySizeFilter.class
+})
 @ImportAutoConfiguration(exclude = StudyMissionApplicationConfiguration.class)
 class ActivityResponseControllerWebTests {
 
@@ -120,6 +125,95 @@ class ActivityResponseControllerWebTests {
         assertThat(command.getValue().responseText())
                 .isEqualTo("Cardiac output depends on stroke volume.");
         assertThat(command.getValue().responsePayload()).isNull();
+    }
+
+    @Test
+    void oversizedRequestBodyIsRejectedWithoutInvokingUseCaseAndWithoutPrivateDetails() throws Exception {
+        String privateLearnerResponse = "PRIVATE_LEARNER_RESPONSE_59218";
+        String body = "{\"responseText\":\"" + privateLearnerResponse
+                + "x".repeat(ActivityResponseBodySizeFilter.MAX_REQUEST_BODY_BYTES) + "\"}";
+
+        String responseBody = mvc.perform(post(
+                            "/api/study-missions/{missionId}/activities/{activityId}/responses",
+                            MISSION_ID, ACTIVITY_ID)
+                        .with(user("student"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isPayloadTooLarge())
+                .andExpect(jsonPath("$.code").value("REQUEST_BODY_TOO_LARGE"))
+                .andExpect(jsonPath("$.message").value("Request body is too large."))
+                .andReturn().getResponse().getContentAsString();
+
+        verifyNoInteractions(submitResponse);
+        assertThat(responseBody).doesNotContain(
+                privateLearnerResponse,
+                "stack trace",
+                "provider",
+                "model",
+                "prompt",
+                "expectedAnswer",
+                "correctOption");
+    }
+
+    @Test
+    void responseTextAboveSemanticMaximumIsRejectedWithoutInvokingUseCase() throws Exception {
+        mvc.perform(post(
+                            "/api/study-missions/{missionId}/activities/{activityId}/responses",
+                            MISSION_ID, ACTIVITY_ID)
+                        .with(user("student"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"responseText\":\""
+                                + "a".repeat(ActivityResponseRequest.MAX_RESPONSE_TEXT_CHARACTERS + 1)
+                                + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+
+        verifyNoInteractions(submitResponse);
+    }
+
+    @Test
+    void selectedOptionAboveSemanticMaximumIsRejectedWithoutInvokingUseCase() throws Exception {
+        mvc.perform(post(
+                            "/api/study-missions/{missionId}/activities/{activityId}/responses",
+                            MISSION_ID, ACTIVITY_ID)
+                        .with(user("student"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"selectedOption\":\""
+                                + "a".repeat(ActivityResponseRequest.MAX_SELECTED_OPTION_CHARACTERS + 1)
+                                + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+
+        verifyNoInteractions(submitResponse);
+    }
+
+    @Test
+    void exactSemanticMaximumsAreAccepted() throws Exception {
+        when(submitResponse.execute(any())).thenReturn(result());
+
+        mvc.perform(post(
+                            "/api/study-missions/{missionId}/activities/{activityId}/responses",
+                            MISSION_ID, ACTIVITY_ID)
+                        .with(user("student"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"responseText\":\""
+                                + "a".repeat(ActivityResponseRequest.MAX_RESPONSE_TEXT_CHARACTERS)
+                                + "\",\"selectedOption\":\""
+                                + "B".repeat(ActivityResponseRequest.MAX_SELECTED_OPTION_CHARACTERS)
+                                + "\"}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<SubmitActivityResponseUseCase.Command> command =
+                ArgumentCaptor.forClass(SubmitActivityResponseUseCase.Command.class);
+        verify(submitResponse).execute(command.capture());
+        assertThat(command.getValue().responseText())
+                .hasSize(ActivityResponseRequest.MAX_RESPONSE_TEXT_CHARACTERS);
+        assertThat(command.getValue().selectedOption())
+                .hasSize(ActivityResponseRequest.MAX_SELECTED_OPTION_CHARACTERS);
     }
 
     @Test
