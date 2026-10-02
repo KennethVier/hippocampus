@@ -64,7 +64,6 @@ describe('App', () => {
     ['/subjects', 'Subjects'],
     ['/subjects/example-subject', 'Subject unavailable'],
     ['/topics/example-topic', 'Topic'],
-    ['/missions/example-mission', 'Study Mission'],
     ['/materials', 'Materials'],
     ['/materials/example-material', 'Material unavailable'],
     ['/review', 'Review'],
@@ -75,6 +74,70 @@ describe('App', () => {
 
     expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument()
     expect(screen.getByRole('main')).toBeInTheDocument()
+  })
+
+  it('routes a valid mission identifier to the data-backed Study Mission page', async () => {
+    const missionId = '3f2504e0-4f89-41d3-9a0c-0305e82c3301'
+    const mission = {
+      id: missionId,
+      status: 'ACTIVE',
+      stage: 'RETRIEVAL',
+      currentActivity: {
+        id: '8d2f44e3-6ee8-4cb9-9231-2f96d89d37d1',
+        type: 'RETRIEVAL',
+        status: 'ACTIVE',
+        difficulty: 'FOUNDATIONAL',
+        classification: 'SOURCE_GROUNDED_GENERATED',
+        content: {
+          subtype: 'MCQ',
+          concept: 'Brachial plexus',
+          question: 'Which roots form the upper trunk?',
+          options: [
+            { id: 'A', text: 'C5-C6' },
+            { id: 'B', text: 'C7-C8' },
+          ],
+          difficulty: 'FOUNDATIONAL',
+          limitations: [],
+        },
+        sources: [],
+      },
+      availableTimeMinutes: 25,
+      startedAt: '2026-10-02T01:00:00Z',
+      completedAt: null,
+      stoppedAt: null,
+      updatedAt: '2026-10-02T01:00:00Z',
+    }
+
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url
+
+      if (url.endsWith(`/api/study-missions/${missionId}`)) {
+        return new Response(JSON.stringify(mission), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.endsWith('/api/auth/session')) {
+        return new Response(JSON.stringify({ userId: missionId }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    renderRoute(`/missions/${missionId}`)
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Study Mission' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Which roots form the upper trunk?')).toBeInTheDocument()
   })
 
   it('navigates with the compact primary navigation without remounting the shell', async () => {

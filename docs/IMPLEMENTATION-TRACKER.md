@@ -5,7 +5,7 @@ Version: 1.0.0
 Status: Active
 Owner: Project Hippocampus Team
 Created: 2026-08-24
-Last Updated: 2026-09-28
+Last Updated: 2026-10-02
 Purpose: Operational tracker for implementing the frozen Hippocampus v1 Source of Truth phase by phase with concrete build requirements, tests, expected behavior, definition of done, and evidence.
 Authority: Document 26 defines implementation order; Documents 00–25 define product/technical requirements; Document 27 governs deviations.
 ---
@@ -2032,7 +2032,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** Frontend
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Create core product experience.
 - **Build:** Implement /missions/:id, typed union renderer for explanation/retrieval/connection/application/feedback/reflection, source panel and actions.
 - **How it works:** Frontend renders backend contract; never parses raw provider semantics.
@@ -2042,9 +2042,17 @@ responsibilities remain outside P5-06.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 20
 - **Evidence / link:** Mission Presentation API dependency implemented in PR #212 with an
-owner-scoped, learner-safe current-activity and source projection.
-- **Notes / blockers:** Mission Presentation API dependency resolved. P7-12 frontend implementation
-has not started.
+owner-scoped, learner-safe current-activity and source projection. Implemented the real
+`/missions/:missionId` route, learner-safe Mission Presentation API client and typed validation,
+TanStack Query-backed `StudyMissionPage`, discriminated-union `ActivityRenderer`, source panel,
+responsive activity presentation, loading/error/unavailable states, and dedicated component/page
+coverage. The stale generic static-route smoke case using non-UUID `example-mission` was removed;
+focused app-router coverage now uses a valid UUID and endpoint-specific valid Mission Presentation
+response, proving the actual router renders the Study Mission page and current activity. User-owned
+frontend validation passed: lint PASS, typecheck PASS, and test PASS (220 tests passed). Production UUID validation,
+safe 404 behavior, and learner-safe API behavior remain unchanged.
+- **Notes / blockers:** Implementation and user validation are complete. External implementation
+review and the independent security gate remain required; P7-12 is not Done.
 
 ## P7-13 — Implement mission submit/resume/conflict UX
 
