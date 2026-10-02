@@ -4,6 +4,7 @@ public enum LearningActionType {
     START,
     RESUME,
     UNDERSTAND,
+    UNDERSTANDING_CHECK,
     RETRIEVE,
     CONNECT,
     APPLY,

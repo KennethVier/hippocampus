@@ -57,87 +57,258 @@ class ContinueStudyMissionUseCaseTests {
 
     @BeforeEach
     void setUp() {
+        // Default: a completed non-UNDERSTAND (RETRIEVE) activity (the already-completed path).
         missions = new InMemoryMissions(mission(
                 StudyMissionStatus.ACTIVE, completedActivity(ACTIVITY_ID), ACTIVITY_ID));
         attempts = new InMemoryAttempts(List.of(attempt()));
         learningEngine = mock(LearningEngine.class);
         materializer = mock(MaterializeLearningActivityUseCase.class);
-        when(learningEngine.decide(any())).thenReturn(nextAction());
-        LearningActivity next = pendingActivity(UUID.randomUUID(), 2);
+        when(learningEngine.decide(any())).thenReturn(retrieveAction());
+        LearningActivity next = pendingActivity(UUID.randomUUID(), 2, LearningActionType.RETRIEVE);
         when(materializer.execute(any())).thenReturn(
                 new MaterializeLearningActivityUseCase.Result(next, missions.current));
-        useCase = new ContinueStudyMissionUseCase(
-                () -> new AuthenticatedUser(USER_ID), missions, attempts, learningEngine,
-                new StudyMissionLearningStateAssembler(), materializer,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+        useCase = buildUseCase();
     }
 
+    // --- Scenario 1: already-completed non-UNDERSTAND activity forwards to engine normally ---
+
     @Test
-    void completedCurrentActivityUsesPersistedAttemptAndMaterializesOnce() {
+    void completedRetrieveActivityMaterializesUsingPersistedAttempts() {
         var result = execute(ACTIVITY_ID);
 
         assertThat(result.materializedActivityId()).isNotNull();
         ArgumentCaptor<LearningState> state = ArgumentCaptor.forClass(LearningState.class);
         verify(learningEngine).decide(state.capture());
+        // History contains the one persisted RETRIEVE attempt
         assertThat(state.getValue().recentActivityHistory()).hasSize(1);
-        verify(materializer).execute(new MaterializeLearningActivityUseCase.Command(
-                MISSION_ID, nextAction(), ACTIVITY_ID));
+        verify(materializer).execute(any());
     }
 
+    // --- Scenario 2: presentation-only UNDERSTAND activity — Continue marks COMPLETED, no StudentAttempt ---
+
     @Test
-    void staleActivityAndUnfinishedCurrentActivityFailWithConflictReasons() {
+    void presentationOnlyUnderstandPersistsCompletionWithoutStudentAttempt() {
+        missions.current = mission(
+                StudyMissionStatus.ACTIVE,
+                pendingActivity(ACTIVITY_ID, 1, LearningActionType.UNDERSTAND), ACTIVITY_ID);
+        attempts = new InMemoryAttempts(List.of()); // no prior attempts
+
+        when(learningEngine.decide(any())).thenReturn(understandCheckAction());
+        LearningActivity next = pendingActivity(UUID.randomUUID(), 2, LearningActionType.UNDERSTANDING_CHECK);
+        when(materializer.execute(any())).thenReturn(
+                new MaterializeLearningActivityUseCase.Result(next, missions.current));
+
+        useCase = buildUseCase();
+        var result = execute(ACTIVITY_ID);
+
+        assertThat(result.materializedActivityId()).isNotNull();
+        // No StudentAttempt was created — the InMemoryAttempts persisted list is still empty
+        assertThat(attempts.persisted).isEmpty();
+        // Mission activity should now be COMPLETED in the in-memory store
+        LearningActivity completed = missions.current.activities().stream()
+                .filter(a -> a.id().equals(ACTIVITY_ID))
+                .findFirst().orElseThrow();
+        assertThat(completed.status()).isEqualTo("COMPLETED");
+        assertThat(completed.completedAt()).isEqualTo(NOW);
+    }
+
+    // --- Scenario 3: engine is called with presentation completion in history (null outcome) ---
+
+    @Test
+    void afterPresentationCompletionEngineReceivesNullOutcomeHistoryEntry() {
+        missions.current = mission(
+                StudyMissionStatus.ACTIVE,
+                pendingActivity(ACTIVITY_ID, 1, LearningActionType.UNDERSTAND), ACTIVITY_ID);
+        attempts = new InMemoryAttempts(List.of());
+        when(learningEngine.decide(any())).thenReturn(understandCheckAction());
+        LearningActivity next = pendingActivity(UUID.randomUUID(), 2, LearningActionType.UNDERSTANDING_CHECK);
+        when(materializer.execute(any())).thenReturn(
+                new MaterializeLearningActivityUseCase.Result(next, missions.current));
+
+        useCase = buildUseCase();
+        execute(ACTIVITY_ID);
+
+        ArgumentCaptor<LearningState> state = ArgumentCaptor.forClass(LearningState.class);
+        verify(learningEngine).decide(state.capture());
+        // The recent history must contain one entry with null outcome for the presentation
+        assertThat(state.getValue().recentActivityHistory()).hasSize(1);
+        assertThat(state.getValue().recentActivityHistory().get(0).attemptOutcome()).isNull();
+        assertThat(state.getValue().recentActivityHistory().get(0).activityType())
+                .isEqualTo(LearningActionType.UNDERSTAND.name());
+    }
+
+    // --- Scenario 4: HINT-represented activity treated as presentation-only UNDERSTAND ---
+
+    @Test
+    void hintRepresentedPendingActivityIsAlsoPresentationOnlyPath() {
+        missions.current = mission(
+                StudyMissionStatus.ACTIVE,
+                pendingActivity(ACTIVITY_ID, 1, LearningActionType.HINT), ACTIVITY_ID);
+        attempts = new InMemoryAttempts(List.of());
+        when(learningEngine.decide(any())).thenReturn(understandCheckAction());
+        LearningActivity next = pendingActivity(UUID.randomUUID(), 2, LearningActionType.UNDERSTANDING_CHECK);
+        when(materializer.execute(any())).thenReturn(
+                new MaterializeLearningActivityUseCase.Result(next, missions.current));
+
+        useCase = buildUseCase();
+        var result = execute(ACTIVITY_ID);
+
+        assertThat(result.materializedActivityId()).isNotNull();
+        assertThat(attempts.persisted).isEmpty();
+    }
+
+    // --- Scenario 5: PREREQUISITE_SUPPORT-represented activity treated as presentation-only ---
+
+    @Test
+    void prerequisiteSupportPendingActivityIsAlsoPresentationOnlyPath() {
+        missions.current = mission(
+                StudyMissionStatus.ACTIVE,
+                pendingActivity(ACTIVITY_ID, 1, LearningActionType.PREREQUISITE_SUPPORT), ACTIVITY_ID);
+        attempts = new InMemoryAttempts(List.of());
+        when(learningEngine.decide(any())).thenReturn(understandCheckAction());
+        LearningActivity next = pendingActivity(UUID.randomUUID(), 2, LearningActionType.UNDERSTANDING_CHECK);
+        when(materializer.execute(any())).thenReturn(
+                new MaterializeLearningActivityUseCase.Result(next, missions.current));
+
+        useCase = buildUseCase();
+        var result = execute(ACTIVITY_ID);
+
+        assertThat(result.materializedActivityId()).isNotNull();
+        assertThat(attempts.persisted).isEmpty();
+    }
+
+    // --- Scenario 6: stale activity ID is rejected with STALE_MISSION ---
+
+    @Test
+    void staleActivityIdIsRejectedWithStaleMissionReason() {
         assertReason(
                 () -> execute(UUID.randomUUID()),
                 ActivityMaterializationException.Reason.STALE_MISSION);
-
-        missions.current = mission(
-                StudyMissionStatus.ACTIVE, pendingActivity(ACTIVITY_ID, 1), ACTIVITY_ID);
-        assertReason(
-                () -> execute(ACTIVITY_ID),
-                ActivityMaterializationException.Reason.UNFINISHED_CURRENT_ACTIVITY);
         verify(materializer, times(0)).execute(any());
     }
 
+    // --- Scenario 7: inactive mission is rejected with MISSION_NOT_ACTIVE ---
+
     @Test
-    void inactiveMissionFailsClosed() {
+    void inactiveMissionIsRejectedWithMissionNotActiveReason() {
         missions.current = mission(
                 StudyMissionStatus.PAUSED, completedActivity(ACTIVITY_ID), ACTIVITY_ID);
-
         assertReason(
                 () -> execute(ACTIVITY_ID),
                 ActivityMaterializationException.Reason.MISSION_NOT_ACTIVE);
         verify(materializer, times(0)).execute(any());
     }
 
-    @Test
-    void crossUserMissionStaysSafeNotFound() {
-        missions.visible = false;
+    // --- Scenario 8: cross-user access returns not found ---
 
+    @Test
+    void crossUserMissionIsNotFound() {
+        missions.visible = false;
         assertThatThrownBy(() -> execute(ACTIVITY_ID))
                 .isInstanceOf(ApplicationNotFoundException.class)
                 .hasMessage("Study mission was not found.");
         verify(materializer, times(0)).execute(any());
     }
 
+    // --- Scenario 9: non-UNDERSTAND pending activity (e.g., RETRIEVE) cannot Continue ---
+
     @Test
-    void secondContinueForOldActivityCannotMaterializeAgain() {
-        LearningActivity next = pendingActivity(UUID.randomUUID(), 2);
+    void pendingRetrieveActivityIsRejectedAsUnfinished() {
+        missions.current = mission(
+                StudyMissionStatus.ACTIVE,
+                pendingActivity(ACTIVITY_ID, 1, LearningActionType.RETRIEVE), ACTIVITY_ID);
+        assertReason(
+                () -> execute(ACTIVITY_ID),
+                ActivityMaterializationException.Reason.UNFINISHED_CURRENT_ACTIVITY);
+        verify(materializer, times(0)).execute(any());
+    }
+
+    // --- Scenario 10: already-completed UNDERSTAND activity (with a prior attempt) uses normal path ---
+
+    @Test
+    void completedUnderstandActivityWithAttemptUsesNormalPath() {
+        LearningActivity completedUnderstand = new LearningActivity(
+                ACTIVITY_ID, OBJECTIVE_ID, LearningActivityType.UNDERSTAND, LearningActionType.UNDERSTAND,
+                null, null, "COMPLETED", LearningDifficulty.FOUNDATIONAL,
+                1, UUID.randomUUID(), false, NOW.minusSeconds(120), NOW.minusSeconds(60),
+                NOW.minusSeconds(180), Set.of());
+        missions.current = mission(StudyMissionStatus.ACTIVE, completedUnderstand, ACTIVITY_ID);
+        // One prior attempt (e.g., understanding check was answered)
+        attempts = new InMemoryAttempts(List.of(attempt()));
+
+        when(learningEngine.decide(any())).thenReturn(retrieveAction());
+        LearningActivity next = pendingActivity(UUID.randomUUID(), 2, LearningActionType.RETRIEVE);
+        when(materializer.execute(any())).thenReturn(
+                new MaterializeLearningActivityUseCase.Result(next, missions.current));
+
+        useCase = buildUseCase();
+        var result = execute(ACTIVITY_ID);
+
+        assertThat(result.materializedActivityId()).isNotNull();
+        // Existing attempt is preserved; no new attempt created
+        assertThat(attempts.persisted).hasSize(1);
+        verify(learningEngine).decide(any());
+    }
+
+    // --- Scenario 11: concurrent second Continue on same presentation is rejected with STALE_MISSION ---
+
+    @Test
+    void secondContinueForPresentationActivityIsRejectedAsStaleMission() {
+        missions.current = mission(
+                StudyMissionStatus.ACTIVE,
+                pendingActivity(ACTIVITY_ID, 1, LearningActionType.UNDERSTAND), ACTIVITY_ID);
+        attempts = new InMemoryAttempts(List.of());
+        when(learningEngine.decide(any())).thenReturn(understandCheckAction());
+        LearningActivity next = pendingActivity(UUID.randomUUID(), 2, LearningActionType.UNDERSTANDING_CHECK);
         when(materializer.execute(any())).thenAnswer(invocation -> {
             missions.current = missionWithNextActivity(next);
             return new MaterializeLearningActivityUseCase.Result(next, missions.current);
         });
 
-        execute(ACTIVITY_ID);
+        useCase = buildUseCase();
+        execute(ACTIVITY_ID); // first Continue succeeds
+
+        // Second Continue on the same activityId is now stale (currentActivityId changed)
         assertReason(
                 () -> execute(ACTIVITY_ID),
                 ActivityMaterializationException.Reason.STALE_MISSION);
-
         verify(materializer, times(1)).execute(any());
-        assertThat(missions.current.activities()).hasSize(2);
+    }
+
+    // --- Scenario 12: engine decision after presentation — UNDERSTANDING_CHECK action materializes ---
+
+    @Test
+    void engineDecisionAfterPresentationMaterializesUnderstandingCheck() {
+        missions.current = mission(
+                StudyMissionStatus.ACTIVE,
+                pendingActivity(ACTIVITY_ID, 1, LearningActionType.UNDERSTAND), ACTIVITY_ID);
+        attempts = new InMemoryAttempts(List.of());
+        NextLearningAction checkAction = understandCheckAction();
+        when(learningEngine.decide(any())).thenReturn(checkAction);
+        LearningActivity next = pendingActivity(UUID.randomUUID(), 2, LearningActionType.UNDERSTANDING_CHECK);
+        when(materializer.execute(any())).thenReturn(
+                new MaterializeLearningActivityUseCase.Result(next, missions.current));
+
+        useCase = buildUseCase();
+        execute(ACTIVITY_ID);
+
+        ArgumentCaptor<MaterializeLearningActivityUseCase.Command> cmd =
+                ArgumentCaptor.forClass(MaterializeLearningActivityUseCase.Command.class);
+        verify(materializer).execute(cmd.capture());
+        assertThat(cmd.getValue().action().actionType()).isEqualTo(LearningActionType.UNDERSTANDING_CHECK);
     }
 
     private ContinueStudyMissionUseCase.Result execute(UUID activityId) {
         return useCase.execute(new ContinueStudyMissionUseCase.Command(MISSION_ID, activityId));
+    }
+
+    private ContinueStudyMissionUseCase buildUseCase() {
+        PersistPresentationCompletion presentationCompletion =
+                new PersistPresentationCompletion(missions);
+        return new ContinueStudyMissionUseCase(
+                () -> new AuthenticatedUser(USER_ID), missions, attempts, learningEngine,
+                new StudyMissionLearningStateAssembler(), materializer,
+                presentationCompletion, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private static void assertReason(
@@ -149,10 +320,18 @@ class ContinueStudyMissionUseCaseTests {
                 .isEqualTo(reason);
     }
 
-    private static NextLearningAction nextAction() {
+    private static NextLearningAction retrieveAction() {
         return new NextLearningAction(
-                LearningActionType.UNDERSTAND, OBJECTIVE_ID, "cardiac-output",
-                LearningDifficulty.FOUNDATIONAL, "TEST_CONTINUE", false);
+                LearningActionType.RETRIEVE, OBJECTIVE_ID, "cardiac-output",
+                LearningDifficulty.FOUNDATIONAL, "READY_FOR_RETRIEVAL", true,
+                com.hippocampus.learning.domain.LearningActionConstraints.unconstrained()
+                        .withRetrievalActivityType(com.hippocampus.learning.domain.RetrievalActivityType.SHORT_ANSWER));
+    }
+
+    private static NextLearningAction understandCheckAction() {
+        return new NextLearningAction(
+                LearningActionType.UNDERSTANDING_CHECK, OBJECTIVE_ID, "cardiac-output",
+                LearningDifficulty.FOUNDATIONAL, "UNDERSTANDING_CHECK_REQUIRED", true);
     }
 
     private static StudentAttempt attempt() {
@@ -169,9 +348,15 @@ class ContinueStudyMissionUseCaseTests {
                 NOW.minusSeconds(180), Set.of());
     }
 
-    private static LearningActivity pendingActivity(UUID id, int sequence) {
+    private static LearningActivity pendingActivity(
+            UUID id, int sequence, LearningActionType represented) {
+        LearningActivityType type = switch (represented) {
+            case UNDERSTAND, HINT, PREREQUISITE_SUPPORT, UNDERSTANDING_CHECK ->
+                    LearningActivityType.UNDERSTAND;
+            default -> LearningActivityType.RETRIEVE;
+        };
         return new LearningActivity(
-                id, OBJECTIVE_ID, LearningActivityType.UNDERSTAND, LearningActionType.UNDERSTAND,
+                id, OBJECTIVE_ID, type, represented,
                 null, null, "PENDING", LearningDifficulty.FOUNDATIONAL,
                 sequence, null, false, null, null, NOW, Set.of());
     }

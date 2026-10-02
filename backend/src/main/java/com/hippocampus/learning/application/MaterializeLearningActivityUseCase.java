@@ -216,7 +216,7 @@ public class MaterializeLearningActivityUseCase {
 
     private static LearningActivityType mapActivityType(NextLearningAction action) {
         LearningActivityType mapped = switch (action.actionType()) {
-            case UNDERSTAND, HINT, PREREQUISITE_SUPPORT -> LearningActivityType.UNDERSTAND;
+            case UNDERSTAND, HINT, PREREQUISITE_SUPPORT, UNDERSTANDING_CHECK -> LearningActivityType.UNDERSTAND;
             case RETRIEVE -> LearningActivityType.RETRIEVE;
             case CONNECT -> LearningActivityType.CONNECT;
             case APPLY -> LearningActivityType.APPLY;

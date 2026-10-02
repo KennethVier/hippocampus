@@ -191,7 +191,7 @@ public class SubmitActivityResponseUseCase {
 
     private static LearningStage stageFor(NextLearningAction action, LearningStage current) {
         return switch (action.actionType()) {
-            case UNDERSTAND, HINT, PREREQUISITE_SUPPORT -> LearningStage.UNDERSTANDING;
+            case UNDERSTAND, HINT, PREREQUISITE_SUPPORT, UNDERSTANDING_CHECK -> LearningStage.UNDERSTANDING;
             case RETRIEVE, RETRY, REDUCE_DIFFICULTY, REUSE_VALIDATED_CONTENT -> current;
             case CONNECT -> LearningStage.CONNECTION;
             case APPLY -> LearningStage.APPLICATION;

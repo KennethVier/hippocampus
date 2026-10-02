@@ -574,6 +574,27 @@ Updated StudyMission state
 
 only after AI evaluation has been validated if AI is required.
 
+## Continue Presentation-Only Activity (ADR-0010)
+
+When a student clicks Continue on a presentation-only `UNDERSTAND` activity:
+
+One transaction persists:
+
+``` text
+Updated LearningActivity (status = COMPLETED, completed_at)
++
+Updated StudyMission state (currentActivityId advance)
+```
+
+No `StudentAttempt` is persisted. No evidence is written.
+No synthetic `CORRECT`, `PARTIAL`, or `INCORRECT` outcome is produced.
+
+The Learning Engine decides the next action after persistence, taking
+into account that `UNDERSTANDING` evidence was not updated by this transition.
+
+If `UNDERSTANDING` evidence remains insufficient, the engine selects an
+`UNDERSTANDING_CHECK` activity rather than a normal `RETRIEVE`.
+
 ## Material Version Activation
 
 One transaction may:

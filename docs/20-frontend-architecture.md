@@ -498,6 +498,22 @@ Actions:
 
 Only actions currently allowed by backend state should be displayed.
 
+**Continue (ADR-0010):** When the student presses Continue on a
+presentation-only `UNDERSTAND` activity, the frontend calls the Continue
+endpoint and awaits the next materialized activity from the backend.
+Continue is a lifecycle transition. The frontend must not fabricate
+evidence, synthetic outcomes, or mastery state from a Continue click.
+
+After a presentation-only `UNDERSTAND` activity, the backend may materialize:
+
+``` text
+Understanding Check  — if UNDERSTANDING evidence is insufficient
+Retrieval             — if UNDERSTANDING evidence is already sufficient
+```
+
+The frontend renders the activity type the backend returns.
+It does not decide which activity type follows.
+
 ------------------------------------------------------------------------
 
 # 18. Retrieval Activity

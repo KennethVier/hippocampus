@@ -22,6 +22,7 @@ class NextLearningActionTests {
                 LearningActionType.START,
                 LearningActionType.RESUME,
                 LearningActionType.UNDERSTAND,
+                LearningActionType.UNDERSTANDING_CHECK,
                 LearningActionType.RETRIEVE,
                 LearningActionType.CONNECT,
                 LearningActionType.APPLY,

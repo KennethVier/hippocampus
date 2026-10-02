@@ -616,7 +616,101 @@ This is a core evidence-based rule.
 
 ---
 
-# 14. Anti-Repetition Engine
+# 14. Presentation Completion and Understanding Check (ADR-0010)
+
+## Presentation-Only Completion Is Not Evidence
+
+An `UNDERSTAND` activity may be a presentation that does not require an
+evaluated learner response.
+
+Completing such a presentation via **Continue**:
+
+- closes the activity lifecycle so the learner can progress;
+- does **not** create a `StudentAttempt`;
+- does **not** produce `CORRECT`, `PARTIAL`, or `INCORRECT` evidence;
+- does **not** directly establish `UNDERSTANDING` evidence.
+
+The Learning Engine must not treat a Continue click as competence proof.
+
+## Understanding Check
+
+After presentation completion, if persisted learning state still lacks
+sufficient `UNDERSTANDING` evidence, the Learning Engine selects an
+explicit **Understanding Check** before normal retrieval.
+
+An Understanding Check is a response-bearing activity with a distinct
+pedagogical identity in the learning domain.
+
+The system distinguishes an Understanding Check from an ordinary
+`RETRIEVE` activity and from a normal `UNDERSTAND` activity without
+relying on provider/model inference or frontend state.
+
+Possible Understanding Check prompts include active reconstruction:
+
+```text
+Explain a mechanism
+Describe a relationship
+Summarize a causal sequence
+Identify why a concept behaves as described
+Relate components
+```
+
+Evaluated Understanding Check outcomes map to `EvidenceDimension.UNDERSTANDING`:
+
+```text
+CORRECT  → DEVELOPING
+PARTIAL  → WEAK
+INCORRECT → INSUFFICIENT
+```
+
+An Understanding Check does **not** establish `RECALL`. Recall is a
+separate evidence dimension established only through normal retrieval.
+
+## Failed or Partial Understanding Check
+
+When a check is `PARTIAL` or `INCORRECT`, the Learning Engine remains
+responsible for choosing the next action. The system must not
+automatically advance merely because a check was attempted.
+
+Possible follow-up actions:
+
+```text
+targeted UNDERSTAND
+HINT
+PREREQUISITE_SUPPORT
+another Understanding Check
+```
+
+depending on existing deterministic policies and learner state.
+
+## Recall Separation
+
+```text
+UNDERSTAND presentation
+  → Continue (lifecycle, not competence)
+  → Understanding Check
+  → evaluated response → UNDERSTANDING evidence
+  → RETRIEVE
+  → RECALL evidence
+```
+
+`RECALL` remains a separate dimension.
+
+## Authority
+
+The Learning Engine owns whether and when an Understanding Check occurs.
+
+The frontend renders backend state and submits explicit learner actions.
+The frontend must not decide evidence or progression.
+
+AI may assist with generating Understanding Check content and evaluating
+free-text responses through the existing validated AI architecture. AI
+does not determine whether presentation completion counts as evidence or
+whether evidence thresholds have been satisfied.
+
+---
+
+# 15. Anti-Repetition Engine
 
 The Learning Engine should track recent activity signatures. A conceptual
 `RecentLearningActivity` entry that represents a durable LearningActivity

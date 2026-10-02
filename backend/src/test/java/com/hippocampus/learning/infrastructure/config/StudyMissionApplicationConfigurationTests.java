@@ -21,6 +21,7 @@ import com.hippocampus.identity.domain.AuthenticatedUser;
 import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.learning.application.GetStudyMissionUseCase;
 import com.hippocampus.learning.application.ContinueStudyMissionUseCase;
+import com.hippocampus.learning.application.PersistPresentationCompletion;
 import com.hippocampus.learning.application.StartStudyMissionUseCase;
 import com.hippocampus.learning.application.StudyMissionLearningStateAssembler;
 import com.hippocampus.learning.application.SubmitActivityResponseUseCase;
@@ -75,6 +76,7 @@ class StudyMissionApplicationConfigurationTests {
     void wiresSubmissionAndBackendOwnedContinuationWhenRequiredPortsExist() {
         runner.run(context -> assertThat(context).hasNotFailed()
                 .hasSingleBean(StudyMissionLearningStateAssembler.class)
+                .hasSingleBean(PersistPresentationCompletion.class)
                 .hasSingleBean(SubmitActivityResponseUseCase.class)
                 .hasSingleBean(ContinueStudyMissionUseCase.class));
     }

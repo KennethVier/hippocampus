@@ -1021,6 +1021,12 @@ For direct pedagogical actions (`UNDERSTAND`, `RETRIEVE`, `CONNECT`, `APPLY`,
 materialized. If `visualRequired` changes the concrete `activity_type` to
 `VISUAL`, the represented action remains unchanged.
 
+For `UNDERSTANDING_CHECK` (ADR-0010), `represented_action_type` is
+`UNDERSTANDING_CHECK`. It is a distinct pedagogical action that materializes
+as an `UNDERSTAND`-type activity and uses the existing response-submission and
+evaluation path. Its `EvidenceDimension` is `UNDERSTANDING`. It does not
+contribute to `RECALL`.
+
 For `RETRY`, `REDUCE_DIFFICULTY`, and `REUSE_VALIDATED_CONTENT`, the new
 LearningActivity inherits `activity_type` and `represented_action_type` from
 the exact prior activity being retried, adapted, or reused. A reduced activity
@@ -1062,6 +1068,25 @@ column. The complete validated contextual-application result, including its
 difficulty, reasoning, expected answer, feedback, provenance, and limitations,
 is retained in the generated artifact payload.
 
+## Presentation-Only Completion (ADR-0010)
+
+A presentation-only `UNDERSTAND` activity (one with no response contract)
+may be completed via an explicit Continue transition.
+
+This transition:
+
+- sets `status = COMPLETED` and `completed_at`;
+- does **not** create a `StudentAttempt` row;
+- does **not** produce `CORRECT`, `PARTIAL`, or `INCORRECT` evidence;
+- does **not** directly establish `UNDERSTANDING` evidence.
+
+The existing `status` and `completed_at` columns in `learning_activities`
+are sufficient to persist presentation completion without a schema change.
+No fabricated assessment evidence is stored.
+
+After presentation completion, if `UNDERSTANDING` evidence remains
+insufficient, the Learning Engine selects an `UNDERSTANDING_CHECK` activity.
+
 Activity types:
 
 ``` text
@@ -1073,6 +1098,7 @@ VISUAL
 FEEDBACK
 REFLECT
 ```
+
 
 ------------------------------------------------------------------------
 
