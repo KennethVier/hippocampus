@@ -1,7 +1,7 @@
 ---
 ADR: ADR-0010
 Title: Presentation-Only UNDERSTAND Progression and Evidence
-Status: PROPOSED
+Status: ACCEPTED
 Date: 2026-10-02
 Decision Owners: Project Hippocampus Team
 Categories: DOMAIN, BACKEND, EDUCATION, FRONTEND
@@ -555,6 +555,6 @@ Production implementation must not precede acceptance of this decision.
 
 # Approval
 
-**Status:** PROPOSED
+**Status:** ACCEPTED
 
-**Approved By:** _Pending external review_
+**Approved By:** Project Hippocampus Team
