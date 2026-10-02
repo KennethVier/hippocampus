@@ -4,6 +4,7 @@ import java.net.URI;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +34,14 @@ final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger LOG = LoggerFactory.getLogger(ApiExceptionHandler.class);
     private static final Map<String, Object> NO_DETAILS = Map.of();
+    private static final Set<String> APPLICATION_CONFLICT_CODES = Set.of(
+            "ACTIVITY_RESPONSE_MISSION_NOT_ACTIVE",
+            "ACTIVITY_RESPONSE_ACTIVITY_NOT_CURRENT",
+            "ACTIVITY_RESPONSE_ACTIVITY_ALREADY_COMPLETED",
+            "ACTIVITY_RESPONSE_STALE_SUBMISSION",
+            "ACTIVITY_MATERIALIZATION_MISSION_NOT_ACTIVE",
+            "ACTIVITY_MATERIALIZATION_UNFINISHED_CURRENT_ACTIVITY",
+            "ACTIVITY_MATERIALIZATION_STALE_MISSION");
 
     @ExceptionHandler(DomainConflictException.class)
     ResponseEntity<Object> handleDomainConflict(
@@ -72,8 +81,11 @@ final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     ResponseEntity<Object> handleApplicationException(
             ApplicationException exception,
             HttpServletRequest request) {
+        HttpStatus status = APPLICATION_CONFLICT_CODES.contains(exception.errorCode().value())
+                ? HttpStatus.CONFLICT
+                : HttpStatus.UNPROCESSABLE_CONTENT;
         return problem(
-                HttpStatus.UNPROCESSABLE_CONTENT,
+                status,
                 exception.errorCode().value(),
                 exception.clientMessage(),
                 NO_DETAILS,

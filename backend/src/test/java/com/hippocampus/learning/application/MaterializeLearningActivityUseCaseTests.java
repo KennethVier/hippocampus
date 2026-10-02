@@ -93,6 +93,25 @@ class MaterializeLearningActivityUseCaseTests {
     }
 
     @Test
+    void expectedCurrentActivityMismatchFailsBeforeMaterialization() {
+        LearningActivity completed = execute(action(
+                LearningActionType.FEEDBACK, null, false)).activity();
+        completeCurrentActivity();
+
+        assertThatThrownBy(() -> useCase.execute(
+                new MaterializeLearningActivityUseCase.Command(
+                        MISSION_ID,
+                        action(LearningActionType.UNDERSTAND, LearningDifficulty.FOUNDATIONAL, true),
+                        UUID.randomUUID())))
+                .isInstanceOf(ActivityMaterializationException.class)
+                .extracting(failure -> ((ActivityMaterializationException) failure).reason())
+                .isEqualTo(ActivityMaterializationException.Reason.STALE_MISSION);
+        assertThat(missions.current.currentActivityId()).isEqualTo(completed.id());
+        assertThat(evidence.calls).isZero();
+        assertThat(ai.calls).isZero();
+    }
+
+    @Test
     void retrieveAiActionPreservesDifficultyAndSourceRequirement() {
         var constraints = new LearningActionConstraints(
                 SourceRequirement.REQUIRED,
