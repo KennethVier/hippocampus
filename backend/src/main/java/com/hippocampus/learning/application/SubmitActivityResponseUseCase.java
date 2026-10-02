@@ -78,6 +78,9 @@ public class SubmitActivityResponseUseCase {
                 .orElseThrow(() -> failure(
                         ActivityResponseException.Reason.EVALUATION_CONTRACT_NOT_FOUND,
                         "The activity cannot be evaluated safely."));
+        String persistedResponseText = contract.supportsDeterministicEvaluation()
+                ? firstNonBlank(command.selectedOption(), command.responseText())
+                : command.responseText();
         Evaluation evaluation = evaluate(contract, command);
 
         Map<UUID, List<StudentAttempt>> attemptHistory = new java.util.LinkedHashMap<>();
@@ -94,7 +97,7 @@ public class SubmitActivityResponseUseCase {
                         mission, activity, attemptHistory, evaluation.outcome(), now));
         StudentAttempt attempt = new StudentAttempt(
                 UUID.randomUUID(), userId, activity.id(), maxAttempt + 1,
-                command.responseText(), command.responsePayload(), now,
+                persistedResponseText, command.responsePayload(), now,
                 evaluation.outcome().name(), null,
                 evaluation.deterministic() ? evaluation.outcome().name() : null,
                 now);
