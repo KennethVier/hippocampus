@@ -4,7 +4,7 @@ Audience: Product, architecture, backend, frontend, AI/RAG, DevOps,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 27
-Last Updated: 2026-10-01
+Last Updated: 2026-10-02
 Owner: Project Hippocampus Team
 Prerequisites:
 - README
@@ -24,7 +24,7 @@ Scope: Decision authority, decision categories, ADR lifecycle, ADR
   Source-of-Truth freeze procedure.
 Status: Final
 Title: Decision Log / ADR Index
-Version: 1.0.8
+Version: 1.0.9
 ---
 
 # 27 - Decision Log / ADR Index
@@ -1390,6 +1390,7 @@ When ADRs exist, add an index:
 | [ADR-0007](adr/ADR-0007-explicit-retrieval-activity-type-selection.md) | Explicit Retrieval Activity Type Selection | ACCEPTED | 2026-09-30 | DOMAIN, BACKEND, AI, EDUCATION |
 | [ADR-0008](adr/ADR-0008-evaluation-gated-configured-ai-task-routing.md) | Evaluation-Gated Configured AI Task Routing | ACCEPTED | 2026-09-30 | ARCHITECTURE, BACKEND, AI, OPERATIONS |
 | [ADR-0009](adr/ADR-0009-explicit-application-level-selection.md) | Explicit Application Level Selection | ACCEPTED | 2026-10-01 | DOMAIN, BACKEND, AI, EDUCATION |
+| [ADR-0010](adr/ADR-0010-presentation-only-understand-progression.md) | Presentation-Only UNDERSTAND Progression and Evidence | ACCEPTED | 2026-10-02 | DOMAIN, BACKEND, EDUCATION, FRONTEND |
 
 This table begins empty at initial v1 freeze unless a real pending
 decision already exists.
@@ -1479,6 +1480,17 @@ to `DIRECT`, intermediate to `GUIDED`, and applied to
 the initial v1 policy. AI integration maps the value exactly and rejects a
 generated application whose difficulty is incompatible with the Learning
 Engine request.
+
+## ADR-0010 Decision Summary
+
+Presentation-only `UNDERSTAND` completion is interaction state, not competence
+evidence. Selecting Continue must not create synthetic `StudentAttempt`,
+`CORRECT`, or `UNDERSTANDING` evidence. Insufficient understanding after
+presentation leads to an explicit response-bearing Understanding Check before
+retrieval progression. Existing response-bearing `UNDERSTAND`, `HINT`, and
+`PREREQUISITE_SUPPORT` evidence semantics remain unchanged, `RECALL` remains
+separate and is established through retrieval, and the frontend and AI/provider
+do not own evidence or progression decisions.
 
 ------------------------------------------------------------------------
 
@@ -1795,6 +1807,11 @@ Phase 0 — Engineering Foundation
                                       Hippocampus Team  ADR-0009 explicit
                                                         application level
                                                         selection
+
+  1.0.9             2026-10-02        Project           Accepted and indexed
+                                      Hippocampus Team  ADR-0010 presentation-only
+                                                        UNDERSTAND progression
+                                                        and evidence
 
   ----------------------------------------------------------------------------
 
