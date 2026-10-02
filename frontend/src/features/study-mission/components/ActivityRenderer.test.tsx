@@ -45,6 +45,18 @@ describe('ActivityRenderer', () => {
   })
 
   it.each([
+    { activity: { ...base, type: 'EXPLANATION', content: null }, heading: 'Explanation' },
+    { activity: { ...base, type: 'RETRIEVAL', content: null }, heading: 'Retrieval practice' },
+    { activity: { ...base, type: 'CONNECTION', content: null }, heading: 'Learning connection' },
+    { activity: { ...base, type: 'APPLICATION', content: null }, heading: 'Application' },
+  ] satisfies Array<{ activity: StudyMissionActivity; heading: string }>)('renders only a bounded neutral state for null-content $activity.type', ({ activity, heading }) => {
+    renderActivity(activity)
+    const shell = screen.getByRole('article')
+    expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument()
+    expect(shell).toHaveTextContent(`Current learning activity${heading}Content is not available for this activity yet.`)
+  })
+
+  it.each([
     { activity: { ...base, type: 'FEEDBACK', content: null }, heading: 'Feedback', message: 'Feedback is not available for this activity yet.' },
     { activity: { ...base, type: 'REFLECTION', content: null }, heading: 'Reflection', message: 'Reflection content is not available for this activity yet.' },
     { activity: { ...base, type: 'VISUAL', content: null }, heading: 'Visual activity', message: 'Visual learning content is not available for this activity yet.' },

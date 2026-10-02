@@ -33,7 +33,7 @@ export function StudyMissionPage() {
           <h1 id="study-mission-title">Study Mission</h1>
         </div>
         <dl className="mission-context">
-          <div><dt>Stage</dt><dd>{displayLabel(current.stage)}</dd></div>
+          {current.stage !== null ? <div><dt>Stage</dt><dd>{displayLabel(current.stage)}</dd></div> : null}
           <div><dt>Status</dt><dd>{displayLabel(current.status)}</dd></div>
           {current.availableTimeMinutes !== null ? <div><dt>Available time</dt><dd>{current.availableTimeMinutes} minutes</dd></div> : null}
         </dl>

@@ -50,21 +50,25 @@ function ActivityShell({ activity, children }: { activity: StudyMissionActivity;
 }
 
 function ExplanationPresentation({ activity }: { activity: ExplanationActivity }) {
+  if (activity.content === null) return <NeutralActivityState>Content is not available for this activity yet.</NeutralActivityState>
   const { concept, explanation, keyPoints, limitations } = activity.content
   return <div className="mission-reading"><p className="mission-concept">{concept}</p><p className="mission-explanation">{explanation}</p><ContentList heading="Key points" items={keyPoints} />{limitations.length > 0 ? <ContentList heading="Keep in mind" items={limitations} /> : null}</div>
 }
 
 function RetrievalPresentation({ activity }: { activity: RetrievalActivity }) {
+  if (activity.content === null) return <NeutralActivityState>Content is not available for this activity yet.</NeutralActivityState>
   const { concept, question, options, limitations } = activity.content
   return <div><p className="mission-concept">{concept}</p><p className="mission-question">{question}</p><ol className="mission-options" aria-label="Answer options">{options.map((option) => <li key={option.id}>{option.text}</li>)}</ol>{limitations.length > 0 ? <ContentList heading="Keep in mind" items={limitations} /> : null}</div>
 }
 
 function ConnectionPresentation({ activity }: { activity: ConnectionActivity }) {
+  if (activity.content === null) return <NeutralActivityState>Content is not available for this activity yet.</NeutralActivityState>
   const { fromConcept, toConcept, relationshipType, relationship, whyItMatters, limitations } = activity.content
   return <div><div className="mission-connection"><p><span>{fromConcept}</span><span aria-hidden="true">→</span><span>{toConcept}</span></p><p className="mission-relationship-type">{relationshipType}</p></div><p className="mission-explanation">{relationship}</p><section><h3>Why it matters</h3><p>{whyItMatters}</p></section>{limitations.length > 0 ? <ContentList heading="Keep in mind" items={limitations} /> : null}</div>
 }
 
 function ApplicationPresentation({ activity }: { activity: ApplicationActivity }) {
+  if (activity.content === null) return <NeutralActivityState>Content is not available for this activity yet.</NeutralActivityState>
   const { scenario, question, targetConcept, limitations } = activity.content
   return <div><p className="mission-concept">Apply: {targetConcept}</p><section className="mission-scenario" aria-labelledby={`scenario-${activity.id}`}><h3 id={`scenario-${activity.id}`}>Scenario</h3><p>{scenario}</p></section><p className="mission-question">{question}</p>{limitations.length > 0 ? <ContentList heading="Keep in mind" items={limitations} /> : null}</div>
 }

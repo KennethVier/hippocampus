@@ -42,6 +42,21 @@ describe('study mission API contract', () => {
     expect(transport.json).toHaveBeenCalledWith(`/api/study-missions/${missionId}`, { signal })
   })
 
+  it('accepts a mission with no current learning stage', async () => {
+    const missionWithoutLearningState = { ...mission, stage: null, currentActivity: null }
+    transport.json.mockResolvedValue(missionWithoutLearningState)
+    await expect(getStudyMission(missionId)).resolves.toEqual(missionWithoutLearningState)
+  })
+
+  it.each(['EXPLANATION', 'RETRIEVAL', 'CONNECTION', 'APPLICATION'] as const)('accepts %s with null generated content', async (type) => {
+    const missionWithoutGeneratedContent = {
+      ...mission,
+      currentActivity: { ...mission.currentActivity, type, content: null },
+    }
+    transport.json.mockResolvedValue(missionWithoutGeneratedContent)
+    await expect(getStudyMission(missionId)).resolves.toEqual(missionWithoutGeneratedContent)
+  })
+
   it.each([
     undefined,
     { ...mission, id: 'not-a-uuid' },

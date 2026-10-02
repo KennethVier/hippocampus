@@ -5,7 +5,7 @@ Version: 1.0.0
 Status: Active
 Owner: Project Hippocampus Team
 Created: 2026-08-24
-Last Updated: 2026-09-28
+Last Updated: 2026-10-02
 Purpose: Operational tracker for implementing the frozen Hippocampus v1 Source of Truth phase by phase with concrete build requirements, tests, expected behavior, definition of done, and evidence.
 Authority: Document 26 defines implementation order; Documents 00–25 define product/technical requirements; Document 27 governs deviations.
 ---
@@ -2049,7 +2049,7 @@ responsive activity presentation, loading/error/unavailable states, and dedicate
 coverage. The stale generic static-route smoke case using non-UUID `example-mission` was removed;
 focused app-router coverage now uses a valid UUID and endpoint-specific valid Mission Presentation
 response, proving the actual router renders the Study Mission page and current activity. User-owned
-frontend validation passed: lint PASS, typecheck PASS, and test PASS. Production UUID validation,
+frontend validation passed: lint PASS, typecheck PASS, and test PASS (220 tests passed). Production UUID validation,
 safe 404 behavior, and learner-safe API behavior remain unchanged.
 - **Notes / blockers:** Implementation and user validation are complete. External implementation
 review and the independent security gate remain required; P7-12 is not Done.
@@ -2067,7 +2067,7 @@ review and the independent security gate remain required; P7-12 is not Done.
 - **Expected result:** Mission survives refresh and rejects double submission.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 20
-- **Evidence / link:** Mission Presentation API prerequisite merged via PR #212. P7-12 frontend implementation added; user-owned frontend lint, typecheck, and test validation passed.
+- **Evidence / link:** _To be recorded during implementation_
 - **Notes / blockers:** _None_
 
 ## P7-14 — Phase 7 First Hippocampus gate

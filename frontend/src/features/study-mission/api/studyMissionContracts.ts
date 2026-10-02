@@ -27,7 +27,7 @@ export const explanationActivitySchema = activityBaseSchema.extend({
     explanation: nonEmpty,
     keyPoints: z.array(nonEmpty),
     limitations: limitationsSchema,
-  }),
+  }).nullable(),
 })
 
 export const retrievalActivitySchema = activityBaseSchema.extend({
@@ -39,7 +39,7 @@ export const retrievalActivitySchema = activityBaseSchema.extend({
     options: z.array(z.strictObject({ id: nonEmpty, text: nonEmpty })),
     difficulty: nonEmpty,
     limitations: limitationsSchema,
-  }),
+  }).nullable(),
 })
 
 export const connectionActivitySchema = activityBaseSchema.extend({
@@ -51,7 +51,7 @@ export const connectionActivitySchema = activityBaseSchema.extend({
     relationship: nonEmpty,
     whyItMatters: nonEmpty,
     limitations: limitationsSchema,
-  }),
+  }).nullable(),
 })
 
 export const applicationActivitySchema = activityBaseSchema.extend({
@@ -62,7 +62,7 @@ export const applicationActivitySchema = activityBaseSchema.extend({
     targetConcept: nonEmpty,
     difficulty: nonEmpty,
     limitations: limitationsSchema,
-  }),
+  }).nullable(),
 })
 
 export const visualActivitySchema = activityBaseSchema.extend({
@@ -93,7 +93,7 @@ export const studyMissionActivitySchema = z.discriminatedUnion('type', [
 export const studyMissionSchema = z.strictObject({
   id: z.uuid(),
   status: nonEmpty,
-  stage: nonEmpty,
+  stage: nonEmpty.nullable(),
   currentActivity: studyMissionActivitySchema.nullable(),
   availableTimeMinutes: z.number().int().nonnegative().nullable(),
   startedAt: instant.nullable(),

@@ -53,9 +53,10 @@ describe('StudyMissionPage', () => {
   })
 
   it('renders a legitimate no-current-activity state', async () => {
-    vi.spyOn(api, 'getStudyMission').mockResolvedValue({ ...mission, currentActivity: null })
+    vi.spyOn(api, 'getStudyMission').mockResolvedValue({ ...mission, stage: null, currentActivity: null })
     renderMission()
     expect(await screen.findByRole('heading', { name: 'No activity is available right now' })).toBeInTheDocument()
+    expect(screen.queryByText('Stage')).not.toBeInTheDocument()
     expect(screen.queryByText('The volume pumped each minute.')).not.toBeInTheDocument()
   })
 
