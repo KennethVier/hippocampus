@@ -7,6 +7,7 @@ import { SubjectDetailPage } from '../../features/learning-organization/pages/Su
 import { SubjectsPage } from '../../features/learning-organization/pages/SubjectsPage'
 import { MaterialsPage } from '../../features/materials/pages/MaterialsPage'
 import { MaterialDetailPage } from '../../features/materials/pages/MaterialDetailPage'
+import { StudyMissionPage } from '../../features/study-mission/pages/StudyMissionPage'
 import { NotFoundPage } from './NotFoundPage'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
 import { RoutePlaceholder } from './RoutePlaceholder'
@@ -28,7 +29,7 @@ export const appRoutes = [
               { path: 'subjects', element: <SubjectsPage /> },
               { path: 'subjects/:subjectId', element: <SubjectDetailPage /> },
               { path: 'topics/:topicId', element: <RoutePlaceholder title="Topic" /> },
-              { path: 'missions/:missionId', element: <RoutePlaceholder title="Study Mission" /> },
+              { path: 'missions/:missionId', element: <StudyMissionPage /> },
               { path: 'materials', element: <MaterialsPage /> },
               { path: 'materials/:materialId', element: <MaterialDetailPage /> },
               { path: 'review', element: <RoutePlaceholder title="Review" /> },

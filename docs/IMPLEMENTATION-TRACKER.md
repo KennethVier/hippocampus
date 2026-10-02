@@ -2032,7 +2032,7 @@ responsibilities remain outside P5-06.
 
 - **Workstream:** Frontend
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Ready for Review
 - **Goal:** Create core product experience.
 - **Build:** Implement /missions/:id, typed union renderer for explanation/retrieval/connection/application/feedback/reflection, source panel and actions.
 - **How it works:** Frontend renders backend contract; never parses raw provider semantics.
@@ -2042,9 +2042,17 @@ responsibilities remain outside P5-06.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 20
 - **Evidence / link:** Mission Presentation API dependency implemented in PR #212 with an
-owner-scoped, learner-safe current-activity and source projection.
-- **Notes / blockers:** Mission Presentation API dependency resolved. P7-12 frontend implementation
-has not started.
+owner-scoped, learner-safe current-activity and source projection. Implemented the real
+`/missions/:missionId` route, learner-safe Mission Presentation API client and typed validation,
+TanStack Query-backed `StudyMissionPage`, discriminated-union `ActivityRenderer`, source panel,
+responsive activity presentation, loading/error/unavailable states, and dedicated component/page
+coverage. The stale generic static-route smoke case using non-UUID `example-mission` was removed;
+focused app-router coverage now uses a valid UUID and endpoint-specific valid Mission Presentation
+response, proving the actual router renders the Study Mission page and current activity. User-owned
+frontend validation passed: lint PASS, typecheck PASS, and test PASS. Production UUID validation,
+safe 404 behavior, and learner-safe API behavior remain unchanged.
+- **Notes / blockers:** Implementation and user validation are complete. External implementation
+review and the independent security gate remain required; P7-12 is not Done.
 
 ## P7-13 — Implement mission submit/resume/conflict UX
 
@@ -2059,7 +2067,7 @@ has not started.
 - **Expected result:** Mission survives refresh and rejects double submission.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 20
-- **Evidence / link:** _To be recorded during implementation_
+- **Evidence / link:** Mission Presentation API prerequisite merged via PR #212. P7-12 frontend implementation added; user-owned frontend lint, typecheck, and test validation passed.
 - **Notes / blockers:** _None_
 
 ## P7-14 — Phase 7 First Hippocampus gate
