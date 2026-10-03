@@ -60,7 +60,8 @@ public final class JacksonGeneratedActivityContentDecoder
                             contentPayload, ConceptConnectionResult.class);
                     yield new Connection(
                             value.fromConcept(), value.toConcept(), value.relationshipType(),
-                            value.relationship(), value.whyItMatters(), value.limitations());
+                            value.relationship(), value.whyItMatters(), value.question(),
+                            value.limitations());
                 }
                 case APPLY -> {
                     requireContract(

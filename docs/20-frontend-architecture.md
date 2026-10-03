@@ -41,7 +41,7 @@ Scope: React application structure, routing, feature/module
   loading/error states, and testing seams.
 Status: Final
 Title: Frontend Architecture
-Version: 1.0.1
+Version: 1.0.2
 ---
 
 # 20 - Frontend Architecture
@@ -477,6 +477,22 @@ type LearningActivity =
 The frontend should not parse free-form AI output into activity types.
 
 Backend must provide explicit type and structured content.
+
+The learner-facing connection presentation contract is:
+
+``` text
+fromConcept
+toConcept
+relationshipType
+relationship
+whyItMatters
+question
+limitations
+```
+
+`question` asks the learner to explain or reconstruct the presented
+relationship. Evaluation-only fields such as `expectedAnswer` must not be
+included in this frontend contract.
 
 ------------------------------------------------------------------------
 
@@ -2327,6 +2343,11 @@ Documents 13, 18, and 19.
                                                         question rendering,
                                                         and evidence identity
                                                         under ADR-0010
+
+  1.0.2             2026-10-03        Project           Added the learner-safe
+                                      Hippocampus Team  connection question to
+                                                        the typed activity
+                                                        presentation contract
 
   ---------------------------------------------------------------------------
 

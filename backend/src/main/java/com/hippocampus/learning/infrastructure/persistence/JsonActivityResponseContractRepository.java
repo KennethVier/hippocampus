@@ -57,7 +57,15 @@ public class JsonActivityResponseContractRepository implements ActivityResponseC
             List<String> expectedConcepts = textArray(root.path("expectedConcepts"));
             if (expectedConcepts.isEmpty()) {
                 String concept = optionalText(root, "concept");
-                expectedConcepts = concept == null ? List.of() : List.of(concept);
+                if (concept != null) {
+                    expectedConcepts = List.of(concept);
+                } else {
+                    expectedConcepts = connectionConcepts(root);
+                    if ("CONCEPT_CONNECTION".equals(artifact.artifactType())
+                            && expectedConcepts.isEmpty()) {
+                        return Optional.empty();
+                    }
+                }
             }
             return Optional.of(new ResponseContract(
                     question,
@@ -68,6 +76,14 @@ public class JsonActivityResponseContractRepository implements ActivityResponseC
         } catch (JsonProcessingException invalidPayload) {
             return Optional.empty();
         }
+    }
+
+    private static List<String> connectionConcepts(JsonNode root) {
+        String fromConcept = optionalText(root, "fromConcept");
+        String toConcept = optionalText(root, "toConcept");
+        return fromConcept != null && toConcept != null
+                ? List.of(fromConcept, toConcept)
+                : List.of();
     }
 
     private static List<String> textArray(JsonNode node) {

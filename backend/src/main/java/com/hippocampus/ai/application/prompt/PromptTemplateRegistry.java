@@ -286,6 +286,9 @@ public final class PromptTemplateRegistry {
                     - Do not create cross-subject connections merely to appear comprehensive.
                     - Match complexity to LEARNER_CONTEXT.
                     - Explain why the relationship matters.
+                    - Ask the learner to explain or reconstruct the relationship just presented.
+                    - Keep the expected answer suitable for response evaluation and do not
+                      reveal it in the learner-facing question.
                     - Do not repeat an already-established connection unless intentional
                       repetition is requested.
                     - Ground source-specific claims in SOURCE_CONTEXT.
@@ -301,6 +304,8 @@ public final class PromptTemplateRegistry {
                       "relationshipType": "string",
                       "relationship": "string",
                       "whyItMatters": "string",
+                      "question": "string",
+                      "expectedAnswer": "string",
                       "sourceReferences": ["string"],
                       "limitations": ["string"]
                     }

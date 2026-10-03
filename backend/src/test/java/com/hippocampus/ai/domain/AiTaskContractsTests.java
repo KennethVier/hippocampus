@@ -148,7 +148,9 @@ class AiTaskContractsTests {
                         List.of("chunk-1"), List.of()),
                 new ConceptConnectionResult(
                         "posterior cord", "radial nerve", "anatomy", "gives rise to",
-                        "localizes injury", List.of("chunk-1"), List.of()),
+                        "localizes injury", "Explain how these concepts are related.",
+                        "The posterior cord gives rise to the radial nerve.",
+                        List.of("chunk-1"), List.of()),
                 new ContextualApplicationResult(
                         "A patient has wrist drop.", "Which structure is involved?", "posterior cord",
                         List.of("connect deficit to nerve"), "Radial nerve pathway",
@@ -158,6 +160,22 @@ class AiTaskContractsTests {
         for (Object contract : contracts) {
             assertThat(objectMapper.writeValueAsString(contract)).startsWith("{").endsWith("}");
         }
+    }
+
+    @Test
+    void conceptConnectionRequiresQuestionAndExpectedAnswer() {
+        assertThatThrownBy(() -> new ConceptConnectionResult(
+                        "posterior cord", "radial nerve", "anatomy", "gives rise to",
+                        "localizes injury", " ", "The posterior cord gives rise to the radial nerve.",
+                        List.of(), List.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("question");
+        assertThatThrownBy(() -> new ConceptConnectionResult(
+                        "posterior cord", "radial nerve", "anatomy", "gives rise to",
+                        "localizes injury", "Explain the relationship.", " ",
+                        List.of(), List.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("expectedAnswer");
     }
 
     @Test

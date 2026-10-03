@@ -36,6 +36,7 @@ public interface GeneratedActivityContentDecoder {
             String relationshipType,
             String relationship,
             String whyItMatters,
+            String question,
             List<String> limitations) implements DecodedContent {}
 
     record Application(

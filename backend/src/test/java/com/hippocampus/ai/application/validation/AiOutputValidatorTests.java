@@ -301,6 +301,8 @@ class AiOutputValidatorTests {
                   "relationshipType": "inverse physiological relationship",
                   "relationship": "Increasing alveolar ventilation lowers arterial carbon dioxide.",
                   "whyItMatters": "It explains respiratory compensation and ventilatory disorders.",
+                  "question": "Explain how alveolar ventilation affects arterial carbon dioxide.",
+                  "expectedAnswer": "Increasing alveolar ventilation lowers arterial carbon dioxide.",
                   "sourceReferences": [],
                   "limitations": []
                 }

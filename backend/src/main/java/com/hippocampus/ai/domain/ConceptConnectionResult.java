@@ -8,6 +8,8 @@ public record ConceptConnectionResult(
         String relationshipType,
         String relationship,
         String whyItMatters,
+        String question,
+        String expectedAnswer,
         List<String> sourceReferences,
         List<String> limitations) {
 
@@ -17,6 +19,8 @@ public record ConceptConnectionResult(
         relationshipType = ContractChecks.requiredText(relationshipType, "relationshipType");
         relationship = ContractChecks.requiredText(relationship, "relationship");
         whyItMatters = ContractChecks.requiredText(whyItMatters, "whyItMatters");
+        question = ContractChecks.requiredText(question, "question");
+        expectedAnswer = ContractChecks.requiredText(expectedAnswer, "expectedAnswer");
         sourceReferences = ContractChecks.immutableList(sourceReferences, "sourceReferences");
         limitations = ContractChecks.immutableList(limitations, "limitations");
     }

@@ -78,9 +78,25 @@ class StudyMissionLearningStateAssemblerTests {
                 .isEqualTo(EvidenceStrength.INSUFFICIENT);
     }
 
+    @Test
+    void validatedConnectAttemptContributesConnectionEvidenceOnly() {
+        LearningActivity connect = activity(LearningActionType.CONNECT);
+
+        var state = assembler.assembleForSubmission(
+                mission(connect), connect, Map.of(connect.id(), List.of()), AttemptOutcome.CORRECT, NOW);
+
+        assertThat(state.evidence().strengthOf(EvidenceDimension.CONNECTION))
+                .isEqualTo(EvidenceStrength.DEVELOPING);
+        assertThat(state.evidence().strengthOf(EvidenceDimension.RECALL))
+                .isEqualTo(EvidenceStrength.INSUFFICIENT);
+    }
+
     private static LearningActivity activity(LearningActionType representedAction) {
+        LearningActivityType activityType = representedAction == LearningActionType.CONNECT
+                ? LearningActivityType.CONNECT
+                : LearningActivityType.RETRIEVE;
         return new LearningActivity(
-                UUID.randomUUID(), OBJECTIVE_ID, LearningActivityType.RETRIEVE,
+                UUID.randomUUID(), OBJECTIVE_ID, activityType,
                 representedAction, null, null, "PENDING", LearningDifficulty.FOUNDATIONAL,
                 1, UUID.randomUUID(), true, NOW.minusSeconds(30), null,
                 NOW.minusSeconds(60), Set.of());

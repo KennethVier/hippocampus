@@ -135,6 +135,8 @@ class GetStudyMissionUseCaseTests {
                  "relationshipType":"CLINICAL_CORRELATION",
                  "relationship":"An upper-trunk lesion produces the characteristic deficit.",
                  "whyItMatters":"It localizes the lesion.",
+                 "question":"Explain how an upper-trunk lesion relates to Erb palsy.",
+                 "expectedAnswer":"PRIVATE_EXPECTED_ANSWER",
                  "sourceReferences":["ignored-provider-reference"],"limitations":[]}
                 """;
         missions.current = mission(activity(LearningActivityType.CONNECT));
@@ -147,7 +149,9 @@ class GetStudyMissionUseCaseTests {
 
         assertThat(content.fromConcept()).isEqualTo("Upper trunk");
         assertThat(content.toConcept()).isEqualTo("Erb palsy");
-        assertThat(content.toString()).doesNotContain("ignored-provider-reference");
+        assertThat(content.question()).contains("upper-trunk lesion");
+        assertThat(content.toString()).doesNotContain(
+                "PRIVATE_EXPECTED_ANSWER", "ignored-provider-reference");
     }
 
     @Test
@@ -169,6 +173,23 @@ class GetStudyMissionUseCaseTests {
         assertThat(content.scenario()).contains("upper limb");
         assertThat(content.toString()).doesNotContain(
                 "PRIVATE_REASONING", "PRIVATE_ANSWER", "PRIVATE_FEEDBACK");
+    }
+
+    @Test
+    void incompleteConnectionPresentationFailsClosed() {
+        String payload = """
+                {"fromConcept":"Upper trunk","toConcept":"Erb palsy",
+                 "relationshipType":"CLINICAL_CORRELATION",
+                 "relationship":"An upper-trunk lesion produces the characteristic deficit.",
+                 "whyItMatters":"It localizes the lesion.",
+                 "question":"Explain the relationship.",
+                 "sourceReferences":[],"limitations":[]}
+                """;
+        missions.current = mission(activity(LearningActivityType.CONNECT));
+        artifacts.put(artifact("CONCEPT_CONNECTION", "CONCEPT_CONNECTION", payload));
+        artifacts.sources = Set.of(SOURCE_ID);
+
+        assertNotFound();
     }
 
     @Test

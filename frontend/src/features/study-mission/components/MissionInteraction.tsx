@@ -11,6 +11,7 @@ interface MissionInteractionProps {
   confirmedContinue: boolean
   isSubmitting: boolean
   isContinuing: boolean
+  interactionBlocked: boolean
   error: string | null
   onSubmit: (input: ActivityResponseInput) => void
   onContinue: () => void
@@ -27,7 +28,7 @@ export function MissionInteraction(props: MissionInteractionProps) {
     || (activity.type === 'EXPLANATION' && activity.content !== null)
     || (props.confirmedSubmission && props.submission?.continuationAvailable === true)
   const responseKind = !completed && !props.confirmedSubmission ? responseKindFor(activity) : null
-  const interactionDisabled = props.missionStatus !== 'ACTIVE'
+  const interactionDisabled = props.missionStatus !== 'ACTIVE' || props.interactionBlocked
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -98,6 +99,7 @@ export function MissionInteraction(props: MissionInteractionProps) {
 }
 
 function responseKindFor(activity: StudyMissionActivity): 'choice' | 'text' | null {
+  if (activity.type === 'CONNECTION' && activity.content !== null) return 'text'
   if (activity.type === 'APPLICATION' && activity.content !== null) return 'text'
   if (activity.type !== 'RETRIEVAL' || activity.content === null) return null
   return activity.content.subtype === 'MCQ' && activity.content.options.length > 0 ? 'choice' : 'text'

@@ -109,6 +109,8 @@ class LearningActivityAiTaskAdapterTests {
                 "inverse physiological relationship",
                 "Increasing alveolar ventilation lowers arterial carbon dioxide.",
                 "This relationship explains respiratory compensation.",
+                "Explain how alveolar ventilation affects arterial carbon dioxide.",
+                "Increasing alveolar ventilation lowers arterial carbon dioxide.",
                 List.of("source-1"),
                 List.of());
         ValidatedAiResult<?> validated = new ValidatedAiResult<>(

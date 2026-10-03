@@ -137,6 +137,12 @@ class PromptTemplateRegistryTests {
                                 "STRUCTURED_OUTPUT_REPAIR_V1")
                         .content())
                 .contains("TASK:", "REQUIRED_SCHEMA:", "PREVIOUS_RESPONSE:");
+
+        assertThat(registry.resolveTask(
+                                AiTaskType.CONCEPT_CONNECTION,
+                                "CONCEPT_CONNECTION_V1")
+                        .content())
+                .contains("\"question\": \"string\"", "\"expectedAnswer\": \"string\"");
     }
 
     @Test
@@ -184,7 +190,7 @@ class PromptTemplateRegistryTests {
                 PromptId.RESPONSE_EVALUATION_V1,
                         "ed9c1c3aea9f37df64f38de727957a4b2950de66b661a5c518743159a678fdda",
                 PromptId.CONCEPT_CONNECTION_V1,
-                        "67697282f23f21c55221f44ca638e7c85c3c27f2565b2159fdd7c3b6384d246e",
+                        "4ecdafe9846632f86619f3a35f7057a009ffbe38adb8773468dc53284709f675",
                 PromptId.CONTEXTUAL_APPLICATION_V1,
                         "8f08fd84de9d0812164f0f7a4940349cbf5261ca405d6ca8a4c62a8d26c37603",
                 PromptId.STRUCTURED_OUTPUT_REPAIR_V1,

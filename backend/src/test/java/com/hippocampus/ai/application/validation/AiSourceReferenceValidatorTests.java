@@ -250,7 +250,9 @@ class AiSourceReferenceValidatorTests {
                         QuestionDifficulty.FOUNDATIONAL, references, List.of()),
                 new ResponseEvaluationResult(Evaluation.CORRECT, List.of(), List.of(), List.of(), "feedback",
                         EvaluationCertainty.SUFFICIENT, RecommendedAction.CONTINUE, references, List.of()),
-                new ConceptConnectionResult("from", "to", "type", "relationship", "why", references, List.of()),
+                new ConceptConnectionResult(
+                        "from", "to", "type", "relationship", "why",
+                        "How are they related?", "from relates to to", references, List.of()),
                 new ContextualApplicationResult("scenario", "question", "concept", List.of("reason"),
                         "answer", List.of("feedback"), ApplicationDifficulty.FOUNDATIONAL_APPLIED,
                         references, List.of()));

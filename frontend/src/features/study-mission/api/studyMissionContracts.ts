@@ -50,6 +50,7 @@ export const connectionActivitySchema = activityBaseSchema.extend({
     relationshipType: nonEmpty,
     relationship: nonEmpty,
     whyItMatters: nonEmpty,
+    question: nonEmpty,
     limitations: limitationsSchema,
   }).nullable(),
 })

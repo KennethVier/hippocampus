@@ -63,6 +63,41 @@ describe('study mission API contract', () => {
     await expect(getStudyMission(missionId)).resolves.toEqual(missionWithoutGeneratedContent)
   })
 
+  it('accepts a learner-safe connection question and rejects an expected answer', async () => {
+    const connection = {
+      ...mission,
+      currentActivity: {
+        ...mission.currentActivity,
+        type: 'CONNECTION',
+        content: {
+          fromConcept: 'Preload', toConcept: 'Stroke volume', relationshipType: 'DIRECTLY_INFLUENCES',
+          relationship: 'Greater filling can increase ejection.', whyItMatters: 'This connects venous return to cardiac output.',
+          question: 'Explain how preload influences stroke volume.', limitations: [],
+        },
+      },
+    }
+    transport.json.mockResolvedValueOnce(connection)
+    await expect(getStudyMission(missionId)).resolves.toEqual(connection)
+
+    transport.json.mockResolvedValueOnce({
+      ...connection,
+      currentActivity: {
+        ...connection.currentActivity,
+        content: { ...connection.currentActivity.content, question: ' ' },
+      },
+    })
+    await expect(getStudyMission(missionId)).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+
+    transport.json.mockResolvedValue({
+      ...connection,
+      currentActivity: {
+        ...connection.currentActivity,
+        content: { ...connection.currentActivity.content, expectedAnswer: 'private evaluation data' },
+      },
+    })
+    await expect(getStudyMission(missionId)).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+
   it.each([
     undefined,
     { ...mission, id: 'not-a-uuid' },

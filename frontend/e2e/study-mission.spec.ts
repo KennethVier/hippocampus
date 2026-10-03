@@ -125,6 +125,48 @@ test('a stale tab refetches authoritative mission state without resubmitting', a
   await context.close()
 })
 
+test('completed retrieval continues to a response-bearing connection submitted once', async ({ page }) => {
+  let activity: 'RETRIEVAL' | 'CONNECTION' = 'RETRIEVAL'
+  let connectionWrites = 0
+  await mockSession(page)
+  await page.route('**/api/auth/csrf', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ token: 'test-token' }) }))
+  await page.route(`**/api/study-missions/${missionId}`, async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback()
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(activity === 'RETRIEVAL'
+        ? missionPresentation('COMPLETED')
+        : connectionMissionPresentation('PRESENTED')),
+    })
+  })
+  await page.route(`**/api/study-missions/${missionId}/activities/*/continue`, async (route) => {
+    activity = 'CONNECTION'
+    await route.fulfill({ status: 204 })
+  })
+  await page.route(`**/api/study-missions/${missionId}/activities/*/responses`, async (route) => {
+    connectionWrites += 1
+    expect(route.request().postDataJSON()).toEqual({ responseText: 'Preload stretches the ventricle and increases stroke volume.' })
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      missionId, activityId: '8b8b3302-b431-45e1-90e3-298c9d80918f', outcome: 'CORRECT',
+      correctConcepts: ['Preload', 'Stroke volume'], missingConcepts: [], misconceptions: [],
+      feedback: 'You explained the relationship.', missionStatus: 'ACTIVE', stage: 'CONNECTION',
+      updatedAt: '2026-10-03T01:02:00Z', continuationAvailable: true,
+    }) })
+  })
+
+  await page.goto(`/missions/${missionId}`)
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await expect(page.getByText('Explain how preload influences stroke volume.')).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Response' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Continue' })).toHaveCount(0)
+
+  await page.getByRole('textbox', { name: 'Response' }).fill('Preload stretches the ventricle and increases stroke volume.')
+  await page.getByRole('button', { name: 'Submit response' }).click()
+  await expect(page.getByText('You explained the relationship.')).toBeVisible()
+  expect(connectionWrites).toBe(1)
+})
+
 test('pause survives refresh and resume restores authoritative ACTIVE state', async ({ page }) => {
   let status = 'ACTIVE'
   await mockSession(page)
@@ -181,6 +223,23 @@ function missionPresentation(activityStatus: string) {
       sources: [],
     },
     availableTimeMinutes: 20, startedAt: '2026-10-02T01:00:00Z', completedAt: null, stoppedAt: null, updatedAt: '2026-10-02T01:01:00Z',
+  }
+}
+
+function connectionMissionPresentation(activityStatus: string) {
+  return {
+    id: missionId, status: 'ACTIVE', stage: 'CONNECTION',
+    currentActivity: {
+      id: '8b8b3302-b431-45e1-90e3-298c9d80918f', type: 'CONNECTION', status: activityStatus,
+      difficulty: 'STANDARD', classification: null,
+      content: {
+        fromConcept: 'Preload', toConcept: 'Stroke volume', relationshipType: 'DIRECTLY_INFLUENCES',
+        relationship: 'Greater filling can increase ejection.', whyItMatters: 'This connects venous return to cardiac output.',
+        question: 'Explain how preload influences stroke volume.', limitations: [],
+      },
+      sources: [],
+    },
+    availableTimeMinutes: 20, startedAt: '2026-10-02T01:00:00Z', completedAt: null, stoppedAt: null, updatedAt: '2026-10-03T01:01:00Z',
   }
 }
 

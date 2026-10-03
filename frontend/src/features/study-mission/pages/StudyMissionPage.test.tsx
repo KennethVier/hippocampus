@@ -50,6 +50,20 @@ const retrievalMission = {
   },
 } satisfies StudyMission
 
+const connectionMission = {
+  ...mission,
+  stage: 'CONNECTION',
+  currentActivity: {
+    id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', type: 'CONNECTION', status: 'PRESENTED', difficulty: 'STANDARD', classification: null,
+    content: {
+      fromConcept: 'Preload', toConcept: 'Stroke volume', relationshipType: 'DIRECTLY_INFLUENCES',
+      relationship: 'Greater filling can increase ejection.', whyItMatters: 'This connects venous return to cardiac output.',
+      question: 'Explain how preload influences stroke volume.', limitations: [],
+    },
+    sources: [],
+  },
+} satisfies StudyMission
+
 const submission: ActivitySubmission = {
   missionId,
   activityId: retrievalMission.currentActivity!.id,
@@ -153,6 +167,26 @@ describe('StudyMissionPage', () => {
     await waitFor(() => expect(submit).toHaveBeenCalledWith(missionId, application.currentActivity.id, { responseText: 'Increase stroke volume' }))
   })
 
+  it('requires and submits an unfinished connection response through the normal endpoint', async () => {
+    const submit = vi.spyOn(api, 'submitActivityResponse').mockImplementation(async (_, activityId) => ({ ...submission, activityId }))
+    vi.spyOn(api, 'getStudyMission').mockResolvedValue(connectionMission)
+    renderMission()
+
+    expect(await screen.findByText('Explain how preload influences stroke volume.')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Response' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Response' }), { target: { value: 'More preload stretches the ventricle and increases ejection.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit response' }))
+
+    await waitFor(() => expect(submit).toHaveBeenCalledWith(
+      missionId,
+      connectionMission.currentActivity.id,
+      { responseText: 'More preload stretches the ventricle and increases ejection.' },
+    ))
+    expect(await screen.findByText(submission.feedback)).toBeInTheDocument()
+  })
+
   it('preserves the response draft when the same activity is refetched', async () => {
     const shortAnswer = {
       ...retrievalMission,
@@ -223,15 +257,47 @@ describe('StudyMissionPage', () => {
   })
 
   it('refetches on a stale conflict, shows a safe notice, and never retries the write', async () => {
-    const get = vi.spyOn(api, 'getStudyMission').mockResolvedValue(retrievalMission)
+    const get = vi.spyOn(api, 'getStudyMission')
+      .mockResolvedValueOnce(retrievalMission)
+      .mockResolvedValue(connectionMission)
     const submit = vi.spyOn(api, 'submitActivityResponse').mockRejectedValue(new ApiError({ kind: 'http', status: 409, code: 'MISSION_CONFLICT', message: 'private' }))
     renderMission()
     fireEvent.click(await screen.findByRole('radio', { name: 'Increased stroke volume' }))
     fireEvent.click(screen.getByRole('button', { name: 'Submit response' }))
     expect(await screen.findByText('This mission changed in another tab. The latest state has been loaded.')).toBeInTheDocument()
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2))
+    expect(screen.getByText('Explain how preload influences stroke volume.')).toBeInTheDocument()
     expect(submit).toHaveBeenCalledTimes(1)
     expect(document.body).not.toHaveTextContent('private')
+  })
+
+  it('blocks stale writes when conflict recovery fails and unlocks after manual reload', async () => {
+    const get = vi.spyOn(api, 'getStudyMission')
+      .mockResolvedValueOnce(retrievalMission)
+      .mockRejectedValueOnce(new ApiError({ kind: 'network', status: null, code: 'NETWORK_ERROR', message: 'private get failure' }))
+      .mockResolvedValue(connectionMission)
+    const submit = vi.spyOn(api, 'submitActivityResponse').mockRejectedValue(
+      new ApiError({ kind: 'http', status: 409, code: 'MISSION_CONFLICT', message: 'private write failure' }),
+    )
+    renderMission()
+    fireEvent.click(await screen.findByRole('radio', { name: 'Increased stroke volume' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit response' }))
+
+    expect(await screen.findByText('This mission changed in another tab, but the latest state could not be loaded.')).toBeInTheDocument()
+    expect(screen.queryByText('This mission changed in another tab. The latest state has been loaded.')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit response' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeDisabled()
+    expect(submit).toHaveBeenCalledTimes(1)
+    expect(document.body).not.toHaveTextContent('private')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reload mission state' }))
+
+    expect(await screen.findByText('Explain how preload influences stroke volume.')).toBeInTheDocument()
+    expect(screen.getByText('This mission changed in another tab. The latest state has been loaded.')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Response' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeEnabled()
+    expect(submit).toHaveBeenCalledTimes(1)
+    expect(get).toHaveBeenCalledTimes(3)
   })
 
   it('exposes only Pause for ACTIVE and waits for confirmation', async () => {

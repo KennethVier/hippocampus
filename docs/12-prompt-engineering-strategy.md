@@ -4,7 +4,7 @@ Audience: AI, backend, architecture, QA, product, security, and
 Authors: Project Hippocampus Team
 Created: 2026-08-23
 Document ID: 12
-Last Updated: 2026-08-24
+Last Updated: 2026-10-03
 Owner: Project Hippocampus Team
 Prerequisites:
 - 00 - Project Vision
@@ -734,6 +734,9 @@ Rules:
 - Do not create cross-subject connections merely to appear comprehensive.
 - Match complexity to LEARNER_CONTEXT.
 - Explain why the relationship matters.
+- Ask the learner to explain or reconstruct the relationship just presented.
+- Keep the expected answer suitable for response evaluation and do not
+  reveal it in the learner-facing question.
 - Do not repeat an already-established connection unless intentional
   repetition is requested.
 - Ground source-specific claims in SOURCE_CONTEXT.
@@ -749,6 +752,8 @@ Return valid structured output matching:
   "relationshipType": "string",
   "relationship": "string",
   "whyItMatters": "string",
+  "question": "string",
+  "expectedAnswer": "string",
   "sourceReferences": ["string"],
   "limitations": ["string"]
 }
@@ -1659,6 +1664,12 @@ It should cover:
   --------------------------------------------------------------------------
   Version           Date              Author            Changes
   ----------------- ----------------- ----------------- --------------------
+  1.0.2             2026-10-03        Project           Added response-bearing
+                                      Hippocampus Team  question and expected
+                                                        answer fields to the
+                                                        concept-connection
+                                                        output contract
+
   1.0.1             2026-08-23        Project           Added
                                       Hippocampus Team  provider-portable
                                                         prompt requirements

@@ -126,7 +126,9 @@ class PromptRegressionTests {
                                 "single most educationally useful connection",
                                 "Ground source-specific claims in SOURCE_CONTEXT.",
                                 "If no useful supported connection is available, report that limitation.",
-                                "\"relationshipType\": \"string\""),
+                                "\"relationshipType\": \"string\"",
+                                "\"question\": \"string\"",
+                                "\"expectedAnswer\": \"string\""),
                         List.of("\"evaluation\":", "\"activityType\":")),
                 new PromptGoldenCase(
                         "contextual-application-v1",

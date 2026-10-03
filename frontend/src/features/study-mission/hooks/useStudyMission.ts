@@ -13,6 +13,7 @@ import type { ActivitySubmission, StudyMission, StudyMissionLifecycle } from '..
 import { studyMissionKeys } from '../queries/studyMissionQueries'
 
 const CONFLICT_NOTICE = 'This mission changed in another tab. The latest state has been loaded.'
+const CONFLICT_RELOAD_ERROR = 'This mission changed in another tab, but the latest state could not be loaded.'
 
 export function useStudyMission(missionId: string) {
   const queryClient = useQueryClient()
@@ -26,9 +27,13 @@ export function useStudyMission(missionId: string) {
   const [confirmedContinueId, setConfirmedContinueId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [interactionError, setInteractionError] = useState<string | null>(null)
+  const [conflictStale, setConflictStale] = useState(false)
+  const [conflictReloadFailed, setConflictReloadFailed] = useState(false)
+  const [isReloadingConflict, setIsReloadingConflict] = useState(false)
   const submittingRef = useRef(false)
   const continuingRef = useRef(false)
   const lifecycleRef = useRef(false)
+  const conflictStaleRef = useRef(false)
   const previousActivityId = useRef<string | null | undefined>(undefined)
 
   useEffect(() => {
@@ -46,11 +51,34 @@ export function useStudyMission(missionId: string) {
     await queryClient.refetchQueries({ queryKey: studyMissionKeys.detail(missionId), exact: true })
   }
 
+  async function reloadAfterConflict() {
+    setIsReloadingConflict(true)
+    setNotice(null)
+    setInteractionError(null)
+    try {
+      await queryClient.refetchQueries(
+        { queryKey: studyMissionKeys.detail(missionId), exact: true },
+        { throwOnError: true },
+      )
+      conflictStaleRef.current = false
+      setConflictStale(false)
+      setConflictReloadFailed(false)
+      setNotice(CONFLICT_NOTICE)
+    } catch {
+      conflictStaleRef.current = true
+      setConflictStale(true)
+      setConflictReloadFailed(true)
+    } finally {
+      setIsReloadingConflict(false)
+    }
+  }
+
   async function handleError(error: unknown) {
     if (error instanceof ApiError && error.status === 409) {
-      setNotice(CONFLICT_NOTICE)
-      setInteractionError(null)
-      await refreshAfterWrite()
+      conflictStaleRef.current = true
+      setConflictStale(true)
+      setConflictReloadFailed(false)
+      await reloadAfterConflict()
       return
     }
     setInteractionError(error instanceof ApiError && error.status === 400
@@ -115,26 +143,31 @@ export function useStudyMission(missionId: string) {
     confirmedContinueId,
     notice,
     interactionError,
+    conflictStale,
+    conflictReloadFailed,
+    conflictReloadMessage: CONFLICT_RELOAD_ERROR,
+    isReloadingConflict,
     dismissNotice: () => setNotice(null),
+    reloadMissionState: reloadAfterConflict,
     submitResponse(activityId: string, input: ActivityResponseInput) {
-      if (submittingRef.current || confirmedSubmissionId === activityId) return
+      if (conflictStaleRef.current || submittingRef.current || confirmedSubmissionId === activityId) return
       submittingRef.current = true
       setInteractionError(null)
       submitMutation.mutate({ activityId, input })
     },
     continueMission(activityId: string) {
-      if (continuingRef.current || confirmedContinueId === activityId) return
+      if (conflictStaleRef.current || continuingRef.current || confirmedContinueId === activityId) return
       continuingRef.current = true
       setInteractionError(null)
       continueMutation.mutate(activityId)
     },
     pause: () => {
-      if (lifecycleRef.current) return
+      if (conflictStaleRef.current || lifecycleRef.current) return
       lifecycleRef.current = true
       pauseMutation.mutate()
     },
     resume: () => {
-      if (lifecycleRef.current) return
+      if (conflictStaleRef.current || lifecycleRef.current) return
       lifecycleRef.current = true
       resumeMutation.mutate()
     },

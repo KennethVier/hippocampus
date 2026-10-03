@@ -36,13 +36,14 @@ export function StudyMissionPage() {
             <div><dt>Status</dt><dd>{displayLabel(current.status)}</dd></div>
           </dl>
           <MissionTimer availableTimeMinutes={current.availableTimeMinutes} status={current.status} />
-          {current.status === 'ACTIVE' ? <Button disabled={studyMission.isPausing} onClick={studyMission.pause} variant="secondary">{studyMission.isPausing ? 'Pausing…' : 'Pause'}</Button> : null}
-          {current.status === 'PAUSED' ? <Button disabled={studyMission.isResuming} onClick={studyMission.resume}>{studyMission.isResuming ? 'Resuming…' : 'Resume'}</Button> : null}
+          {current.status === 'ACTIVE' ? <Button disabled={studyMission.isPausing || studyMission.conflictStale} onClick={studyMission.pause} variant="secondary">{studyMission.isPausing ? 'Pausing…' : 'Pause'}</Button> : null}
+          {current.status === 'PAUSED' ? <Button disabled={studyMission.isResuming || studyMission.conflictStale} onClick={studyMission.resume}>{studyMission.isResuming ? 'Resuming…' : 'Resume'}</Button> : null}
         </div>
       </header>
 
       {studyMission.notice ? <div className="mission-conflict" role="status"><span>{studyMission.notice}</span><Button onClick={studyMission.dismissNotice} variant="tertiary">Dismiss</Button></div> : null}
-      {mission.isError && mission.data !== undefined ? <div className="mission-refetch-error" role="alert"><span>The latest mission state could not be loaded.</span><Button onClick={() => void mission.refetch()} variant="secondary">Try again</Button></div> : null}
+      {studyMission.conflictReloadFailed ? <div className="mission-refetch-error" role="alert"><span>{studyMission.conflictReloadMessage}</span><Button disabled={studyMission.isReloadingConflict} onClick={() => void studyMission.reloadMissionState()} variant="secondary">{studyMission.isReloadingConflict ? 'Reloading…' : 'Reload mission state'}</Button></div> : null}
+      {mission.isError && mission.data !== undefined && !studyMission.conflictStale ? <div className="mission-refetch-error" role="alert"><span>The latest mission state could not be loaded.</span><Button onClick={() => void mission.refetch()} variant="secondary">Try again</Button></div> : null}
 
       {current.currentActivity === null ? (
         <section className="mission-empty" aria-labelledby="mission-empty-heading">
@@ -61,6 +62,7 @@ export function StudyMissionPage() {
               error={studyMission.interactionError}
               isContinuing={studyMission.isContinuing}
               isSubmitting={studyMission.isSubmitting}
+              interactionBlocked={studyMission.conflictStale}
               key={current.currentActivity.id}
               missionStatus={current.status}
               onContinue={() => studyMission.continueMission(current.currentActivity!.id)}
