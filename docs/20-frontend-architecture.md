@@ -4,7 +4,7 @@ Audience: Frontend, architecture, product, UX, QA, backend, and
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 20
-Last Updated: 2026-10-03
+Last Updated: 2026-10-04
 Owner: Project Hippocampus Team
 Prerequisites:
 - 04 - Product Requirements
@@ -41,7 +41,7 @@ Scope: React application structure, routing, feature/module
   loading/error states, and testing seams.
 Status: Final
 Title: Frontend Architecture
-Version: 1.0.2
+Version: 1.0.3
 ---
 
 # 20 - Frontend Architecture
@@ -486,13 +486,20 @@ toConcept
 relationshipType
 relationship
 whyItMatters
-question
+question (response-bearing connections only)
 limitations
 ```
 
 `question` asks the learner to explain or reconstruct the presented
 relationship. Evaluation-only fields such as `expectedAnswer` must not be
 included in this frontend contract.
+
+Historical presentation-only connection artifacts have no `question`. The
+frontend presents their relationship content and offers Continue without a
+response field. It must not infer an assessment contract or fabricate
+connection evidence. Newly generated response-bearing connections include the
+learner-facing `question`, submit through the existing activity-response path,
+and leave evaluation and evidence semantics to the backend Learning Engine.
 
 ------------------------------------------------------------------------
 
@@ -2348,6 +2355,12 @@ Documents 13, 18, and 19.
                                       Hippocampus Team  connection question to
                                                         the typed activity
                                                         presentation contract
+
+  1.0.3             2026-10-04        Project           Distinguished historical
+                                      Hippocampus Team  presentation-only
+                                                        connections from new
+                                                        response-bearing
+                                                        connections
 
   ---------------------------------------------------------------------------
 

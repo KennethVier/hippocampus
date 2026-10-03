@@ -57,18 +57,50 @@ class JsonActivityResponseContractRepositoryTests {
 
         assertThat(repository.findValidatedForActivity(ACTIVITY_ID, ARTIFACT_ID, OWNER_ID))
                 .isEmpty();
+        assertThat(repository.isHistoricalPresentationOnly(
+                ACTIVITY_ID, ARTIFACT_ID, OWNER_ID)).isFalse();
+    }
+
+    @Test
+    void historicalV1ConnectionDoesNotFabricateResponseEvaluationContract() {
+        var repository = repository(artifact("""
+                {
+                  "fromConcept": "Preload",
+                  "toConcept": "Stroke volume",
+                  "relationshipType": "DIRECTLY_INFLUENCES",
+                  "relationship": "Greater preload can increase stroke volume.",
+                  "whyItMatters": "This helps connect venous return with cardiac output.",
+                  "sourceReferences": [],
+                  "limitations": []
+                }
+                """, "CONCEPT_CONNECTION_V1", "1"));
+
+        assertThat(repository.findValidatedForActivity(ACTIVITY_ID, ARTIFACT_ID, OWNER_ID))
+                .isEmpty();
+        assertThat(repository.isHistoricalPresentationOnly(
+                ACTIVITY_ID, ARTIFACT_ID, OWNER_ID)).isTrue();
     }
 
     private static JsonActivityResponseContractRepository repository(String payload) {
+        return repository(artifact(payload));
+    }
+
+    private static JsonActivityResponseContractRepository repository(
+            GeneratedArtifactRepository.GeneratedArtifact artifact) {
         return new JsonActivityResponseContractRepository(
-                new SingleArtifactRepository(artifact(payload)), new ObjectMapper());
+                new SingleArtifactRepository(artifact), new ObjectMapper());
     }
 
     private static GeneratedArtifactRepository.GeneratedArtifact artifact(String payload) {
+        return artifact(payload, "CONCEPT_CONNECTION_V2", "2");
+    }
+
+    private static GeneratedArtifactRepository.GeneratedArtifact artifact(
+            String payload, String promptId, String promptVersion) {
         return new GeneratedArtifactRepository.GeneratedArtifact(
                 ARTIFACT_ID, OWNER_ID, "CONCEPT_CONNECTION", "CONCEPT_CONNECTION",
                 "connection", payload, "STRICT_SOURCE", "SOURCE_GROUNDED_GENERATED",
-                "CONCEPT_CONNECTION_V1", "1", "provider", "model", "version",
+                promptId, promptVersion, "provider", "model", "version",
                 "VALIDATED", true, Instant.parse("2026-10-03T00:00:00Z"));
     }
 

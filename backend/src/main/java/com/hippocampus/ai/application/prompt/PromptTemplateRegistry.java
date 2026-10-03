@@ -286,6 +286,56 @@ public final class PromptTemplateRegistry {
                     - Do not create cross-subject connections merely to appear comprehensive.
                     - Match complexity to LEARNER_CONTEXT.
                     - Explain why the relationship matters.
+                    - Do not repeat an already-established connection unless intentional
+                      repetition is requested.
+                    - Ground source-specific claims in SOURCE_CONTEXT.
+                    - If no useful supported connection is available, report that limitation.
+
+                    [OUTPUT_CONTRACT]
+
+                    Return valid structured output matching:
+
+                    {
+                      "fromConcept": "string",
+                      "toConcept": "string",
+                      "relationshipType": "string",
+                      "relationship": "string",
+                      "whyItMatters": "string",
+                      "sourceReferences": ["string"],
+                      "limitations": ["string"]
+                    }
+
+                    [LEARNER_CONTEXT]
+                    {learnerContext}
+
+                    [KNOWN_CONNECTIONS]
+                    {knownConnections}
+
+                    [SOURCE_CONTEXT]
+                    {sourceContext}
+                    """),
+            template(PromptId.CONCEPT_CONNECTION_V2, PromptAuthority.TASK_CONTRACT, """
+                    PROMPT ID: CONCEPT_CONNECTION_V2
+
+                    [TASK_CONTRACT]
+
+                    Identify the single most educationally useful connection between the
+                    TARGET_CONCEPT and another relevant medical concept.
+
+                    TARGET_CONCEPT:
+                    {targetConcept}
+
+                    LEARNING_OBJECTIVE:
+                    {learningObjective}
+
+                    Rules:
+                    - Choose a connection that improves understanding or future application.
+                    - Prefer relationships such as structure-function, mechanism-effect,
+                      normal-abnormal, anatomy-physiology, pathology-clinical finding, or
+                      drug mechanism-effect when relevant.
+                    - Do not create cross-subject connections merely to appear comprehensive.
+                    - Match complexity to LEARNER_CONTEXT.
+                    - Explain why the relationship matters.
                     - Ask the learner to explain or reconstruct the relationship just presented.
                     - Keep the expected answer suitable for response evaluation and do not
                       reveal it in the learner-facing question.
@@ -433,10 +483,6 @@ public final class PromptTemplateRegistry {
         if (!template.promptId().supports(taskType)) {
             throw new IllegalArgumentException(promptVersion + " does not match task type " + taskType);
         }
-        PromptTemplate registeredForTask = BY_TASK_TYPE.get(taskType);
-        if (registeredForTask == null || registeredForTask != template) {
-            throw new IllegalArgumentException("unsupported prompt registration for task type " + taskType);
-        }
         return template;
     }
 
@@ -496,8 +542,9 @@ public final class PromptTemplateRegistry {
         EnumMap<AiTaskType, PromptTemplate> templates = new EnumMap<>(AiTaskType.class);
         for (PromptTemplate template : BY_ID.values()) {
             template.promptId().taskType().ifPresent(taskType -> {
-                if (templates.put(taskType, template) != null) {
-                    throw new IllegalStateException("duplicate prompt registration for task type " + taskType);
+                PromptTemplate current = templates.get(taskType);
+                if (current == null || template.version() > current.version()) {
+                    templates.put(taskType, template);
                 }
             });
         }

@@ -117,7 +117,8 @@ public class StudyMissionLearningStateAssembler {
                 && activity.completedAt() != null
                 && (activity.representedActionType() == LearningActionType.UNDERSTAND
                         || activity.representedActionType() == LearningActionType.HINT
-                        || activity.representedActionType() == LearningActionType.PREREQUISITE_SUPPORT);
+                        || activity.representedActionType() == LearningActionType.PREREQUISITE_SUPPORT
+                        || activity.representedActionType() == LearningActionType.CONNECT);
     }
 
     private static LearningObjective objectiveFor(

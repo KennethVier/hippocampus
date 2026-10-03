@@ -148,6 +148,9 @@ class AiTaskContractsTests {
                         List.of("chunk-1"), List.of()),
                 new ConceptConnectionResult(
                         "posterior cord", "radial nerve", "anatomy", "gives rise to",
+                        "localizes injury", List.of("chunk-1"), List.of()),
+                new ConceptConnectionV2Result(
+                        "posterior cord", "radial nerve", "anatomy", "gives rise to",
                         "localizes injury", "Explain how these concepts are related.",
                         "The posterior cord gives rise to the radial nerve.",
                         List.of("chunk-1"), List.of()),
@@ -163,14 +166,14 @@ class AiTaskContractsTests {
     }
 
     @Test
-    void conceptConnectionRequiresQuestionAndExpectedAnswer() {
-        assertThatThrownBy(() -> new ConceptConnectionResult(
+    void conceptConnectionV2RequiresQuestionAndExpectedAnswer() {
+        assertThatThrownBy(() -> new ConceptConnectionV2Result(
                         "posterior cord", "radial nerve", "anatomy", "gives rise to",
                         "localizes injury", " ", "The posterior cord gives rise to the radial nerve.",
                         List.of(), List.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("question");
-        assertThatThrownBy(() -> new ConceptConnectionResult(
+        assertThatThrownBy(() -> new ConceptConnectionV2Result(
                         "posterior cord", "radial nerve", "anatomy", "gives rise to",
                         "localizes injury", "Explain the relationship.", " ",
                         List.of(), List.of()))
@@ -202,6 +205,7 @@ class AiTaskContractsTests {
                 QuestionGenerationInput.class, QuestionGenerationResult.class,
                 ResponseEvaluationInput.class, ResponseEvaluationResult.class,
                 ConceptConnectionInput.class, ConceptConnectionResult.class,
+                ConceptConnectionV2Result.class,
                 ContextualApplicationInput.class, ContextualApplicationResult.class,
                 StructuredOutputRepairInput.class);
 

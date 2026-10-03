@@ -155,6 +155,30 @@ class GetStudyMissionUseCaseTests {
     }
 
     @Test
+    void historicalV1ConnectionRemainsReadableWithoutFabricatingAQuestion() {
+        String payload = """
+                {"fromConcept":"Preload","toConcept":"Stroke volume",
+                 "relationshipType":"DIRECTLY_INFLUENCES",
+                 "relationship":"Greater preload can increase stroke volume.",
+                 "whyItMatters":"This helps connect venous return with cardiac output.",
+                 "sourceReferences":[],"limitations":[]}
+                """;
+        missions.current = mission(activity(LearningActivityType.CONNECT));
+        artifacts.put(artifact(
+                "CONCEPT_CONNECTION", "CONCEPT_CONNECTION", payload,
+                "CONCEPT_CONNECTION_V1", "1"));
+        artifacts.sources = Set.of(SOURCE_ID);
+
+        GetStudyMissionUseCase.ConnectionContent content =
+                (GetStudyMissionUseCase.ConnectionContent) useCase.execute(MISSION_ID)
+                        .currentActivity().content();
+
+        assertThat(content.relationship()).isEqualTo(
+                "Greater preload can increase stroke volume.");
+        assertThat(content.question()).isNull();
+    }
+
+    @Test
     void applicationPresentationWithholdsExpectedAnswerReasoningAndFeedbackPoints() {
         String payload = """
                 {"scenario":"A learner reviews an upper limb lesion.","question":"Which trunk is involved?",
@@ -277,9 +301,26 @@ class GetStudyMissionUseCaseTests {
 
     private static GeneratedArtifactRepository.GeneratedArtifact artifact(
             String artifactType, String taskType, String payload) {
+        String promptId = switch (artifactType) {
+            case "CONCEPT_CONNECTION" -> "CONCEPT_CONNECTION_V2";
+            case "QUESTION" -> "QUESTION_GENERATION_V1";
+            case "EXPLANATION" -> "EXPLANATION_V1";
+            case "CONTEXTUAL_APPLICATION" -> "CONTEXTUAL_APPLICATION_V1";
+            default -> "prompt";
+        };
+        String promptVersion = "CONCEPT_CONNECTION_V2".equals(promptId) ? "2" : "1";
+        return artifact(artifactType, taskType, payload, promptId, promptVersion);
+    }
+
+    private static GeneratedArtifactRepository.GeneratedArtifact artifact(
+            String artifactType,
+            String taskType,
+            String payload,
+            String promptId,
+            String promptVersion) {
         return new GeneratedArtifactRepository.GeneratedArtifact(
                 ARTIFACT_ID, OWNER_ID, artifactType, taskType, "learner content", payload,
-                "STRICT_SOURCE", "SOURCE_GROUNDED_GENERATED", "prompt", "1",
+                "STRICT_SOURCE", "SOURCE_GROUNDED_GENERATED", promptId, promptVersion,
                 "PRIVATE_PROVIDER", "PRIVATE_MODEL", "PRIVATE_MODEL_VERSION",
                 "VALIDATED", true, NOW);
     }

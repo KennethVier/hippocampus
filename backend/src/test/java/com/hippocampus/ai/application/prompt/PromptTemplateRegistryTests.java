@@ -35,7 +35,7 @@ class PromptTemplateRegistryTests {
                 AiTaskType.EXPLANATION, PromptId.EXPLANATION_V1,
                 AiTaskType.QUESTION_GENERATION, PromptId.QUESTION_GENERATION_V1,
                 AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V1,
-                AiTaskType.CONCEPT_CONNECTION, PromptId.CONCEPT_CONNECTION_V1,
+                AiTaskType.CONCEPT_CONNECTION, PromptId.CONCEPT_CONNECTION_V2,
                 AiTaskType.CONTEXTUAL_APPLICATION, PromptId.CONTEXTUAL_APPLICATION_V1,
                 AiTaskType.STRUCTURED_OUTPUT_REPAIR, PromptId.STRUCTURED_OUTPUT_REPAIR_V1);
 
@@ -87,6 +87,7 @@ class PromptTemplateRegistryTests {
                 PromptId.QUESTION_GENERATION_V1,
                 PromptId.RESPONSE_EVALUATION_V1,
                 PromptId.CONCEPT_CONNECTION_V1,
+                PromptId.CONCEPT_CONNECTION_V2,
                 PromptId.CONTEXTUAL_APPLICATION_V1,
                 PromptId.STRUCTURED_OUTPUT_REPAIR_V1);
         assertThat(registry.registeredTemplates())
@@ -96,12 +97,12 @@ class PromptTemplateRegistryTests {
     }
 
     @Test
-    void exposesExplicitV1MetadataForEveryTemplate() {
+    void exposesExplicitVersionMetadataForEveryTemplate() {
         assertThat(registry.registeredTemplates())
                 .allSatisfy(template -> {
-                    assertThat(template.version()).isEqualTo(1);
-                    assertThat(template.promptId().version()).isEqualTo(1);
-                    assertThat(template.promptId().name()).endsWith("_V1");
+                    assertThat(template.version()).isEqualTo(template.promptId().version());
+                    assertThat(template.promptId().name())
+                            .endsWith("_V" + template.version());
                     assertThat(template.content())
                             .startsWith("PROMPT ID: " + template.promptId().name());
                 });
@@ -142,6 +143,11 @@ class PromptTemplateRegistryTests {
                                 AiTaskType.CONCEPT_CONNECTION,
                                 "CONCEPT_CONNECTION_V1")
                         .content())
+                .doesNotContain("\"question\": \"string\"", "\"expectedAnswer\": \"string\"");
+        assertThat(registry.resolveTask(
+                                AiTaskType.CONCEPT_CONNECTION,
+                                "CONCEPT_CONNECTION_V2")
+                        .content())
                 .contains("\"question\": \"string\"", "\"expectedAnswer\": \"string\"");
     }
 
@@ -149,7 +155,10 @@ class PromptTemplateRegistryTests {
     void resolvesCanonicalRepairSchemaForEveryOutputContract() {
         for (AiOutputContract outputContract : AiOutputContract.values()) {
             AiTaskType taskType = AiTaskType.valueOf(outputContract.name());
-            PromptTemplate primaryTemplate = registry.resolveTask(taskType, taskType.name() + "_V1");
+            PromptId promptId = taskType == AiTaskType.CONCEPT_CONNECTION
+                    ? PromptId.CONCEPT_CONNECTION_V2
+                    : PromptId.valueOf(taskType.name() + "_V1");
+            PromptTemplate primaryTemplate = registry.resolveTask(taskType, promptId.name());
             String repairSchema = registry.resolveRepairSchema(outputContract);
 
             assertThat(repairSchema).startsWith("{").endsWith("}");
@@ -179,22 +188,32 @@ class PromptTemplateRegistryTests {
     }
 
     @Test
-    void activeV1TemplatesMatchStableSha256Snapshots() {
-        Map<PromptId, String> expected = Map.of(
+    void versionedTemplatesMatchStableSha256Snapshots() {
+        Map<PromptId, String> expected = Map.ofEntries(
+                Map.entry(
                 PromptId.HIPPOCAMPUS_SYSTEM_V1,
-                        "7b7921cc02c2d998a661b59fade6c3a8d198e026a2f5f1e0a8b30a2c6296672d",
+                        "7b7921cc02c2d998a661b59fade6c3a8d198e026a2f5f1e0a8b30a2c6296672d"),
+                Map.entry(
                 PromptId.EXPLANATION_V1,
-                        "ea7c31d8c0da7e8c29f6753e873dc2c8b65354d03d26ac447f0b5403e6745145",
+                        "ea7c31d8c0da7e8c29f6753e873dc2c8b65354d03d26ac447f0b5403e6745145"),
+                Map.entry(
                 PromptId.QUESTION_GENERATION_V1,
-                        "228faf9bfe9eedd03618a99b7228f7b1e6104ac118918299ab52a92c317025fa",
+                        "228faf9bfe9eedd03618a99b7228f7b1e6104ac118918299ab52a92c317025fa"),
+                Map.entry(
                 PromptId.RESPONSE_EVALUATION_V1,
-                        "ed9c1c3aea9f37df64f38de727957a4b2950de66b661a5c518743159a678fdda",
+                        "ed9c1c3aea9f37df64f38de727957a4b2950de66b661a5c518743159a678fdda"),
+                Map.entry(
                 PromptId.CONCEPT_CONNECTION_V1,
-                        "4ecdafe9846632f86619f3a35f7057a009ffbe38adb8773468dc53284709f675",
+                        "67697282f23f21c55221f44ca638e7c85c3c27f2565b2159fdd7c3b6384d246e"),
+                Map.entry(
+                PromptId.CONCEPT_CONNECTION_V2,
+                        "2aa4cdd38a353a35c30e0a266d7d3e60c3f9364ce7b54630f9b5eb99f52dfe06"),
+                Map.entry(
                 PromptId.CONTEXTUAL_APPLICATION_V1,
-                        "8f08fd84de9d0812164f0f7a4940349cbf5261ca405d6ca8a4c62a8d26c37603",
+                        "8f08fd84de9d0812164f0f7a4940349cbf5261ca405d6ca8a4c62a8d26c37603"),
+                Map.entry(
                 PromptId.STRUCTURED_OUTPUT_REPAIR_V1,
-                        "40319a40f5d543600ec0c64472c5a931ae47dfa26c842c8b50384d7b5b19bc90");
+                        "40319a40f5d543600ec0c64472c5a931ae47dfa26c842c8b50384d7b5b19bc90"));
         LinkedHashMap<PromptId, String> actual = new LinkedHashMap<>();
         for (PromptTemplate template : registry.registeredTemplates()) {
             actual.put(template.promptId(), sha256(template.content()));

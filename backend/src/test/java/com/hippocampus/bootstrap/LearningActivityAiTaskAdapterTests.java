@@ -31,7 +31,7 @@ import com.hippocampus.ai.domain.ActivityType;
 import com.hippocampus.ai.domain.ApplicationDifficulty;
 import com.hippocampus.ai.domain.ApplicationLevel;
 import com.hippocampus.ai.domain.ConceptConnectionInput;
-import com.hippocampus.ai.domain.ConceptConnectionResult;
+import com.hippocampus.ai.domain.ConceptConnectionV2Result;
 import com.hippocampus.ai.domain.ContextualApplicationInput;
 import com.hippocampus.ai.domain.ContextualApplicationResult;
 import com.hippocampus.ai.domain.ExplanationResult;
@@ -103,7 +103,7 @@ class LearningActivityAiTaskAdapterTests {
 
     @Test
     void executesConnectAsSourceGroundedReusableConceptConnection() throws Exception {
-        ConceptConnectionResult connection = new ConceptConnectionResult(
+        ConceptConnectionV2Result connection = new ConceptConnectionV2Result(
                 "Alveolar ventilation",
                 "Arterial carbon dioxide",
                 "inverse physiological relationship",
@@ -116,7 +116,7 @@ class LearningActivityAiTaskAdapterTests {
         ValidatedAiResult<?> validated = new ValidatedAiResult<>(
                 connection,
                 new ValidatedAiResult.ExecutionMetadata(
-                        "GEMINI", "test-model", "test-version", "CONCEPT_CONNECTION_V1", "1"));
+                        "GEMINI", "test-model", "test-version", "CONCEPT_CONNECTION_V2", "2"));
         when(orchestrator.execute(any(), any(), any(), anyList(), any()))
                 .thenReturn(CompletableFuture.completedFuture(validated));
 
@@ -129,7 +129,7 @@ class LearningActivityAiTaskAdapterTests {
                 any(), anyList(), any());
         AiTaskRequest<?> aiRequest = requestCaptor.getValue();
         assertThat(aiRequest.taskType()).isEqualTo(AiTaskType.CONCEPT_CONNECTION);
-        assertThat(aiRequest.promptVersion()).isEqualTo("CONCEPT_CONNECTION_V1");
+        assertThat(aiRequest.promptVersion()).isEqualTo("CONCEPT_CONNECTION_V2");
         assertThat(aiRequest.outputContract()).isEqualTo(AiOutputContract.CONCEPT_CONNECTION);
         assertThat(aiRequest.groundingMode()).isEqualTo(GroundingMode.STRICT_SOURCE);
         assertThat(aiRequest.taskContext()).isEqualTo(new ConceptConnectionInput(

@@ -98,6 +98,25 @@ describe('study mission API contract', () => {
     await expect(getStudyMission(missionId)).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
   })
 
+  it('accepts a historical presentation-only connection without a question', async () => {
+    const connection = {
+      ...mission,
+      currentActivity: {
+        ...mission.currentActivity,
+        type: 'CONNECTION',
+        content: {
+          fromConcept: 'Preload', toConcept: 'Stroke volume', relationshipType: 'DIRECTLY_INFLUENCES',
+          relationship: 'Greater preload can increase stroke volume.',
+          whyItMatters: 'This helps connect venous return with cardiac output.',
+          question: null, limitations: [],
+        },
+      },
+    }
+    transport.json.mockResolvedValue(connection)
+
+    await expect(getStudyMission(missionId)).resolves.toEqual(connection)
+  })
+
   it.each([
     undefined,
     { ...mission, id: 'not-a-uuid' },

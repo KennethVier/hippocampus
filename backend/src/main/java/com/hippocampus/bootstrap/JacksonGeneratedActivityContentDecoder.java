@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import com.hippocampus.ai.domain.ConceptConnectionResult;
+import com.hippocampus.ai.domain.ConceptConnectionV2Result;
 import com.hippocampus.ai.domain.ContextualApplicationResult;
 import com.hippocampus.ai.domain.ExplanationResult;
 import com.hippocampus.ai.domain.QuestionGenerationResult;
@@ -31,6 +32,8 @@ public final class JacksonGeneratedActivityContentDecoder
             LearningActivityType activityType,
             String artifactType,
             String taskType,
+            String promptId,
+            String promptVersion,
             String contentPayload) {
         Objects.requireNonNull(activityType, "activityType must not be null");
         if (contentPayload == null || contentPayload.isBlank()) {
@@ -56,12 +59,24 @@ public final class JacksonGeneratedActivityContentDecoder
                 }
                 case CONNECT -> {
                     requireContract(artifactType, taskType, "CONCEPT_CONNECTION", "CONCEPT_CONNECTION");
-                    ConceptConnectionResult value = objectMapper.readValue(
-                            contentPayload, ConceptConnectionResult.class);
-                    yield new Connection(
-                            value.fromConcept(), value.toConcept(), value.relationshipType(),
-                            value.relationship(), value.whyItMatters(), value.question(),
-                            value.limitations());
+                    if ("CONCEPT_CONNECTION_V1".equals(promptId) && "1".equals(promptVersion)) {
+                        ConceptConnectionResult value = objectMapper.readValue(
+                                contentPayload, ConceptConnectionResult.class);
+                        yield new Connection(
+                                value.fromConcept(), value.toConcept(), value.relationshipType(),
+                                value.relationship(), value.whyItMatters(), null,
+                                value.limitations());
+                    }
+                    if ("CONCEPT_CONNECTION_V2".equals(promptId) && "2".equals(promptVersion)) {
+                        ConceptConnectionV2Result value = objectMapper.readValue(
+                                contentPayload, ConceptConnectionV2Result.class);
+                        yield new Connection(
+                                value.fromConcept(), value.toConcept(), value.relationshipType(),
+                                value.relationship(), value.whyItMatters(), value.question(),
+                                value.limitations());
+                    }
+                    throw new IllegalArgumentException(
+                            "generated concept connection has an unsupported prompt contract");
                 }
                 case APPLY -> {
                     requireContract(

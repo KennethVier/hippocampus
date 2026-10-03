@@ -26,6 +26,7 @@ export function MissionInteraction(props: MissionInteractionProps) {
   const completed = activity.status === 'COMPLETED'
   const canContinue = completed
     || (activity.type === 'EXPLANATION' && activity.content !== null)
+    || (activity.type === 'CONNECTION' && activity.content !== null && activity.content.question === null)
     || (props.confirmedSubmission && props.submission?.continuationAvailable === true)
   const responseKind = !completed && !props.confirmedSubmission ? responseKindFor(activity) : null
   const interactionDisabled = props.missionStatus !== 'ACTIVE' || props.interactionBlocked
@@ -99,7 +100,7 @@ export function MissionInteraction(props: MissionInteractionProps) {
 }
 
 function responseKindFor(activity: StudyMissionActivity): 'choice' | 'text' | null {
-  if (activity.type === 'CONNECTION' && activity.content !== null) return 'text'
+  if (activity.type === 'CONNECTION' && activity.content?.question) return 'text'
   if (activity.type === 'APPLICATION' && activity.content !== null) return 'text'
   if (activity.type !== 'RETRIEVAL' || activity.content === null) return null
   return activity.content.subtype === 'MCQ' && activity.content.options.length > 0 ? 'choice' : 'text'

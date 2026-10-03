@@ -108,6 +108,7 @@ public class GetStudyMissionUseCase {
         try {
             decoded = contentDecoder.decode(
                     activity.activityType(), artifact.artifactType(), artifact.taskType(),
+                    artifact.promptId(), artifact.promptVersion(),
                     artifact.contentPayload());
         } catch (IllegalArgumentException invalidStoredArtifact) {
             throw notFound();

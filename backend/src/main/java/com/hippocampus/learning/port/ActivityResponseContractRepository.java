@@ -8,6 +8,11 @@ public interface ActivityResponseContractRepository {
 
     Optional<ResponseContract> findValidatedForActivity(UUID activityId, UUID artifactId, UUID ownerId);
 
+    default boolean isHistoricalPresentationOnly(
+            UUID activityId, UUID artifactId, UUID ownerId) {
+        return false;
+    }
+
     record ResponseContract(
             String question,
             List<String> expectedConcepts,

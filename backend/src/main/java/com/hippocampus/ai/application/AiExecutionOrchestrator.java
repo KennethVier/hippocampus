@@ -434,7 +434,8 @@ public final class AiExecutionOrchestrator {
             AiTaskRequest<?> originalRequest,
             PromptContext originalPrompt) {
         ValidatedAiResult<?> schemaValidated = outputValidator.validate(
-                providerResult, originalRequest.outputContract(), originalRequest.taskContext());
+                providerResult, originalRequest.outputContract(), originalRequest.taskContext(),
+                originalPrompt.taskPromptId());
         ValidatedAiResult<?> sourceValidated = sourceReferenceValidator.validate(
                 authenticatedUserId, schemaValidated, originalRequest, originalPrompt);
         return sourceValidated.withExecutionMetadata(new ValidatedAiResult.ExecutionMetadata(

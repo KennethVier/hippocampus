@@ -64,6 +64,14 @@ const connectionMission = {
   },
 } satisfies StudyMission
 
+const historicalConnectionMission = {
+  ...connectionMission,
+  currentActivity: {
+    ...connectionMission.currentActivity,
+    content: { ...connectionMission.currentActivity.content, question: null },
+  },
+} satisfies StudyMission
+
 const submission: ActivitySubmission = {
   missionId,
   activityId: retrievalMission.currentActivity!.id,
@@ -185,6 +193,16 @@ describe('StudyMissionPage', () => {
       { responseText: 'More preload stretches the ventricle and increases ejection.' },
     ))
     expect(await screen.findByText(submission.feedback)).toBeInTheDocument()
+  })
+
+  it('presents a historical connection without fabricating response evaluation', async () => {
+    vi.spyOn(api, 'getStudyMission').mockResolvedValue(historicalConnectionMission)
+    renderMission()
+
+    expect(await screen.findByText('Greater filling can increase ejection.')).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Response' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Submit response' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
   })
 
   it('preserves the response draft when the same activity is refetched', async () => {

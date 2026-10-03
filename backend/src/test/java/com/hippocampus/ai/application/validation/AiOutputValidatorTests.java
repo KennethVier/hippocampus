@@ -13,9 +13,11 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import com.hippocampus.ai.application.provider.ProviderExecutionResult;
 import com.hippocampus.ai.application.provider.ProviderUsage;
+import com.hippocampus.ai.application.prompt.PromptId;
 import com.hippocampus.ai.application.routing.ProviderId;
 import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.domain.ConceptConnectionResult;
+import com.hippocampus.ai.domain.ConceptConnectionV2Result;
 import com.hippocampus.ai.domain.ContextualApplicationResult;
 import com.hippocampus.ai.domain.ExplanationResult;
 import com.hippocampus.ai.domain.QuestionGenerationResult;
@@ -132,6 +134,41 @@ class AiOutputValidatorTests {
 
         assertFailure(output, AiOutputContract.CONCEPT_CONNECTION,
                 AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION);
+    }
+
+    @Test
+    void preservesHistoricalConceptConnectionV1Contract() {
+        String output = """
+                {
+                  "fromConcept": "Preload",
+                  "toConcept": "Stroke volume",
+                  "relationshipType": "DIRECTLY_INFLUENCES",
+                  "relationship": "Greater preload can increase stroke volume.",
+                  "whyItMatters": "This helps connect venous return with cardiac output.",
+                  "sourceReferences": [],
+                  "limitations": []
+                }
+                """;
+
+        ValidatedAiResult<?> result = validator.validate(
+                providerResult(output), AiOutputContract.CONCEPT_CONNECTION, null,
+                PromptId.CONCEPT_CONNECTION_V1);
+
+        assertThat(result.result()).isInstanceOf(ConceptConnectionResult.class);
+    }
+
+    @Test
+    void conceptConnectionV2RejectsMissingResponseBearingFields() {
+        String output = validConceptConnection()
+                .replace("  \"question\": \"Explain how alveolar ventilation affects arterial carbon dioxide.\",\n", "")
+                .replace("  \"expectedAnswer\": \"Increasing alveolar ventilation lowers arterial carbon dioxide.\",\n", "");
+
+        assertThatThrownBy(() -> validator.validate(
+                        providerResult(output), AiOutputContract.CONCEPT_CONNECTION, null,
+                        PromptId.CONCEPT_CONNECTION_V2))
+                .isInstanceOfSatisfying(AiSchemaValidationException.class, failure ->
+                        assertThat(failure.reason())
+                                .isEqualTo(AiSchemaValidationException.Reason.CONTRACT_MISMATCH));
     }
 
     @Test
@@ -274,7 +311,7 @@ class AiOutputValidatorTests {
                         }
                         """, ResponseEvaluationResult.class),
                 Arguments.of(AiOutputContract.CONCEPT_CONNECTION,
-                        validConceptConnection(), ConceptConnectionResult.class),
+                        validConceptConnection(), ConceptConnectionV2Result.class),
                 Arguments.of(AiOutputContract.CONTEXTUAL_APPLICATION,
                         validContextualApplication(), ContextualApplicationResult.class));
     }

@@ -43,9 +43,34 @@ public class JsonActivityResponseContractRepository implements ActivityResponseC
                 .flatMap(this::parse);
     }
 
+    @Override
+    public boolean isHistoricalPresentationOnly(
+            UUID activityId, UUID artifactId, UUID ownerId) {
+        Objects.requireNonNull(activityId, "activityId must not be null");
+        Objects.requireNonNull(ownerId, "ownerId must not be null");
+        if (artifactId == null) {
+            return false;
+        }
+        return artifacts.findById(artifactId)
+                .filter(artifact -> ownerId.equals(artifact.userId()))
+                .filter(artifact -> "VALIDATED".equals(artifact.validationStatus()))
+                .filter(artifact -> "CONCEPT_CONNECTION".equals(artifact.artifactType()))
+                .filter(artifact -> "CONCEPT_CONNECTION".equals(artifact.taskType()))
+                .filter(artifact -> "CONCEPT_CONNECTION_V1".equals(artifact.promptId()))
+                .filter(artifact -> "1".equals(artifact.promptVersion()))
+                .isPresent();
+    }
+
     private Optional<ResponseContract> parse(GeneratedArtifactRepository.GeneratedArtifact artifact) {
         if (artifact.contentPayload() == null || artifact.contentPayload().isBlank()) {
             return Optional.empty();
+        }
+        if ("CONCEPT_CONNECTION".equals(artifact.artifactType())) {
+            if (!"CONCEPT_CONNECTION".equals(artifact.taskType())
+                    || !"CONCEPT_CONNECTION_V2".equals(artifact.promptId())
+                    || !"2".equals(artifact.promptVersion())) {
+                return Optional.empty();
+            }
         }
         try {
             JsonNode root = objectMapper.readTree(artifact.contentPayload());
