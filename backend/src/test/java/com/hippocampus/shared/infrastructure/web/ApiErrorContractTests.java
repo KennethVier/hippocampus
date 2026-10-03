@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -21,10 +22,12 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.hippocampus.shared.application.error.ApplicationException;
 import com.hippocampus.shared.application.error.ApplicationNotFoundException;
 import com.hippocampus.shared.domain.error.DomainConflictException;
 import com.hippocampus.shared.domain.error.ErrorCode;
@@ -106,6 +109,39 @@ class ApiErrorContractTests {
                 .andExpect(jsonPath("$.message").value("The requested test state conflicts with current state."))
                 .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID))
                 .andExpect(jsonPath("$.details").isEmpty());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "ACTIVITY_RESPONSE_MISSION_NOT_ACTIVE",
+            "ACTIVITY_RESPONSE_ACTIVITY_NOT_CURRENT",
+            "ACTIVITY_RESPONSE_ACTIVITY_ALREADY_COMPLETED",
+            "ACTIVITY_RESPONSE_STALE_SUBMISSION",
+            "ACTIVITY_MATERIALIZATION_MISSION_NOT_ACTIVE",
+            "ACTIVITY_MATERIALIZATION_UNFINISHED_CURRENT_ACTIVITY",
+            "ACTIVITY_MATERIALIZATION_STALE_MISSION"
+    })
+    void missionInteractionStateConflictsReturn409WithStableCode(String code) throws Exception {
+        mockMvc.perform(get("/test/errors/application/{code}", code)
+                        .header(CorrelationIdFilter.HEADER_NAME, CORRELATION_ID))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(code));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "ACTIVITY_RESPONSE_INVALID_RESPONSE,422",
+            "ACTIVITY_RESPONSE_EVALUATION_CONTRACT_NOT_FOUND,422",
+            "ACTIVITY_RESPONSE_EXTERNAL_EVALUATION_FAILED,422",
+            "ACTIVITY_RESPONSE_INVALID_EVALUATION,422",
+            "ACTIVITY_MATERIALIZATION_NOT_MATERIALIZABLE,422",
+            "ACTIVITY_MATERIALIZATION_INVALID_AI_CONTENT,422"
+    })
+    void semanticApplicationFailuresRemainNonConflict(String code, int expectedStatus) throws Exception {
+        mockMvc.perform(get("/test/errors/application/{code}", code)
+                        .header(CorrelationIdFilter.HEADER_NAME, CORRELATION_ID))
+                .andExpect(status().is(expectedStatus))
+                .andExpect(jsonPath("$.code").value(code));
     }
 
     @Test
@@ -207,6 +243,18 @@ class ApiErrorContractTests {
         @GetMapping("/internal")
         void internal() {
             throw new IllegalStateException(INTERNAL_MARKER);
+        }
+
+        @GetMapping("/application/{code}")
+        void application(@PathVariable String code) {
+            throw new TestApplicationException(
+                    new ErrorCode(code), "The request conflicts with current state.");
+        }
+    }
+
+    private static final class TestApplicationException extends ApplicationException {
+        private TestApplicationException(ErrorCode errorCode, String clientMessage) {
+            super(errorCode, clientMessage);
         }
     }
 

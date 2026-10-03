@@ -4,7 +4,7 @@ Audience: Frontend, architecture, product, UX, QA, backend, and
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 20
-Last Updated: 2026-08-24
+Last Updated: 2026-10-03
 Owner: Project Hippocampus Team
 Prerequisites:
 - 04 - Product Requirements
@@ -41,7 +41,7 @@ Scope: React application structure, routing, feature/module
   loading/error states, and testing seams.
 Status: Final
 Title: Frontend Architecture
-Version: 1.0.0
+Version: 1.0.1
 ---
 
 # 20 - Frontend Architecture
@@ -497,6 +497,28 @@ Actions:
 ```
 
 Only actions currently allowed by backend state should be displayed.
+
+**Continue (ADR-0010):** When the student presses Continue on a
+presentation-only `UNDERSTAND` activity, the frontend calls the Continue
+endpoint and awaits the next materialized activity from the backend.
+Continue is a lifecycle transition. The frontend must not fabricate
+evidence, synthetic outcomes, or mastery state from a Continue click.
+
+After a presentation-only `UNDERSTAND` activity, the backend may materialize:
+
+``` text
+Understanding Check  — if UNDERSTANDING evidence is insufficient
+Retrieval             — if UNDERSTANDING evidence is already sufficient
+```
+
+The frontend renders the activity type the backend returns.
+It does not decide which activity type follows.
+
+An Understanding Check may reuse the existing concrete `RETRIEVE`
+question-rendering contract while the backend retains its pedagogical identity
+as `UNDERSTANDING_CHECK`. The frontend renders and submits the response-bearing
+question contract; it does not infer evidence ownership from the concrete
+rendering type. Backend sequencing and evidence semantics remain authoritative.
 
 ------------------------------------------------------------------------
 
@@ -2298,6 +2320,13 @@ Documents 13, 18, and 19.
                                                         responsive behavior,
                                                         and frontend testing
                                                         boundaries
+
+  1.0.1             2026-10-03        Project           Clarified backend-owned
+                                      Hippocampus Team  Understanding Check
+                                                        sequencing, concrete
+                                                        question rendering,
+                                                        and evidence identity
+                                                        under ADR-0010
 
   ---------------------------------------------------------------------------
 

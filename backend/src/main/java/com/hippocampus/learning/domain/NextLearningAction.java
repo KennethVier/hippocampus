@@ -29,10 +29,11 @@ public record NextLearningAction(
             throw new IllegalArgumentException(
                     "reuseLearningActivityId must be present exactly for REUSE_VALIDATED_CONTENT");
         }
-        boolean generatesRetrievalQuestion = actionType == LearningActionType.RETRIEVE && aiTaskRequired;
+        boolean generatesRetrievalQuestion = (actionType == LearningActionType.RETRIEVE
+                || actionType == LearningActionType.UNDERSTANDING_CHECK) && aiTaskRequired;
         if (generatesRetrievalQuestion != (constraints.retrievalActivityType() != null)) {
             throw new IllegalArgumentException(
-                    "retrievalActivityType must be present exactly for AI-backed RETRIEVE actions");
+                    "retrievalActivityType must be present exactly for AI-backed question actions");
         }
         boolean generatesApplication = actionType == LearningActionType.APPLY && aiTaskRequired;
         if (generatesApplication != (constraints.applicationActivityLevel() != null)) {

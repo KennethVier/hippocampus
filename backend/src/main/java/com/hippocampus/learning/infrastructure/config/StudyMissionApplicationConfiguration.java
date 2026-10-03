@@ -12,11 +12,14 @@ import org.springframework.context.annotation.Lazy;
 import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.learning.application.StartStudyMissionUseCase;
 import com.hippocampus.learning.application.ChangeStudyMissionStatusUseCase;
+import com.hippocampus.learning.application.ContinueStudyMissionUseCase;
 import com.hippocampus.learning.application.GetStudyMissionUseCase;
 import com.hippocampus.learning.application.MaterializeLearningActivityUseCase;
 import com.hippocampus.learning.application.PersistActivityResponse;
 import com.hippocampus.learning.application.PersistMaterializedActivity;
+import com.hippocampus.learning.application.PersistPresentationCompletion;
 import com.hippocampus.learning.application.SubmitActivityResponseUseCase;
+import com.hippocampus.learning.application.StudyMissionLearningStateAssembler;
 import com.hippocampus.learning.domain.LearningActionType;
 import com.hippocampus.learning.domain.LearningEngine;
 import com.hippocampus.learning.domain.LearningPolicyConfiguration;
@@ -74,6 +77,12 @@ public class StudyMissionApplicationConfiguration {
     @ConditionalOnMissingBean
     MissionStateMachinePolicy missionStateMachinePolicy() {
         return new MissionStateMachinePolicy();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    StudyMissionLearningStateAssembler studyMissionLearningStateAssembler() {
+        return new StudyMissionLearningStateAssembler();
     }
 
     @Bean
@@ -136,6 +145,13 @@ public class StudyMissionApplicationConfiguration {
     @Bean
     @Lazy
     @ConditionalOnMissingBean
+    PersistPresentationCompletion persistPresentationCompletion(StudyMissionRepository missions) {
+        return new PersistPresentationCompletion(missions);
+    }
+
+    @Bean
+    @Lazy
+    @ConditionalOnMissingBean
     @ConditionalOnBean({StudentAttemptRepository.class, ActivityResponseContractRepository.class,
             ResponseEvaluationPort.class, PersistActivityResponse.class})
     SubmitActivityResponseUseCase submitActivityResponseUseCase(
@@ -145,11 +161,32 @@ public class StudyMissionApplicationConfiguration {
             ActivityResponseContractRepository contracts,
             ResponseEvaluationPort responseEvaluation,
             LearningEngine learningEngine,
+            StudyMissionLearningStateAssembler learningStateAssembler,
             PersistActivityResponse persistence,
             Clock studyMissionClock) {
         return new SubmitActivityResponseUseCase(
                 currentUser, missions, attempts, contracts, responseEvaluation,
-                learningEngine, persistence, studyMissionClock);
+                learningEngine, learningStateAssembler, persistence, studyMissionClock);
+    }
+
+    @Bean
+    @Lazy
+    @ConditionalOnMissingBean
+    @ConditionalOnBean({StudentAttemptRepository.class, ActivityResponseContractRepository.class,
+            MaterializeLearningActivityUseCase.class, PersistPresentationCompletion.class})
+    ContinueStudyMissionUseCase continueStudyMissionUseCase(
+            CurrentUser currentUser,
+            StudyMissionRepository missions,
+            StudentAttemptRepository attempts,
+            ActivityResponseContractRepository contracts,
+            LearningEngine learningEngine,
+            StudyMissionLearningStateAssembler learningStateAssembler,
+            MaterializeLearningActivityUseCase materializeLearningActivity,
+            PersistPresentationCompletion persistPresentationCompletion,
+            Clock studyMissionClock) {
+        return new ContinueStudyMissionUseCase(
+                currentUser, missions, attempts, contracts, learningEngine, learningStateAssembler,
+                materializeLearningActivity, persistPresentationCompletion, studyMissionClock);
     }
 
     @Bean

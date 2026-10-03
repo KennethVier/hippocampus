@@ -22,6 +22,7 @@ class NextLearningActionTests {
                 LearningActionType.START,
                 LearningActionType.RESUME,
                 LearningActionType.UNDERSTAND,
+                LearningActionType.UNDERSTANDING_CHECK,
                 LearningActionType.RETRIEVE,
                 LearningActionType.CONNECT,
                 LearningActionType.APPLY,
@@ -218,6 +219,27 @@ class NextLearningActionTests {
                         .withApplicationActivityLevel(ApplicationActivityLevel.DIRECT)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("applicationActivityLevel");
+    }
+
+    @Test
+    void understandingCheckRequiresExplicitQuestionFormat() {
+        UUID objectiveId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> new NextLearningAction(
+                LearningActionType.UNDERSTANDING_CHECK, objectiveId, "concept",
+                LearningDifficulty.FOUNDATIONAL, "CHECK", true,
+                LearningActionConstraints.unconstrained()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("retrievalActivityType");
+
+        NextLearningAction action = new NextLearningAction(
+                LearningActionType.UNDERSTANDING_CHECK, objectiveId, "concept",
+                LearningDifficulty.FOUNDATIONAL, "CHECK", true,
+                LearningActionConstraints.unconstrained()
+                        .withRetrievalActivityType(RetrievalActivityType.SHORT_ANSWER));
+
+        assertThat(action.constraints().retrievalActivityType())
+                .isEqualTo(RetrievalActivityType.SHORT_ANSWER);
     }
 
     @Test

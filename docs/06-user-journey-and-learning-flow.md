@@ -1,12 +1,12 @@
 ---
 Document ID: 06
 Title: User Journey & Learning Flow
-Version: 1.0.0
+Version: 1.0.1
 Status: Final
 Owner: Project Hippocampus Team
 Authors: Project Hippocampus Team
 Created: 2026-08-23
-Last Updated: 2026-08-23
+Last Updated: 2026-10-03
 Purpose: Define the end-to-end student journey and evidence-aligned learning flow through Hippocampus.
 Scope: Entry paths, material intake, study planning, Study Mission stages, learning-state adaptation, review loops, continuity, exceptions, and requirement traceability.
 Audience: Product, UX, engineering, AI, research, and medical-education contributors.
@@ -552,9 +552,54 @@ Help the student build or repair an accurate mental model.
 
 ## Product Behavior
 
-The system should avoid overwhelming the learner with every available detail at once.
+- The system should avoid overwhelming the learner with every available detail at once.
+- When the learner remains confused, Hippocampus should adapt the explanation rather than simply repeat the same wording.
 
-When the student remains confused, Hippocampus should adapt the explanation rather than simply repeat the same wording.
+## Presentation-Only Completion (ADR-0010)
+
+An `UNDERSTAND` activity may be purely a presentation — it delivers an explanation
+without requiring an evaluated learner response.
+
+The learner may explicitly complete a presentation-only activity via **Continue**.
+
+**Continue is a lifecycle transition, not a competence signal.**
+
+Completing a presentation-only activity:
+
+- marks the activity as finished so the learner can move forward;
+- does **not** create a `StudentAttempt`;
+- does **not** produce `CORRECT`, `PARTIAL`, or `INCORRECT` evidence;
+- does **not** directly establish `UNDERSTANDING` evidence.
+
+## Understanding Check (ADR-0010)
+
+After presentation completion, if the persisted learning state still lacks
+sufficient `UNDERSTANDING` evidence, the Learning Engine selects an explicit
+**Understanding Check** before normal retrieval.
+
+An Understanding Check is a response-bearing activity that requires the learner
+to actively reconstruct the concept — for example:
+
+- explain a mechanism;
+- describe a relationship;
+- summarize a causal sequence;
+- identify why a concept behaves as described.
+
+The Understanding Check is evaluated and its outcome maps to
+`EvidenceDimension.UNDERSTANDING`:
+
+```text
+CORRECT  → DEVELOPING
+PARTIAL  → WEAK
+INCORRECT → INSUFFICIENT
+```
+
+An Understanding Check does **not** establish `RECALL`.
+`RECALL` remains a separate dimension established only through normal
+retrieval activities.
+
+The Learning Engine decides whether an Understanding Check is required.
+The frontend does not decide evidence or progression.
 
 ## Transition Signal
 
@@ -1285,6 +1330,7 @@ Feature
 | Version | Date | Author | Changes |
 |---|---|---|---|
 | 1.0.0 | 2026-08-23 | Project Hippocampus Team | Initial finalized end-to-end student journey and learning flow |
+| 1.0.1 | 2026-10-03 | Project Hippocampus Team | Restored adaptive explanation requirements and aligned presentation completion and Understanding Checks with ADR-0010 |
 
 ---
 

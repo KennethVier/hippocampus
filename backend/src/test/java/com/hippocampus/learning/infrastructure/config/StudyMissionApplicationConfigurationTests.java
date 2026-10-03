@@ -20,13 +20,23 @@ import com.hippocampus.bootstrap.JacksonGeneratedActivityContentDecoder;
 import com.hippocampus.identity.domain.AuthenticatedUser;
 import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.learning.application.GetStudyMissionUseCase;
+import com.hippocampus.learning.application.ContinueStudyMissionUseCase;
+import com.hippocampus.learning.application.PersistPresentationCompletion;
 import com.hippocampus.learning.application.StartStudyMissionUseCase;
+import com.hippocampus.learning.application.StudyMissionLearningStateAssembler;
+import com.hippocampus.learning.application.SubmitActivityResponseUseCase;
+import com.hippocampus.learning.port.ActivityAiTaskPort;
+import com.hippocampus.learning.port.ActivityEvidencePort;
+import com.hippocampus.learning.port.ActivityResponseContractRepository;
+import com.hippocampus.learning.port.ActivitySourceReferenceAuthorization;
 import com.hippocampus.learning.port.GeneratedArtifactRepository;
+import com.hippocampus.learning.port.ResponseEvaluationPort;
 import com.hippocampus.learning.port.StudyMissionRepository;
 import com.hippocampus.learning.port.StudyMissionSourceCatalog;
 import com.hippocampus.learning.port.StudyMissionSourcePresentationRepository;
 import com.hippocampus.learning.port.SubtopicRepository;
 import com.hippocampus.learning.port.TopicRepository;
+import com.hippocampus.progress.port.StudentAttemptRepository;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -60,6 +70,15 @@ class StudyMissionApplicationConfigurationTests {
 
             assertThat(context.getBean(GetStudyMissionUseCase.class)).isNotNull();
         });
+    }
+
+    @Test
+    void wiresSubmissionAndBackendOwnedContinuationWhenRequiredPortsExist() {
+        runner.run(context -> assertThat(context).hasNotFailed()
+                .hasSingleBean(StudyMissionLearningStateAssembler.class)
+                .hasSingleBean(PersistPresentationCompletion.class)
+                .hasSingleBean(SubmitActivityResponseUseCase.class)
+                .hasSingleBean(ContinueStudyMissionUseCase.class));
     }
 
     @Configuration(proxyBeanMethods = false)
@@ -98,6 +117,36 @@ class StudyMissionApplicationConfigurationTests {
         @Bean
         GeneratedArtifactRepository generatedArtifactRepository() {
             return mock(GeneratedArtifactRepository.class);
+        }
+
+        @Bean
+        ActivitySourceReferenceAuthorization activitySourceReferenceAuthorization() {
+            return mock(ActivitySourceReferenceAuthorization.class);
+        }
+
+        @Bean
+        ActivityEvidencePort activityEvidencePort() {
+            return mock(ActivityEvidencePort.class);
+        }
+
+        @Bean
+        ActivityAiTaskPort activityAiTaskPort() {
+            return mock(ActivityAiTaskPort.class);
+        }
+
+        @Bean
+        StudentAttemptRepository studentAttemptRepository() {
+            return mock(StudentAttemptRepository.class);
+        }
+
+        @Bean
+        ActivityResponseContractRepository activityResponseContractRepository() {
+            return mock(ActivityResponseContractRepository.class);
+        }
+
+        @Bean
+        ResponseEvaluationPort responseEvaluationPort() {
+            return mock(ResponseEvaluationPort.class);
         }
 
         @Bean

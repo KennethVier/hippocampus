@@ -3,6 +3,7 @@ package com.hippocampus.learning.domain.policy;
 import static com.hippocampus.learning.domain.LearningRationaleCodes.FOUNDATION_INSUFFICIENT;
 import static com.hippocampus.learning.domain.LearningRationaleCodes.READY_FOR_RETRIEVAL;
 import static com.hippocampus.learning.domain.LearningRationaleCodes.RETRIEVAL_GAP;
+import static com.hippocampus.learning.domain.LearningRationaleCodes.UNDERSTANDING_CHECK_REQUIRED;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.hippocampus.learning.domain.AttemptOutcome;
@@ -62,5 +63,62 @@ class UnderstandRetrievePolicyTests {
 
         assertThat(action.actionType()).isEqualTo(LearningActionType.UNDERSTAND);
         assertThat(action.rationaleCode()).isEqualTo(RETRIEVAL_GAP);
+    }
+
+    @Test
+    void selectsUnderstandingCheckWhenFoundationInsufficientAndPresentationJustCompleted() {
+        LearningState state = PolicyTestFixtures.state(
+                MissionLifecycleState.ACTIVE,
+                LearningStage.UNDERSTANDING,
+                Map.of(EvidenceDimension.UNDERSTANDING, EvidenceStrength.INSUFFICIENT),
+                List.of(PolicyTestFixtures.activity(
+                        LearningActionType.UNDERSTAND, LearningDifficulty.FOUNDATIONAL, null)),
+                false,
+                new SourceCapability(SourceReadiness.READY, true, false, false),
+                new LearningTimeContext(15, 15, 0),
+                LearningActionConstraints.unconstrained());
+
+        var action = policy.select(state);
+
+        assertThat(action.actionType()).isEqualTo(LearningActionType.UNDERSTANDING_CHECK);
+        assertThat(action.rationaleCode()).isEqualTo(UNDERSTANDING_CHECK_REQUIRED);
+        assertThat(action.constraints().retrievalActivityType())
+                .isEqualTo(com.hippocampus.learning.domain.RetrievalActivityType.SHORT_ANSWER);
+    }
+
+    @Test
+    void selectsUnderstandingCheckOnlyForPersistedUnderstandingFamilyPresentationHistory() {
+        for (LearningActionType presentationType : List.of(
+                LearningActionType.UNDERSTAND,
+                LearningActionType.HINT,
+                LearningActionType.PREREQUISITE_SUPPORT)) {
+            LearningState state = PolicyTestFixtures.state(
+                    MissionLifecycleState.ACTIVE,
+                    LearningStage.UNDERSTANDING,
+                    Map.of(EvidenceDimension.UNDERSTANDING, EvidenceStrength.INSUFFICIENT),
+                    List.of(PolicyTestFixtures.activity(
+                            presentationType, LearningDifficulty.FOUNDATIONAL, null)),
+                    false,
+                    new SourceCapability(SourceReadiness.READY, true, false, false),
+                    new LearningTimeContext(15, 15, 0),
+                    LearningActionConstraints.unconstrained());
+
+            assertThat(policy.select(state).actionType())
+                    .isEqualTo(LearningActionType.UNDERSTANDING_CHECK);
+        }
+
+        LearningState unrelatedNullOutcome = PolicyTestFixtures.state(
+                MissionLifecycleState.ACTIVE,
+                LearningStage.UNDERSTANDING,
+                Map.of(EvidenceDimension.UNDERSTANDING, EvidenceStrength.INSUFFICIENT),
+                List.of(PolicyTestFixtures.activity(
+                        LearningActionType.CONNECT, LearningDifficulty.FOUNDATIONAL, null)),
+                false,
+                new SourceCapability(SourceReadiness.READY, true, false, false),
+                new LearningTimeContext(15, 15, 0),
+                LearningActionConstraints.unconstrained());
+
+        assertThat(policy.select(unrelatedNullOutcome).actionType())
+                .isEqualTo(LearningActionType.UNDERSTAND);
     }
 }

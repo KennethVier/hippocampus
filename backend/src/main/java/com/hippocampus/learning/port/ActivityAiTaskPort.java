@@ -37,10 +37,11 @@ public interface ActivityAiTaskPort {
                         "recentQuestionIntents must not contain null or blank values");
             }
             Objects.requireNonNull(constraints, "constraints must not be null");
-            if ((actionType == LearningActionType.RETRIEVE)
-                    != (constraints.retrievalActivityType() != null)) {
+            boolean requiresQuestionFormat = actionType == LearningActionType.RETRIEVE
+                    || actionType == LearningActionType.UNDERSTANDING_CHECK;
+            if (requiresQuestionFormat != (constraints.retrievalActivityType() != null)) {
                 throw new IllegalArgumentException(
-                        "retrievalActivityType must be present exactly for RETRIEVE requests");
+                        "retrievalActivityType must be present exactly for question-generation requests");
             }
             if ((actionType == LearningActionType.APPLY)
                     != (constraints.applicationActivityLevel() != null)) {

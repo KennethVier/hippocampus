@@ -4,7 +4,7 @@ Audience: Backend, architecture, AI, QA, security, and DevOps
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 19
-Last Updated: 2026-09-29
+Last Updated: 2026-10-03
 Owner: Project Hippocampus Team
 Prerequisites:
 - 10 - AI Architecture v1.1+
@@ -37,7 +37,7 @@ Scope: Spring Boot modular-monolith structure, package/module ownership,
   security integration, observability hooks, and testing seams.
 Status: Final
 Title: Backend Architecture
-Version: 1.0.1
+Version: 1.0.2
 ---
 
 # 19 - Backend Architecture
@@ -573,6 +573,35 @@ Updated StudyMission state
 ```
 
 only after AI evaluation has been validated if AI is required.
+
+## Continue Presentation-Only Activity (ADR-0010)
+
+When a student clicks Continue on a presentation-only `UNDERSTAND` activity:
+
+The first short transaction locks the owner-scoped mission, validates the
+current activity and snapshot, and persists:
+
+``` text
+Updated LearningActivity (status = COMPLETED, completed_at)
+```
+
+No `StudentAttempt` is persisted. No evidence is written.
+No synthetic `CORRECT`, `PARTIAL`, or `INCORRECT` outcome is produced.
+
+After that transaction commits, the application reconstructs learning state
+from the persisted mission and attempts. The Learning Engine decides the next
+action, taking into account that `UNDERSTANDING` evidence was not updated by
+the presentation completion. RAG and AI preparation occur outside a database
+transaction.
+
+If `UNDERSTANDING` evidence remains insufficient, the engine selects an
+`UNDERSTANDING_CHECK` activity rather than a normal `RETRIEVE`.
+
+A second short transaction re-locks and revalidates the mission snapshot,
+persists the next activity, and advances `currentActivityId`. If another
+request wins between these boundaries, the stale request fails with a conflict
+and creates no duplicate activity. No database transaction remains open across
+AI, RAG, or other network work.
 
 ## Material Version Activation
 
@@ -2303,6 +2332,12 @@ The frontend must preserve the product rule:
                                       Hippocampus Team  materialization and exact
                                                         LearningActivity identity
                                                         with ADR-0006
+
+  1.0.2             2026-10-03        Project           Aligned durable
+                                      Hippocampus Team  presentation completion,
+                                                        reconstruction, and
+                                                        two-transaction mission
+                                                        progression with ADR-0010
 
   ----------------------------------------------------------------------------
 

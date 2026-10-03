@@ -39,6 +39,8 @@ import com.hippocampus.learning.port.ActivityAiTaskPort;
 import com.hippocampus.learning.port.ActivityEvidencePort;
 import com.hippocampus.learning.port.GeneratedArtifactRepository;
 import com.hippocampus.learning.port.StudyMissionRepository;
+import com.hippocampus.learning.infrastructure.persistence.JsonActivityResponseContractRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hippocampus.shared.application.error.ApplicationNotFoundException;
 
 class MaterializeLearningActivityUseCaseTests {
@@ -93,6 +95,25 @@ class MaterializeLearningActivityUseCaseTests {
     }
 
     @Test
+    void expectedCurrentActivityMismatchFailsBeforeMaterialization() {
+        LearningActivity completed = execute(action(
+                LearningActionType.FEEDBACK, null, false)).activity();
+        completeCurrentActivity();
+
+        assertThatThrownBy(() -> useCase.execute(
+                new MaterializeLearningActivityUseCase.Command(
+                        MISSION_ID,
+                        action(LearningActionType.UNDERSTAND, LearningDifficulty.FOUNDATIONAL, true),
+                        UUID.randomUUID())))
+                .isInstanceOf(ActivityMaterializationException.class)
+                .extracting(failure -> ((ActivityMaterializationException) failure).reason())
+                .isEqualTo(ActivityMaterializationException.Reason.STALE_MISSION);
+        assertThat(missions.current.currentActivityId()).isEqualTo(completed.id());
+        assertThat(evidence.calls).isZero();
+        assertThat(ai.calls).isZero();
+    }
+
+    @Test
     void retrieveAiActionPreservesDifficultyAndSourceRequirement() {
         var constraints = new LearningActionConstraints(
                 SourceRequirement.REQUIRED,
@@ -111,6 +132,34 @@ class MaterializeLearningActivityUseCaseTests {
         assertThat(result.activity().activityType()).isEqualTo(LearningActivityType.RETRIEVE);
         assertThat(result.activity().difficulty()).isEqualTo(LearningDifficulty.APPLIED);
         assertThat(result.activity().sourceRequired()).isTrue();
+    }
+
+    @Test
+    void understandingCheckUsesRetrieveRenderingAndPersistsResolvableQuestionContract() {
+        ai.contentPayload = """
+                {"question":"Why does cardiac output rise?","expectedAnswer":"Heart rate or stroke volume rises.","expectedConcepts":["cardiac output"]}
+                """;
+        var constraints = new LearningActionConstraints(
+                SourceRequirement.REQUIRED, false, false, null, null,
+                LearningActivityIntent.STANDARD, RetrievalActivityType.SHORT_ANSWER);
+
+        LearningActivity activity = execute(action(
+                LearningActionType.UNDERSTANDING_CHECK,
+                LearningDifficulty.FOUNDATIONAL,
+                true,
+                constraints)).activity();
+
+        assertThat(activity.activityType()).isEqualTo(LearningActivityType.RETRIEVE);
+        assertThat(activity.representedActionType())
+                .isEqualTo(LearningActionType.UNDERSTANDING_CHECK);
+        assertThat(ai.lastRequest.constraints().retrievalActivityType())
+                .isEqualTo(RetrievalActivityType.SHORT_ANSWER);
+        var contracts = new JsonActivityResponseContractRepository(artifacts, new ObjectMapper());
+        var contract = contracts.findValidatedForActivity(
+                activity.id(), activity.generatedArtifactId(), USER_ID).orElseThrow();
+        assertThat(contract.question()).isEqualTo("Why does cardiac output rise?");
+        assertThat(contract.expectedAnswer())
+                .isEqualTo("Heart rate or stroke volume rises.");
     }
 
     @Test
@@ -539,13 +588,16 @@ class MaterializeLearningActivityUseCaseTests {
     private static final class RecordingAiPort implements ActivityAiTaskPort {
         int calls;
         Request lastRequest;
+        String contentPayload;
 
         @Override
         public ValidatedContent execute(Request request) {
             calls++;
             lastRequest = request;
             return new ValidatedContent(
-                    "EXPLANATION", request.actionType().name(), "Validated content", null,
+                    request.actionType() == LearningActionType.UNDERSTANDING_CHECK
+                            ? "QUESTION" : "EXPLANATION",
+                    request.actionType().name(), "Validated content", contentPayload,
                     request.groundingMode().name(), "SOURCE_GROUNDED_GENERATED",
                     "activity-materialization", "1", "GEMINI", "test-model", null,
                     ValidationStatus.VALIDATED, true);

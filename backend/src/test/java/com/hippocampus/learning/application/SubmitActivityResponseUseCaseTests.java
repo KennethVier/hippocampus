@@ -61,7 +61,8 @@ class SubmitActivityResponseUseCaseTests {
         var persistence = new PersistActivityResponse(missions, attempts);
         useCase = new SubmitActivityResponseUseCase(
                 () -> new AuthenticatedUser(USER_ID), missions, attempts, contracts, evaluation,
-                engine(), persistence, Clock.fixed(NOW, ZoneOffset.UTC));
+                engine(), new StudyMissionLearningStateAssembler(), persistence,
+                Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -73,9 +74,20 @@ class SubmitActivityResponseUseCaseTests {
         assertThat(result.evaluation().outcome().name()).isEqualTo("CORRECT");
         assertThat(result.evaluation().deterministic()).isTrue();
         assertThat(result.attempt().attemptNumber()).isOne();
+        assertThat(result.attempt().responseText()).isEqualTo("B");
         assertThat(result.attempt().deterministicResult()).isEqualTo("CORRECT");
         assertThat(result.activity().status()).isEqualTo("COMPLETED");
         assertThat(evaluation.calls).isZero();
+    }
+
+    @Test
+    void deterministicResponsePersistsSelectedOptionWhenResponseTextIsAlsoSupplied() {
+        contracts.contract = deterministicContract();
+
+        var result = execute("A", "B");
+
+        assertThat(result.evaluation().outcome().name()).isEqualTo("CORRECT");
+        assertThat(result.attempt().responseText()).isEqualTo("B");
     }
 
     @Test

@@ -27,6 +27,7 @@ import com.hippocampus.ai.application.validation.AiSchemaValidationException;
 import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.domain.AiTaskRequest;
 import com.hippocampus.ai.domain.AiTaskType;
+import com.hippocampus.ai.domain.ActivityType;
 import com.hippocampus.ai.domain.ApplicationDifficulty;
 import com.hippocampus.ai.domain.ApplicationLevel;
 import com.hippocampus.ai.domain.ConceptConnectionInput;
@@ -34,6 +35,9 @@ import com.hippocampus.ai.domain.ConceptConnectionResult;
 import com.hippocampus.ai.domain.ContextualApplicationInput;
 import com.hippocampus.ai.domain.ContextualApplicationResult;
 import com.hippocampus.ai.domain.ExplanationResult;
+import com.hippocampus.ai.domain.QuestionDifficulty;
+import com.hippocampus.ai.domain.QuestionGenerationInput;
+import com.hippocampus.ai.domain.QuestionGenerationResult;
 import com.hippocampus.ai.domain.ValidatedAiResult;
 import com.hippocampus.ai.infrastructure.learning.AiTaskExecutionOptions;
 import com.hippocampus.ai.infrastructure.learning.AiTaskExecutionPolicy;
@@ -60,6 +64,7 @@ class LearningActivityAiTaskAdapterTests {
         AiTaskExecutionPolicy executionPolicy = mock(AiTaskExecutionPolicy.class);
         AiTaskExecutionOptions options = executionOptions();
         when(executionPolicy.optionsFor(AiTaskType.EXPLANATION)).thenReturn(options);
+        when(executionPolicy.optionsFor(AiTaskType.QUESTION_GENERATION)).thenReturn(options);
         when(executionPolicy.optionsFor(AiTaskType.CONCEPT_CONNECTION)).thenReturn(options);
         when(executionPolicy.optionsFor(AiTaskType.CONTEXTUAL_APPLICATION)).thenReturn(options);
         adapter = new LearningActivityAiTaskAdapter(
@@ -135,6 +140,50 @@ class LearningActivityAiTaskAdapterTests {
         assertThat(content.classification()).isEqualTo("SOURCE_GROUNDED_GENERATED");
         assertThat(content.validationStatus()).isEqualTo(ActivityAiTaskPort.ValidationStatus.VALIDATED);
         assertThat(content.reusable()).isTrue();
+    }
+
+    @Test
+    void executesUnderstandingCheckThroughShortAnswerQuestionGeneration() throws Exception {
+        QuestionGenerationResult question = new QuestionGenerationResult(
+                ActivityType.SHORT_ANSWER,
+                "Cardiac output",
+                "Explain cardiac output",
+                "Why can cardiac output rise?",
+                List.of(),
+                null,
+                "Heart rate or stroke volume rises.",
+                "Cardiac output is heart rate multiplied by stroke volume.",
+                QuestionDifficulty.FOUNDATIONAL,
+                List.of("source-1"),
+                List.of());
+        ValidatedAiResult<?> validated = new ValidatedAiResult<>(
+                question,
+                new ValidatedAiResult.ExecutionMetadata(
+                        "GEMINI", "test-model", "test-version", "QUESTION_GENERATION_V1", "1"));
+        when(orchestrator.execute(any(), any(), any(), anyList(), any()))
+                .thenReturn(CompletableFuture.completedFuture(validated));
+
+        ActivityAiTaskPort.ValidatedContent content = adapter.execute(understandingCheckRequest());
+
+        ArgumentCaptor<AiTaskRequest<?>> requestCaptor = ArgumentCaptor.forClass(AiTaskRequest.class);
+        verify(orchestrator).execute(
+                requestCaptor.capture(),
+                org.mockito.ArgumentMatchers.eq(AiRequestPriority.INTERACTIVE_GENERATION),
+                any(), anyList(), any());
+        AiTaskRequest<?> aiRequest = requestCaptor.getValue();
+        assertThat(aiRequest.taskType()).isEqualTo(AiTaskType.QUESTION_GENERATION);
+        assertThat(aiRequest.promptVersion()).isEqualTo("QUESTION_GENERATION_V1");
+        assertThat(aiRequest.outputContract()).isEqualTo(AiOutputContract.QUESTION_GENERATION);
+        assertThat(aiRequest.taskContext()).isEqualTo(new QuestionGenerationInput(
+                "Explain cardiac output", "Cardiac output", ActivityType.SHORT_ANSWER,
+                QuestionDifficulty.FOUNDATIONAL, List.of(), null));
+        assertThat(aiRequest.learnerContext().learningState())
+                .isEqualTo(LearningActionType.UNDERSTANDING_CHECK.name());
+        assertThat(content.artifactType()).isEqualTo("QUESTION");
+        assertThat(content.taskType()).isEqualTo(AiTaskType.QUESTION_GENERATION.name());
+        assertThat(content.contentPayload()).contains(
+                "\"question\":\"Why can cardiac output rise?\"",
+                "\"expectedAnswer\":\"Heart rate or stroke volume rises.\"");
     }
 
     @Test
@@ -261,6 +310,21 @@ class LearningActivityAiTaskAdapterTests {
                 evidence, List.of(), constraints);
     }
 
+    private static ActivityAiTaskPort.Request understandingCheckRequest() {
+        LearningActionConstraints constraints = new LearningActionConstraints(
+                SourceRequirement.REQUIRED, false, false,
+                null, null, LearningActivityIntent.STANDARD)
+                .withRetrievalActivityType(com.hippocampus.learning.domain.RetrievalActivityType.SHORT_ANSWER);
+        EvidencePackage evidencePackage = mock(EvidencePackage.class);
+        when(evidencePackage.groundingMode()).thenReturn(GroundingMode.STRICT_SOURCE);
+        ActivityEvidencePort.Evidence evidence = new ActivityEvidencePort.Evidence(
+                Set.of(), new RagActivityEvidencePayload(evidencePackage));
+        return new ActivityAiTaskPort.Request(
+                "Explain cardiac output", "Cardiac output", LearningActionType.UNDERSTANDING_CHECK,
+                LearningDifficulty.FOUNDATIONAL, StudyMissionGroundingMode.STRICT_SOURCE,
+                evidence, List.of(), constraints);
+    }
+
     private static ActivityAiTaskPort.Request applicationRequest() {
         LearningActionConstraints constraints = new LearningActionConstraints(
                 SourceRequirement.REQUIRED, false, false,
@@ -279,9 +343,9 @@ class LearningActivityAiTaskAdapterTests {
     private static AiTaskExecutionOptions executionOptions() {
         ProviderRoutingCandidate candidate = new ProviderRoutingCandidate(
                 ProviderId.GEMINI, "test-model",
-                Set.of(AiTaskType.EXPLANATION, AiTaskType.CONCEPT_CONNECTION,
+                Set.of(AiTaskType.EXPLANATION, AiTaskType.QUESTION_GENERATION, AiTaskType.CONCEPT_CONNECTION,
                         AiTaskType.CONTEXTUAL_APPLICATION),
-                Set.of(AiTaskType.EXPLANATION, AiTaskType.CONCEPT_CONNECTION,
+                Set.of(AiTaskType.EXPLANATION, AiTaskType.QUESTION_GENERATION, AiTaskType.CONCEPT_CONNECTION,
                         AiTaskType.CONTEXTUAL_APPLICATION),
                 true, true, true, 0, 0, 0);
         return new AiTaskExecutionOptions(
