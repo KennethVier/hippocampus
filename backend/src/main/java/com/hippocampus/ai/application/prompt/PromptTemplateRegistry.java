@@ -314,6 +314,61 @@ public final class PromptTemplateRegistry {
                     [SOURCE_CONTEXT]
                     {sourceContext}
                     """),
+            template(PromptId.CONCEPT_CONNECTION_V2, PromptAuthority.TASK_CONTRACT, """
+                    PROMPT ID: CONCEPT_CONNECTION_V2
+
+                    [TASK_CONTRACT]
+
+                    Identify the single most educationally useful connection between the
+                    TARGET_CONCEPT and another relevant medical concept.
+
+                    TARGET_CONCEPT:
+                    {targetConcept}
+
+                    LEARNING_OBJECTIVE:
+                    {learningObjective}
+
+                    Rules:
+                    - Choose a connection that improves understanding or future application.
+                    - Prefer relationships such as structure-function, mechanism-effect,
+                      normal-abnormal, anatomy-physiology, pathology-clinical finding, or
+                      drug mechanism-effect when relevant.
+                    - Do not create cross-subject connections merely to appear comprehensive.
+                    - Match complexity to LEARNER_CONTEXT.
+                    - Explain why the relationship matters.
+                    - Ask the learner to explain or reconstruct the relationship just presented.
+                    - Keep the expected answer suitable for response evaluation and do not
+                      reveal it in the learner-facing question.
+                    - Do not repeat an already-established connection unless intentional
+                      repetition is requested.
+                    - Ground source-specific claims in SOURCE_CONTEXT.
+                    - If no useful supported connection is available, report that limitation.
+
+                    [OUTPUT_CONTRACT]
+
+                    Return valid structured output matching:
+
+                    {
+                      "fromConcept": "string",
+                      "toConcept": "string",
+                      "relationshipType": "string",
+                      "relationship": "string",
+                      "whyItMatters": "string",
+                      "question": "string",
+                      "expectedAnswer": "string",
+                      "sourceReferences": ["string"],
+                      "limitations": ["string"]
+                    }
+
+                    [LEARNER_CONTEXT]
+                    {learnerContext}
+
+                    [KNOWN_CONNECTIONS]
+                    {knownConnections}
+
+                    [SOURCE_CONTEXT]
+                    {sourceContext}
+                    """),
             template(PromptId.CONTEXTUAL_APPLICATION_V1, PromptAuthority.TASK_CONTRACT, """
                     PROMPT ID: CONTEXTUAL_APPLICATION_V1
 
@@ -399,8 +454,7 @@ public final class PromptTemplateRegistry {
 
     private static final Map<PromptId, PromptTemplate> BY_ID = indexById();
     private static final Map<String, PromptTemplate> BY_VERSION_IDENTITY = indexByVersionIdentity();
-    private static final Map<AiTaskType, PromptTemplate> BY_TASK_TYPE = indexByTaskType();
-    private static final Map<AiOutputContract, String> REPAIR_SCHEMAS = indexRepairSchemas();
+    private static final Map<PromptId, String> REPAIR_SCHEMAS = indexRepairSchemas();
 
     public PromptTemplate resolveSystemPolicy() {
         return resolveSystemPolicy(PromptId.HIPPOCAMPUS_SYSTEM_V1.name());
@@ -428,10 +482,6 @@ public final class PromptTemplateRegistry {
         if (!template.promptId().supports(taskType)) {
             throw new IllegalArgumentException(promptVersion + " does not match task type " + taskType);
         }
-        PromptTemplate registeredForTask = BY_TASK_TYPE.get(taskType);
-        if (registeredForTask == null || registeredForTask != template) {
-            throw new IllegalArgumentException("unsupported prompt registration for task type " + taskType);
-        }
         return template;
     }
 
@@ -443,9 +493,25 @@ public final class PromptTemplateRegistry {
         return TEMPLATES;
     }
 
-    public String resolveRepairSchema(AiOutputContract outputContract) {
+    public String resolveRepairSchema(AiOutputContract outputContract, PromptId originalPromptId) {
         Objects.requireNonNull(outputContract, "outputContract must not be null");
-        return REPAIR_SCHEMAS.get(outputContract);
+        Objects.requireNonNull(originalPromptId, "originalPromptId must not be null");
+        String schema = REPAIR_SCHEMAS.get(originalPromptId);
+        if (schema == null) {
+            throw new IllegalArgumentException(originalPromptId + " has no repairable output schema");
+        }
+        AiTaskType expectedTask = AiTaskType.valueOf(outputContract.name());
+        if (!originalPromptId.supports(expectedTask)) {
+            throw new IllegalArgumentException(
+                    originalPromptId + " does not match output contract " + outputContract);
+        }
+        return schema;
+    }
+
+    public String resolveRepairSchema(AiOutputContract outputContract, String originalTaskPromptVersion) {
+        Objects.requireNonNull(outputContract, "outputContract must not be null");
+        PromptTemplate original = resolveKnownVersion(originalTaskPromptVersion);
+        return resolveRepairSchema(outputContract, original.promptId());
     }
 
     private PromptTemplate resolveKnownVersion(String promptVersion) {
@@ -487,30 +553,21 @@ public final class PromptTemplateRegistry {
         return Map.copyOf(templates);
     }
 
-    private static Map<AiTaskType, PromptTemplate> indexByTaskType() {
-        EnumMap<AiTaskType, PromptTemplate> templates = new EnumMap<>(AiTaskType.class);
+    private static Map<PromptId, String> indexRepairSchemas() {
+        EnumMap<PromptId, String> schemas = new EnumMap<>(PromptId.class);
+        EnumMap<AiOutputContract, Boolean> covered = new EnumMap<>(AiOutputContract.class);
         for (PromptTemplate template : BY_ID.values()) {
-            template.promptId().taskType().ifPresent(taskType -> {
-                if (templates.put(taskType, template) != null) {
-                    throw new IllegalStateException("duplicate prompt registration for task type " + taskType);
-                }
-            });
+            AiTaskType taskType = template.promptId().taskType().orElse(null);
+            if (taskType == null || taskType == AiTaskType.STRUCTURED_OUTPUT_REPAIR) {
+                continue;
+            }
+            schemas.put(template.promptId(), extractOutputSchema(template));
+            covered.put(AiOutputContract.valueOf(taskType.name()), Boolean.TRUE);
         }
-        if (templates.size() != AiTaskType.values().length) {
-            throw new IllegalStateException("every supported task type must have one prompt registration");
-        }
-        return Map.copyOf(templates);
-    }
-
-    private static Map<AiOutputContract, String> indexRepairSchemas() {
-        EnumMap<AiOutputContract, String> schemas = new EnumMap<>(AiOutputContract.class);
         for (AiOutputContract outputContract : AiOutputContract.values()) {
-            AiTaskType taskType = AiTaskType.valueOf(outputContract.name());
-            PromptTemplate template = BY_TASK_TYPE.get(taskType);
-            if (template == null) {
+            if (!covered.containsKey(outputContract)) {
                 throw new IllegalStateException("missing prompt registration for " + outputContract);
             }
-            schemas.put(outputContract, extractOutputSchema(template));
         }
         return Map.copyOf(schemas);
     }

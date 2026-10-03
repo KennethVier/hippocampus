@@ -18,7 +18,7 @@ import com.hippocampus.ai.domain.AiTaskContext;
 import com.hippocampus.ai.domain.AiTaskRequest;
 import com.hippocampus.ai.domain.AiTaskType;
 import com.hippocampus.ai.domain.ConceptConnectionInput;
-import com.hippocampus.ai.domain.ConceptConnectionResult;
+import com.hippocampus.ai.domain.ConceptConnectionV2Result;
 import com.hippocampus.ai.domain.ContextualApplicationInput;
 import com.hippocampus.ai.domain.ContextualApplicationResult;
 import com.hippocampus.ai.domain.ExplanationInput;
@@ -97,7 +97,7 @@ public final class LearningActivityAiTaskAdapter implements ActivityAiTaskPort {
                         "QUESTION", AiTaskType.QUESTION_GENERATION, question.question(),
                         question, request.groundingMode(), metadata, true, false);
             }
-            case ConceptConnectionResult connection -> content(
+            case ConceptConnectionV2Result connection -> content(
                     "CONCEPT_CONNECTION", AiTaskType.CONCEPT_CONNECTION, connection.relationship(),
                     connection, request.groundingMode(), metadata, true, false);
             case ContextualApplicationResult application -> {
@@ -145,7 +145,7 @@ public final class LearningActivityAiTaskAdapter implements ActivityAiTaskPort {
             }
             case CONNECT -> {
                 taskType = AiTaskType.CONCEPT_CONNECTION;
-                promptId = PromptId.CONCEPT_CONNECTION_V1;
+                promptId = PromptId.CONCEPT_CONNECTION_V2;
                 outputContract = AiOutputContract.CONCEPT_CONNECTION;
                 taskContext = new ConceptConnectionInput(
                         request.targetDisplayName(), request.objective(), List.of());

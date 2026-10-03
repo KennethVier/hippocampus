@@ -83,7 +83,8 @@ public final class PromptContextBuilder {
             StructuredOutputRepairInput input = (StructuredOutputRepairInput) request.taskContext();
             return new BuildState(
                     Map.of(
-                            "schema", registry.resolveRepairSchema(request.outputContract()),
+                            "schema", registry.resolveRepairSchema(
+                                    request.outputContract(), input.originalTaskPromptVersion()),
                             "previousResponse", jsonString(input.previousResponse())),
                     List.of(),
                     0,

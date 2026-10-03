@@ -108,6 +108,7 @@ public class GetStudyMissionUseCase {
         try {
             decoded = contentDecoder.decode(
                     activity.activityType(), artifact.artifactType(), artifact.taskType(),
+                    artifact.promptId(), artifact.promptVersion(),
                     artifact.contentPayload());
         } catch (IllegalArgumentException invalidStoredArtifact) {
             throw notFound();
@@ -128,7 +129,7 @@ public class GetStudyMissionUseCase {
                     value.difficulty(), value.limitations());
             case GeneratedActivityContentDecoder.Connection value -> new ConnectionContent(
                     value.fromConcept(), value.toConcept(), value.relationshipType(),
-                    value.relationship(), value.whyItMatters(), value.limitations());
+                    value.relationship(), value.whyItMatters(), value.question(), value.limitations());
             case GeneratedActivityContentDecoder.Application value -> new ApplicationContent(
                     value.scenario(), value.question(), value.targetConcept(),
                     value.difficulty(), value.limitations());
@@ -196,6 +197,7 @@ public class GetStudyMissionUseCase {
             String relationshipType,
             String relationship,
             String whyItMatters,
+            String question,
             List<String> limitations) implements Content {}
 
     public record ApplicationContent(

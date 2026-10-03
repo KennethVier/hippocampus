@@ -59,7 +59,7 @@ class AiTaskContractsTests {
         for (AiOutputContract outputContract : AiOutputContract.values()) {
             AiTaskRequest<StructuredOutputRepairInput> request = request(
                     AiTaskType.STRUCTURED_OUTPUT_REPAIR,
-                    new StructuredOutputRepairInput("{malformed"),
+                    new StructuredOutputRepairInput("{malformed", "EXPLANATION_V1"),
                     outputContract);
 
             assertThat(request.outputContract()).isEqualTo(outputContract);
@@ -133,7 +133,7 @@ class AiTaskContractsTests {
                 new ConceptConnectionInput("cord", "connect", List.of("cord-radial nerve")),
                 new ContextualApplicationInput(
                         "cord", "apply", ApplicationLevel.MECHANISM_TO_FINDING),
-                new StructuredOutputRepairInput("{malformed"),
+                new StructuredOutputRepairInput("{malformed", "EXPLANATION_V1"),
                 new ExplanationResult(
                         "cord", "explanation", List.of("point"), List.of(),
                         List.of("chunk-1"), false, List.of()),
@@ -149,6 +149,11 @@ class AiTaskContractsTests {
                 new ConceptConnectionResult(
                         "posterior cord", "radial nerve", "anatomy", "gives rise to",
                         "localizes injury", List.of("chunk-1"), List.of()),
+                new ConceptConnectionV2Result(
+                        "posterior cord", "radial nerve", "anatomy", "gives rise to",
+                        "localizes injury", "Explain how these concepts are related.",
+                        "The posterior cord gives rise to the radial nerve.",
+                        List.of("chunk-1"), List.of()),
                 new ContextualApplicationResult(
                         "A patient has wrist drop.", "Which structure is involved?", "posterior cord",
                         List.of("connect deficit to nerve"), "Radial nerve pathway",
@@ -158,6 +163,22 @@ class AiTaskContractsTests {
         for (Object contract : contracts) {
             assertThat(objectMapper.writeValueAsString(contract)).startsWith("{").endsWith("}");
         }
+    }
+
+    @Test
+    void conceptConnectionV2RequiresQuestionAndExpectedAnswer() {
+        assertThatThrownBy(() -> new ConceptConnectionV2Result(
+                        "posterior cord", "radial nerve", "anatomy", "gives rise to",
+                        "localizes injury", " ", "The posterior cord gives rise to the radial nerve.",
+                        List.of(), List.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("question");
+        assertThatThrownBy(() -> new ConceptConnectionV2Result(
+                        "posterior cord", "radial nerve", "anatomy", "gives rise to",
+                        "localizes injury", "Explain the relationship.", " ",
+                        List.of(), List.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("expectedAnswer");
     }
 
     @Test
@@ -184,6 +205,7 @@ class AiTaskContractsTests {
                 QuestionGenerationInput.class, QuestionGenerationResult.class,
                 ResponseEvaluationInput.class, ResponseEvaluationResult.class,
                 ConceptConnectionInput.class, ConceptConnectionResult.class,
+                ConceptConnectionV2Result.class,
                 ContextualApplicationInput.class, ContextualApplicationResult.class,
                 StructuredOutputRepairInput.class);
 

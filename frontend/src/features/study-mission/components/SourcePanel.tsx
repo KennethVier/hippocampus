@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { Button } from '../../../components/ui'
+import { Button, Drawer } from '../../../components/ui'
 import type { MissionSource } from '../api/studyMissionContracts'
 
 export interface SourcePanelProps {
@@ -8,10 +8,11 @@ export interface SourcePanelProps {
 
 export function SourcePanel({ sources }: SourcePanelProps) {
   const [expanded, setExpanded] = useState(true)
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const sourceListId = useId()
 
-  return (
-    <aside aria-labelledby={`${sourceListId}-heading`} className="mission-sources">
+  return <>
+    <aside aria-labelledby={`${sourceListId}-heading`} className="mission-sources mission-sources-desktop">
       <div className="mission-sources-heading">
         <div>
           <p className="mission-eyebrow">Provenance</p>
@@ -31,16 +32,26 @@ export function SourcePanel({ sources }: SourcePanelProps) {
 
       {sources.length === 0 ? <p className="mission-muted">No sources are available for this activity.</p> : null}
       {expanded && sources.length > 0 ? (
-        <ul className="mission-source-list" id={sourceListId}>
-          {sources.map((source) => (
-            <li className="mission-source" key={source.sourceReferenceId}>
-              <p className="mission-source-title">{source.materialTitle}</p>
-              {source.pageNumber !== null ? <p>Page {source.pageNumber}</p> : null}
-              {source.displayLabel ? <p>{source.displayLabel}</p> : null}
-            </li>
-          ))}
-        </ul>
+        <SourceList id={sourceListId} sources={sources} />
       ) : null}
     </aside>
-  )
+    <div className="mission-sources-mobile">
+      <Button aria-haspopup="dialog" onClick={() => setDrawerOpen(true)} variant="secondary">View sources</Button>
+      {drawerOpen ? (
+        <Drawer open onClose={() => setDrawerOpen(false)} title="Sources" closeLabel="Close sources">
+          {sources.length > 0 ? <SourceList sources={sources} /> : <p className="mission-muted">No sources are available for this activity.</p>}
+        </Drawer>
+      ) : null}
+    </div>
+  </>
+}
+
+function SourceList({ id, sources }: { id?: string; sources: MissionSource[] }) {
+  return <ul className="mission-source-list" id={id}>{sources.map((source) => (
+    <li className="mission-source" key={source.sourceReferenceId}>
+      <p className="mission-source-title">{source.materialTitle}</p>
+      {source.pageNumber !== null ? <p>Page {source.pageNumber}</p> : null}
+      {source.displayLabel ? <p>{source.displayLabel}</p> : null}
+    </li>
+  ))}</ul>
 }

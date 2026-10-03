@@ -288,7 +288,7 @@ class ProviderRouterTests {
             case CONCEPT_CONNECTION -> new ConceptConnectionInput("posterior cord", "connect", List.of());
             case CONTEXTUAL_APPLICATION -> new ContextualApplicationInput(
                     "posterior cord", "apply", ApplicationLevel.MECHANISM_TO_FINDING);
-            case STRUCTURED_OUTPUT_REPAIR -> new StructuredOutputRepairInput("{malformed");
+            case STRUCTURED_OUTPUT_REPAIR -> new StructuredOutputRepairInput("{malformed", "EXPLANATION_V1");
         };
         AiOutputContract outputContract = taskType == AiTaskType.STRUCTURED_OUTPUT_REPAIR
                 ? AiOutputContract.EXPLANATION

@@ -105,6 +105,30 @@ class SubmitActivityResponseUseCaseTests {
     }
 
     @Test
+    void connectResponseUsesTheNormalValidatedEvaluationAndAttemptFlow() {
+        missions.current = mission(
+                StudyMissionStatus.ACTIVE, "ACTIVE", ACTIVITY_ID,
+                LearningActivityType.CONNECT, LearningActionType.CONNECT, LearningStage.CONNECTION);
+        contracts.contract = new ActivityResponseContractRepository.ResponseContract(
+                "Explain how preload influences stroke volume.",
+                List.of("Preload", "Stroke volume"),
+                "Greater preload increases ventricular stretch and stroke volume.",
+                null,
+                "Reference answer");
+
+        var result = execute("Greater filling stretches the ventricle and increases ejection.", null);
+
+        assertThat(result.activity().status()).isEqualTo("COMPLETED");
+        assertThat(result.attempt().responseText())
+                .isEqualTo("Greater filling stretches the ventricle and increases ejection.");
+        assertThat(evaluation.request.question())
+                .isEqualTo("Explain how preload influences stroke volume.");
+        assertThat(evaluation.request.expectedConcepts())
+                .containsExactly("Preload", "Stroke volume");
+        assertThat(evaluation.calls).isOne();
+    }
+
+    @Test
     void invalidResponseIsRejectedWithoutPersistence() {
         contracts.contract = aiContract();
 
@@ -244,15 +268,27 @@ class SubmitActivityResponseUseCaseTests {
 
     private static StudyMission mission(
             StudyMissionStatus status, String activityStatus, UUID currentActivityId) {
+        return mission(
+                status, activityStatus, currentActivityId,
+                LearningActivityType.RETRIEVE, LearningActionType.RETRIEVE, LearningStage.RETRIEVAL);
+    }
+
+    private static StudyMission mission(
+            StudyMissionStatus status,
+            String activityStatus,
+            UUID currentActivityId,
+            LearningActivityType activityType,
+            LearningActionType actionType,
+            LearningStage stage) {
         LearningActivity activity = new LearningActivity(
-                ACTIVITY_ID, OBJECTIVE_ID, LearningActivityType.RETRIEVE,
-                LearningActionType.RETRIEVE, "recall", "retrieval-v1", activityStatus,
+                ACTIVITY_ID, OBJECTIVE_ID, activityType,
+                actionType, "recall", "retrieval-v1", activityStatus,
                 LearningDifficulty.FOUNDATIONAL, 1, ARTIFACT_ID, true,
                 NOW.minusSeconds(60), "COMPLETED".equals(activityStatus) ? NOW.minusSeconds(1) : null,
                 NOW.minusSeconds(120), Set.of());
         return new StudyMission(
                 MISSION_ID, USER_ID, UUID.randomUUID(), null, status,
-                LearningStage.RETRIEVAL, StudyMissionGroundingMode.STRICT_SOURCE, 30,
+                stage, StudyMissionGroundingMode.STRICT_SOURCE, 30,
                 NOW.minusSeconds(300), null, null, currentActivityId,
                 List.of(new MissionMaterial(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), null)),
                 List.of(new LearningObjective(
@@ -337,10 +373,12 @@ class SubmitActivityResponseUseCaseTests {
         private Result result = aiResult(Outcome.CORRECT);
         private RuntimeException failure;
         private int calls;
+        private Request request;
 
         @Override
         public Result evaluate(Request request) {
             calls++;
+            this.request = request;
             if (failure != null) {
                 throw failure;
             }

@@ -67,11 +67,12 @@ public class ContinueStudyMissionUseCase {
                 .orElseThrow(ContinueStudyMissionUseCase::missionNotFound);
         LearningActivity current = validateCurrentActivity(mission, command.activityId());
 
-        // ADR-0010: if the current activity is an unfinished understanding-family presentation with
-        // no validated response contract, persist completion without a StudentAttempt or evidence.
+        // Presentation-only activities persist lifecycle completion without a StudentAttempt or
+        // evidence. Historical V1 connections then let the Learning Engine request a current V2
+        // response-bearing connection instead of fabricating an evaluation contract.
         // The normal persisted-state assembler then reconstructs that completion for the policy layer.
         StudyMission missionForDecision = mission;
-        if (isPresentationOnlyUnderstand(current, userId)) {
+        if (isPresentationOnly(current, userId)) {
             Instant now = clock.instant();
             PersistPresentationCompletion.Result persisted = presentationCompletion.persist(
                     new PersistPresentationCompletion.Command(
@@ -102,18 +103,23 @@ public class ContinueStudyMissionUseCase {
     }
 
     /**
-     * Returns true when the current activity is an UNDERSTAND-type presentation that has not yet
-     * been given an evaluated response (status is PENDING or ACTIVE).
-     * These activities are completed via Continue without producing a StudentAttempt.
+     * Returns true for an unfinished understanding-family presentation without a response
+     * contract or an explicitly versioned historical V1 concept-connection presentation.
      */
-    private boolean isPresentationOnlyUnderstand(LearningActivity activity, UUID userId) {
-        boolean presentationFamily = activity.representedActionType() == LearningActionType.UNDERSTAND
+    private boolean isPresentationOnly(LearningActivity activity, UUID userId) {
+        boolean understandingPresentation = activity.representedActionType() == LearningActionType.UNDERSTAND
                 || activity.representedActionType() == LearningActionType.HINT
                 || activity.representedActionType() == LearningActionType.PREREQUISITE_SUPPORT;
-        return presentationFamily
-                && PersistActivityResponse.isUnfinished(activity)
-                && contracts.findValidatedForActivity(
-                        activity.id(), activity.generatedArtifactId(), userId).isEmpty();
+        if (!PersistActivityResponse.isUnfinished(activity)) {
+            return false;
+        }
+        if (understandingPresentation) {
+            return contracts.findValidatedForActivity(
+                    activity.id(), activity.generatedArtifactId(), userId).isEmpty();
+        }
+        return activity.representedActionType() == LearningActionType.CONNECT
+                && contracts.isHistoricalPresentationOnly(
+                        activity.id(), activity.generatedArtifactId(), userId);
     }
 
     private static void requireCompleted(LearningActivity current) {

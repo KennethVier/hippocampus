@@ -43,9 +43,34 @@ public class JsonActivityResponseContractRepository implements ActivityResponseC
                 .flatMap(this::parse);
     }
 
+    @Override
+    public boolean isHistoricalPresentationOnly(
+            UUID activityId, UUID artifactId, UUID ownerId) {
+        Objects.requireNonNull(activityId, "activityId must not be null");
+        Objects.requireNonNull(ownerId, "ownerId must not be null");
+        if (artifactId == null) {
+            return false;
+        }
+        return artifacts.findById(artifactId)
+                .filter(artifact -> ownerId.equals(artifact.userId()))
+                .filter(artifact -> "VALIDATED".equals(artifact.validationStatus()))
+                .filter(artifact -> "CONCEPT_CONNECTION".equals(artifact.artifactType()))
+                .filter(artifact -> "CONCEPT_CONNECTION".equals(artifact.taskType()))
+                .filter(artifact -> "CONCEPT_CONNECTION_V1".equals(artifact.promptId()))
+                .filter(artifact -> "1".equals(artifact.promptVersion()))
+                .isPresent();
+    }
+
     private Optional<ResponseContract> parse(GeneratedArtifactRepository.GeneratedArtifact artifact) {
         if (artifact.contentPayload() == null || artifact.contentPayload().isBlank()) {
             return Optional.empty();
+        }
+        if ("CONCEPT_CONNECTION".equals(artifact.artifactType())) {
+            if (!"CONCEPT_CONNECTION".equals(artifact.taskType())
+                    || !"CONCEPT_CONNECTION_V2".equals(artifact.promptId())
+                    || !"2".equals(artifact.promptVersion())) {
+                return Optional.empty();
+            }
         }
         try {
             JsonNode root = objectMapper.readTree(artifact.contentPayload());
@@ -57,7 +82,15 @@ public class JsonActivityResponseContractRepository implements ActivityResponseC
             List<String> expectedConcepts = textArray(root.path("expectedConcepts"));
             if (expectedConcepts.isEmpty()) {
                 String concept = optionalText(root, "concept");
-                expectedConcepts = concept == null ? List.of() : List.of(concept);
+                if (concept != null) {
+                    expectedConcepts = List.of(concept);
+                } else {
+                    expectedConcepts = connectionConcepts(root);
+                    if ("CONCEPT_CONNECTION".equals(artifact.artifactType())
+                            && expectedConcepts.isEmpty()) {
+                        return Optional.empty();
+                    }
+                }
             }
             return Optional.of(new ResponseContract(
                     question,
@@ -68,6 +101,14 @@ public class JsonActivityResponseContractRepository implements ActivityResponseC
         } catch (JsonProcessingException invalidPayload) {
             return Optional.empty();
         }
+    }
+
+    private static List<String> connectionConcepts(JsonNode root) {
+        String fromConcept = optionalText(root, "fromConcept");
+        String toConcept = optionalText(root, "toConcept");
+        return fromConcept != null && toConcept != null
+                ? List.of(fromConcept, toConcept)
+                : List.of();
     }
 
     private static List<String> textArray(JsonNode node) {

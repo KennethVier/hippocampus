@@ -25,7 +25,7 @@ import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.domain.AiTaskRequest;
 import com.hippocampus.ai.domain.AiTaskType;
 import com.hippocampus.ai.domain.ApplicationDifficulty;
-import com.hippocampus.ai.domain.ConceptConnectionResult;
+import com.hippocampus.ai.domain.ConceptConnectionV2Result;
 import com.hippocampus.ai.domain.ContextualApplicationResult;
 import com.hippocampus.ai.domain.Evaluation;
 import com.hippocampus.ai.domain.EvaluationCertainty;
@@ -250,7 +250,9 @@ class AiSourceReferenceValidatorTests {
                         QuestionDifficulty.FOUNDATIONAL, references, List.of()),
                 new ResponseEvaluationResult(Evaluation.CORRECT, List.of(), List.of(), List.of(), "feedback",
                         EvaluationCertainty.SUFFICIENT, RecommendedAction.CONTINUE, references, List.of()),
-                new ConceptConnectionResult("from", "to", "type", "relationship", "why", references, List.of()),
+                new ConceptConnectionV2Result(
+                        "from", "to", "type", "relationship", "why",
+                        "How are they related?", "from relates to to", references, List.of()),
                 new ContextualApplicationResult("scenario", "question", "concept", List.of("reason"),
                         "answer", List.of("feedback"), ApplicationDifficulty.FOUNDATIONAL_APPLIED,
                         references, List.of()));

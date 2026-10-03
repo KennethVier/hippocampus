@@ -50,6 +50,7 @@ export const connectionActivitySchema = activityBaseSchema.extend({
     relationshipType: nonEmpty,
     relationship: nonEmpty,
     whyItMatters: nonEmpty,
+    question: nonEmpty.nullable(),
     limitations: limitationsSchema,
   }).nullable(),
 })
@@ -102,6 +103,37 @@ export const studyMissionSchema = z.strictObject({
   updatedAt: instant,
 })
 
+export const activitySubmissionSchema = z.strictObject({
+  missionId: z.uuid(),
+  activityId: z.uuid(),
+  outcome: nonEmpty,
+  correctConcepts: z.array(nonEmpty),
+  missingConcepts: z.array(nonEmpty),
+  misconceptions: z.array(nonEmpty),
+  feedback: nonEmpty,
+  missionStatus: nonEmpty,
+  stage: nonEmpty,
+  updatedAt: instant,
+  continuationAvailable: z.boolean(),
+})
+
+const lifecycleSourceScopeSchema = z.strictObject({
+  materialId: z.uuid(),
+  materialVersionId: z.uuid(),
+  documentNodeId: z.uuid().nullable(),
+})
+
+export const studyMissionLifecycleSchema = z.strictObject({
+  id: z.uuid(),
+  status: nonEmpty,
+  currentActivityId: z.uuid().nullable(),
+  sourceScopes: z.array(lifecycleSourceScopeSchema),
+  startedAt: instant.nullable(),
+  completedAt: instant.nullable(),
+  stoppedAt: instant.nullable(),
+  updatedAt: instant,
+})
+
 export type MissionSource = z.infer<typeof missionSourceSchema>
 export type ExplanationActivity = z.infer<typeof explanationActivitySchema>
 export type RetrievalActivity = z.infer<typeof retrievalActivitySchema>
@@ -112,3 +144,5 @@ export type FeedbackActivity = z.infer<typeof feedbackActivitySchema>
 export type ReflectionActivity = z.infer<typeof reflectionActivitySchema>
 export type StudyMissionActivity = z.infer<typeof studyMissionActivitySchema>
 export type StudyMission = z.infer<typeof studyMissionSchema>
+export type ActivitySubmission = z.infer<typeof activitySubmissionSchema>
+export type StudyMissionLifecycle = z.infer<typeof studyMissionLifecycleSchema>

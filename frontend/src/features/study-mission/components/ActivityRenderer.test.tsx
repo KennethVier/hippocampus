@@ -31,9 +31,10 @@ describe('ActivityRenderer', () => {
   })
 
   it('renders a learning connection', () => {
-    renderActivity({ ...base, type: 'CONNECTION', content: { fromConcept: 'Preload', toConcept: 'Stroke volume', relationshipType: 'DIRECTLY_INFLUENCES', relationship: 'Greater filling can increase ejection.', whyItMatters: 'It connects venous return to cardiac output.', limitations: [] } })
+    renderActivity({ ...base, type: 'CONNECTION', content: { fromConcept: 'Preload', toConcept: 'Stroke volume', relationshipType: 'DIRECTLY_INFLUENCES', relationship: 'Greater filling can increase ejection.', whyItMatters: 'It connects venous return to cardiac output.', question: 'Explain how preload influences stroke volume.', limitations: [] } })
     expect(screen.getByRole('heading', { name: 'Learning connection' })).toBeInTheDocument()
     expect(screen.getByText('It connects venous return to cardiac output.')).toBeInTheDocument()
+    expect(screen.getByText('Explain how preload influences stroke volume.')).toHaveClass('mission-question')
   })
 
   it('renders an educational application without hidden answers or reasoning', () => {

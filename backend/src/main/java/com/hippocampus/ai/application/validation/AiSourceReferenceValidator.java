@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.hippocampus.ai.application.prompt.PromptContext;
 import com.hippocampus.ai.domain.AiTaskRequest;
 import com.hippocampus.ai.domain.ConceptConnectionResult;
+import com.hippocampus.ai.domain.ConceptConnectionV2Result;
 import com.hippocampus.ai.domain.ContextualApplicationResult;
 import com.hippocampus.ai.domain.ExplanationResult;
 import com.hippocampus.ai.domain.QuestionGenerationResult;
@@ -90,6 +91,7 @@ public class AiSourceReferenceValidator {
             case QuestionGenerationResult value -> value.sourceReferences();
             case ResponseEvaluationResult value -> value.sourceReferences();
             case ConceptConnectionResult value -> value.sourceReferences();
+            case ConceptConnectionV2Result value -> value.sourceReferences();
             case ContextualApplicationResult value -> value.sourceReferences();
             default -> throw new AiGroundingValidationException(
                     AiGroundingValidationException.Reason.UNSUPPORTED_RESULT_TYPE);

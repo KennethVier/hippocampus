@@ -10,6 +10,8 @@ public interface GeneratedActivityContentDecoder {
             LearningActivityType activityType,
             String artifactType,
             String taskType,
+            String promptId,
+            String promptVersion,
             String contentPayload);
 
     sealed interface DecodedContent permits Explanation, Retrieval, Connection, Application {}
@@ -36,6 +38,7 @@ public interface GeneratedActivityContentDecoder {
             String relationshipType,
             String relationship,
             String whyItMatters,
+            String question,
             List<String> limitations) implements DecodedContent {}
 
     record Application(

@@ -5,10 +5,12 @@ import java.util.Objects;
 import java.util.Set;
 
 import com.hippocampus.ai.application.provider.ProviderExecutionResult;
+import com.hippocampus.ai.application.prompt.PromptId;
 import com.hippocampus.ai.domain.ActivityType;
 import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.domain.AiTaskContext;
 import com.hippocampus.ai.domain.ConceptConnectionResult;
+import com.hippocampus.ai.domain.ConceptConnectionV2Result;
 import com.hippocampus.ai.domain.ContextualApplicationResult;
 import com.hippocampus.ai.domain.ExplanationResult;
 import com.hippocampus.ai.domain.QuestionGenerationResult;
@@ -37,10 +39,18 @@ public final class AiOutputValidator {
             ProviderExecutionResult providerResult,
             AiOutputContract outputContract,
             AiTaskContext taskContext) {
+        return validate(providerResult, outputContract, taskContext, null);
+    }
+
+    public ValidatedAiResult<?> validate(
+            ProviderExecutionResult providerResult,
+            AiOutputContract outputContract,
+            AiTaskContext taskContext,
+            PromptId promptId) {
         Objects.requireNonNull(providerResult, "providerResult must not be null");
         Objects.requireNonNull(outputContract, "outputContract must not be null");
 
-        Object decoded = decode(providerResult.rawContent(), outputContract);
+        Object decoded = decode(providerResult.rawContent(), outputContract, promptId);
         validateBusinessRules(decoded, outputContract);
         validateRequestedQuestionContract(decoded, outputContract, taskContext);
         return new ValidatedAiResult<>(decoded);
@@ -60,12 +70,17 @@ public final class AiOutputValidator {
         }
     }
 
-    private Object decode(String rawOutput, AiOutputContract outputContract) {
+    private Object decode(
+            String rawOutput,
+            AiOutputContract outputContract,
+            PromptId promptId) {
         Class<?> resultType = switch (outputContract) {
             case EXPLANATION -> ExplanationResult.class;
             case QUESTION_GENERATION -> QuestionGenerationResult.class;
             case RESPONSE_EVALUATION -> ResponseEvaluationResult.class;
-            case CONCEPT_CONNECTION -> ConceptConnectionResult.class;
+            case CONCEPT_CONNECTION -> promptId == PromptId.CONCEPT_CONNECTION_V1
+                    ? ConceptConnectionResult.class
+                    : ConceptConnectionV2Result.class;
             case CONTEXTUAL_APPLICATION -> ContextualApplicationResult.class;
         };
 
@@ -82,6 +97,12 @@ public final class AiOutputValidator {
 
     private static void validateBusinessRules(Object decoded, AiOutputContract outputContract) {
         if (decoded instanceof ConceptConnectionResult connection
+                && connection.fromConcept().trim().equalsIgnoreCase(connection.toConcept().trim())) {
+            throw new AiSchemaValidationException(
+                    outputContract,
+                    AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION);
+        }
+        if (decoded instanceof ConceptConnectionV2Result connection
                 && connection.fromConcept().trim().equalsIgnoreCase(connection.toConcept().trim())) {
             throw new AiSchemaValidationException(
                     outputContract,

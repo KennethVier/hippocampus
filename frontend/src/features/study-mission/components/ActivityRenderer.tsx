@@ -63,8 +63,8 @@ function RetrievalPresentation({ activity }: { activity: RetrievalActivity }) {
 
 function ConnectionPresentation({ activity }: { activity: ConnectionActivity }) {
   if (activity.content === null) return <NeutralActivityState>Content is not available for this activity yet.</NeutralActivityState>
-  const { fromConcept, toConcept, relationshipType, relationship, whyItMatters, limitations } = activity.content
-  return <div><div className="mission-connection"><p><span>{fromConcept}</span><span aria-hidden="true">→</span><span>{toConcept}</span></p><p className="mission-relationship-type">{relationshipType}</p></div><p className="mission-explanation">{relationship}</p><section><h3>Why it matters</h3><p>{whyItMatters}</p></section>{limitations.length > 0 ? <ContentList heading="Keep in mind" items={limitations} /> : null}</div>
+  const { fromConcept, toConcept, relationshipType, relationship, whyItMatters, question, limitations } = activity.content
+  return <div><div className="mission-connection"><p><span>{fromConcept}</span><span aria-hidden="true">→</span><span>{toConcept}</span></p><p className="mission-relationship-type">{relationshipType}</p></div><p className="mission-explanation">{relationship}</p><section><h3>Why it matters</h3><p>{whyItMatters}</p></section>{question ? <p className="mission-question">{question}</p> : null}{limitations.length > 0 ? <ContentList heading="Keep in mind" items={limitations} /> : null}</div>
 }
 
 function ApplicationPresentation({ activity }: { activity: ApplicationActivity }) {

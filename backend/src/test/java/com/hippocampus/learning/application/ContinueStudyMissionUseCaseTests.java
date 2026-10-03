@@ -232,6 +232,36 @@ class ContinueStudyMissionUseCaseTests {
     }
 
     @Test
+    void historicalConnectionCompletesWithoutEvidenceAndMaterializesResponseBearingConnection() {
+        LearningActivity historicalConnection = pendingActivity(
+                ACTIVITY_ID, 1, LearningActionType.CONNECT);
+        missions.current = mission(
+                StudyMissionStatus.ACTIVE, historicalConnection, ACTIVITY_ID);
+        attempts = new InMemoryAttempts(List.of());
+        contracts.presentationOnlyActivities.add(ACTIVITY_ID);
+        NextLearningAction responseBearingConnection = connectionAction();
+        when(learningEngine.decide(any())).thenReturn(responseBearingConnection);
+        LearningActivity next = pendingActivity(UUID.randomUUID(), 2, LearningActionType.CONNECT);
+        when(materializer.execute(any())).thenReturn(
+                new MaterializeLearningActivityUseCase.Result(next, missions.current));
+
+        useCase = buildUseCase();
+        execute(ACTIVITY_ID);
+
+        assertThat(attempts.persisted).isEmpty();
+        ArgumentCaptor<LearningState> state = ArgumentCaptor.forClass(LearningState.class);
+        verify(learningEngine).decide(state.capture());
+        assertThat(state.getValue().evidence().strengthOf(EvidenceDimension.CONNECTION))
+                .isEqualTo(EvidenceStrength.INSUFFICIENT);
+        assertThat(state.getValue().recentActivityHistory()).singleElement().satisfies(history -> {
+            assertThat(history.activityType()).isEqualTo(LearningActionType.CONNECT.name());
+            assertThat(history.attemptOutcome()).isNull();
+        });
+        verify(materializer).execute(new MaterializeLearningActivityUseCase.Command(
+                MISSION_ID, responseBearingConnection, ACTIVITY_ID));
+    }
+
+    @Test
     void responseBearingUnderstandingFamilyActivitiesCannotBeSkippedThroughContinue() {
         for (LearningActionType represented : List.of(
                 LearningActionType.UNDERSTAND,
@@ -418,6 +448,13 @@ class ContinueStudyMissionUseCaseTests {
                                 com.hippocampus.learning.domain.RetrievalActivityType.SHORT_ANSWER));
     }
 
+    private static NextLearningAction connectionAction() {
+        return new NextLearningAction(
+                LearningActionType.CONNECT, OBJECTIVE_ID, "cardiac-output",
+                LearningDifficulty.INTERMEDIATE, "CONNECTION_READY", true,
+                com.hippocampus.learning.domain.LearningActionConstraints.unconstrained());
+    }
+
     private static StudentAttempt attempt() {
         return new StudentAttempt(
                 UUID.randomUUID(), USER_ID, ACTIVITY_ID, 1, "answer", null,
@@ -437,6 +474,7 @@ class ContinueStudyMissionUseCaseTests {
         LearningActivityType type = switch (represented) {
             case UNDERSTAND, HINT, PREREQUISITE_SUPPORT ->
                     LearningActivityType.UNDERSTAND;
+            case CONNECT -> LearningActivityType.CONNECT;
             default -> LearningActivityType.RETRIEVE;
         };
         return new LearningActivity(
@@ -528,6 +566,7 @@ class ContinueStudyMissionUseCaseTests {
 
     private static final class StubContracts implements ActivityResponseContractRepository {
         private final Set<UUID> responseBearingActivities = new java.util.HashSet<>();
+        private final Set<UUID> presentationOnlyActivities = new java.util.HashSet<>();
         private UUID lastOwnerId;
 
         @Override
@@ -539,6 +578,13 @@ class ContinueStudyMissionUseCaseTests {
             }
             return Optional.of(new ResponseContract(
                     "Question", List.of("concept"), "Expected answer", null, "Feedback"));
+        }
+
+        @Override
+        public boolean isHistoricalPresentationOnly(
+                UUID activityId, UUID artifactId, UUID ownerId) {
+            lastOwnerId = ownerId;
+            return presentationOnlyActivities.contains(activityId);
         }
     }
 }

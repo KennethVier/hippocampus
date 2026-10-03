@@ -4,7 +4,7 @@ Audience: AI, backend, architecture, QA, product, security, and
 Authors: Project Hippocampus Team
 Created: 2026-08-23
 Document ID: 12
-Last Updated: 2026-08-24
+Last Updated: 2026-10-04
 Owner: Project Hippocampus Team
 Prerequisites:
 - 00 - Project Vision
@@ -33,7 +33,7 @@ Scope: Prompt hierarchy, task prompt families, source and learner
   observability, and finalized v1 baseline templates.
 Status: Final
 Title: Prompt Engineering Strategy
-Version: 1.0.2
+Version: 1.0.3
 ---
 
 # 12 - Prompt Engineering Strategy
@@ -763,6 +763,51 @@ Return valid structured output matching:
 {sourceContext}
 ```
 
+`CONCEPT_CONNECTION_V1` is the historical presentation-only contract.
+It remains readable as persisted content and does not define a learner
+response or response-evaluation contract.
+
+## P-04 response-bearing version
+
+New connection activities use the explicitly versioned response-bearing
+contract:
+
+``` text
+PROMPT ID: CONCEPT_CONNECTION_V2
+
+[TASK_CONTRACT]
+
+Use the same bounded, source-grounded connection task as V1, and ask the
+learner to explain or reconstruct the relationship. Keep the expected answer
+suitable for response evaluation and do not reveal it in the learner-facing
+question.
+
+[OUTPUT_CONTRACT]
+
+Return valid structured output matching:
+
+{
+  "fromConcept": "string",
+  "toConcept": "string",
+  "relationshipType": "string",
+  "relationship": "string",
+  "whyItMatters": "string",
+  "question": "string",
+  "expectedAnswer": "string",
+  "sourceReferences": ["string"],
+  "limitations": ["string"]
+}
+
+[LEARNER_CONTEXT]
+{learnerContext}
+
+[KNOWN_CONNECTIONS]
+{knownConnections}
+
+[SOURCE_CONTEXT]
+{sourceContext}
+```
+
 ------------------------------------------------------------------------
 
 # 19. P-05 --- Contextualized Application Template v1
@@ -1180,6 +1225,7 @@ EXPLANATION_V1
 QUESTION_GENERATION_V1
 RESPONSE_EVALUATION_V1
 CONCEPT_CONNECTION_V1
+CONCEPT_CONNECTION_V2
 CONTEXTUAL_APPLICATION_V1
 REFLECTION_INTERPRETATION_V1
 MISSION_PLANNING_V1
@@ -1659,6 +1705,18 @@ It should cover:
   --------------------------------------------------------------------------
   Version           Date              Author            Changes
   ----------------- ----------------- ----------------- --------------------
+  1.0.3             2026-10-04        Project           Restored the historical
+                                      Hippocampus Team  presentation-only V1
+                                                        contract and introduced
+                                                        response-bearing
+                                                        CONCEPT_CONNECTION_V2
+
+  1.0.2             2026-10-03        Project           Added response-bearing
+                                      Hippocampus Team  question and expected
+                                                        answer fields to the
+                                                        concept-connection
+                                                        output contract
+
   1.0.1             2026-08-23        Project           Added
                                       Hippocampus Team  provider-portable
                                                         prompt requirements

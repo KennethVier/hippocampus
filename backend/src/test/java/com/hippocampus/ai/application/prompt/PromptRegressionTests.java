@@ -26,12 +26,13 @@ class PromptRegressionTests {
         assertThat(system.promptId()).isEqualTo(goldenCase.systemPromptId());
         assertThat(system.version()).isEqualTo(1);
         assertThat(task.promptId()).isEqualTo(goldenCase.taskPromptId());
-        assertThat(task.version()).isEqualTo(1);
+        assertThat(task.version()).isEqualTo(goldenCase.taskPromptId().version());
         assertThat(task.content())
                 .contains("[TASK_CONTRACT]", "[OUTPUT_CONTRACT]")
                 .contains(goldenCase.requiredFragments().toArray(String[]::new))
                 .contains("Return valid structured output matching:\n\n"
-                        + registry.resolveRepairSchema(goldenCase.outputContract()))
+                        + registry.resolveRepairSchema(
+                                goldenCase.outputContract(), goldenCase.taskPromptId()))
                 .doesNotContain(goldenCase.forbiddenFragments().toArray(String[]::new));
     }
 
@@ -78,6 +79,16 @@ class PromptRegressionTests {
                 "SOURCE_CONTEXT", "EvidencePackage", "retrieve", "new evidence");
     }
 
+    @Test
+    void historicalConceptConnectionV1PreservesPresentationOnlySchema() {
+        PromptTemplate template = registry.resolveTask(
+                AiTaskType.CONCEPT_CONNECTION, PromptId.CONCEPT_CONNECTION_V1.name());
+
+        assertThat(template.content())
+                .contains("\"relationship\": \"string\"", "\"whyItMatters\": \"string\"")
+                .doesNotContain("\"question\": \"string\"", "\"expectedAnswer\": \"string\"");
+    }
+
     static Stream<PromptGoldenCase> goldenCases() {
         return Stream.of(
                 new PromptGoldenCase(
@@ -117,16 +128,18 @@ class PromptRegressionTests {
                                 "\"evaluation\": \"CORRECT | PARTIAL | INCORRECT | UNCERTAIN\""),
                         List.of("\"supplementalKnowledgeUsed\":", "\"scenario\":")),
                 new PromptGoldenCase(
-                        "concept-connection-v1",
+                        "concept-connection-v2",
                         AiTaskType.CONCEPT_CONNECTION,
                         AiOutputContract.CONCEPT_CONNECTION,
                         PromptId.HIPPOCAMPUS_SYSTEM_V1,
-                        PromptId.CONCEPT_CONNECTION_V1,
+                        PromptId.CONCEPT_CONNECTION_V2,
                         List.of(
                                 "single most educationally useful connection",
                                 "Ground source-specific claims in SOURCE_CONTEXT.",
                                 "If no useful supported connection is available, report that limitation.",
-                                "\"relationshipType\": \"string\""),
+                                "\"relationshipType\": \"string\"",
+                                "\"question\": \"string\"",
+                                "\"expectedAnswer\": \"string\""),
                         List.of("\"evaluation\":", "\"activityType\":")),
                 new PromptGoldenCase(
                         "contextual-application-v1",
