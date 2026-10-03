@@ -81,7 +81,8 @@ class ContinueStudyMissionUseCaseTests {
         verify(learningEngine).decide(state.capture());
         // History contains the one persisted RETRIEVE attempt
         assertThat(state.getValue().recentActivityHistory()).hasSize(1);
-        verify(materializer).execute(any());
+        verify(materializer).execute(new MaterializeLearningActivityUseCase.Command(
+                MISSION_ID, retrieveAction(), ACTIVITY_ID));
     }
 
     // --- Scenario 2: presentation-only UNDERSTAND activity — Continue marks COMPLETED, no StudentAttempt ---
@@ -276,6 +277,23 @@ class ContinueStudyMissionUseCaseTests {
     }
 
     // --- Scenario 12: engine decision after presentation — UNDERSTANDING_CHECK action materializes ---
+
+    @Test
+    void secondContinueForCompletedActivityCannotMaterializeAgain() {
+        LearningActivity next = pendingActivity(UUID.randomUUID(), 2, LearningActionType.RETRIEVE);
+        when(materializer.execute(any())).thenAnswer(invocation -> {
+            missions.current = missionWithNextActivity(next);
+            return new MaterializeLearningActivityUseCase.Result(next, missions.current);
+        });
+
+        execute(ACTIVITY_ID);
+        assertReason(
+                () -> execute(ACTIVITY_ID),
+                ActivityMaterializationException.Reason.STALE_MISSION);
+
+        verify(materializer, times(1)).execute(any());
+        assertThat(missions.current.activities()).hasSize(2);
+    }
 
     @Test
     void engineDecisionAfterPresentationMaterializesUnderstandingCheck() {
