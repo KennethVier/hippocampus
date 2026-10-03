@@ -5,7 +5,7 @@ Version: 1.0.0
 Status: Active
 Owner: Project Hippocampus Team
 Created: 2026-08-24
-Last Updated: 2026-10-02
+Last Updated: 2026-10-04
 Purpose: Operational tracker for implementing the frozen Hippocampus v1 Source of Truth phase by phase with concrete build requirements, tests, expected behavior, definition of done, and evidence.
 Authority: Document 26 defines implementation order; Documents 00–25 define product/technical requirements; Document 27 governs deviations.
 ---
@@ -1866,7 +1866,7 @@ responsibilities remain outside P5-06.
 - **Definition of Done:** Schema tests pass.
 - **Authority:** Documents 18
 - **Evidence / link:** P7-01 introduced Flyway V20 (`V20__create_study_mission_foundation.sql`) and the learning-owned Study Mission domain/port/JPA persistence foundation. V20 creates `study_missions`, corrected UUID-identified `mission_materials`, `learning_objectives`, `learning_activities`, and `activity_source_references`, plus the schema-only `generated_artifacts` prerequisite required by the authoritative nullable LearningActivity foreign key; no GeneratedArtifact domain behavior, repository, or use case was added. Mission source scope supports canonical whole-version rows with nullable `document_node_id` and node-scoped rows, enforces same-Material MaterialVersion and same-version DocumentNode relationships, and retains the frozen MaterialVersion after a newer version becomes active. Composite constraints enforce same-mission objective/activity and current-activity integrity. The repository load path requires both mission ID and authoritative owner ID. Focused PostgreSQL/Testcontainers validation passed 21 tests with 0 failures/errors/skips: 5 StudyMission persistence migration/FK/version scenarios, 5 Flyway migration regression tests including fresh V20/idempotency and exact table inventory, and all 11 architecture tests. No P7-02+ behavior, API/controller, AI/RAG execution, new dependency, or undocumented architecture deviation was introduced.
-- **Notes / blockers:** *None*
+- **Notes / blockers:** Merged via PR #203 (merge SHA `564fe6ca322f229409304766b1bc42356f634f3c`). Implementation and focused schema/persistence validation complete. External implementation review and independent security review remain unrecorded; P7-01 is not Done.
 
 ## P7-02 — Create StudentAttempt schema
 
@@ -1882,7 +1882,7 @@ responsibilities remain outside P5-06.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 18
 - **Evidence / link:** Added Flyway V21 (`V21__create_student_attempts.sql`) and the progress-owned, framework-independent `StudentAttempt` domain model, append-only repository port, and JDBC persistence adapter. The schema preserves immutable attempt history with positive per-activity attempt numbering, restrictive foreign keys, nullable response/evaluation artifact fields, and a unique `(learning_activity_id, attempt_number)` constraint. Append authorization resolves ownership through LearningActivity and StudyMission, and history reads are owner-scoped and ordered by attempt number. User-reported focused validation passed for `StudentAttemptPersistenceIntegrationTests`, `FlywayMigrationApplicationTests`, and `HippocampusArchitectureTests`. No P7-03+ behavior, API/controller, evaluation workflow, evidence update, provider/RAG call, new dependency, or undocumented architecture deviation was introduced.
-- **Notes / blockers:** _None_
+- **Notes / blockers:** Merged via PR #204 (merge SHA `ba1cee53c21b3a5e5803962797e0fe049e063a37`). Implementation and focused persistence validation complete. External implementation review and independent security review remain unrecorded; P7-02 is not Done.
 
 ## P7-03 — Implement StartStudyMissionUseCase
 
@@ -1898,13 +1898,13 @@ responsibilities remain outside P5-06.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 19
 - **Evidence / link:** Focused validation passed: `StartStudyMissionUseCaseTests`, `StudyMissionSourceCatalogIntegrationTests`, and `HippocampusArchitectureTests` — 21 tests, 0 failures, 0 errors, 0 skipped; Maven `BUILD SUCCESS` (2026-09-29).
-- **Notes / blockers:** _None_
+- **Notes / blockers:** Merged via PR #205 (merge SHA `429668941e6f2177219578a0c750fa59cf1cb994`). Implementation and focused validation complete. External implementation review and independent security review remain unrecorded; P7-03 is not Done.
 
 ## P7-04 — Implement activity materialization
 
 - **Workstream:** Application
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Turn NextLearningAction into concrete activity.
 - **Build:** For deterministic actions create directly; for AI tasks retrieve EvidencePackage, execute typed task, validate, persist artifact/activity/source refs.
 - **How it works:** Engine decides kind; AI creates bounded content.
@@ -1913,8 +1913,8 @@ responsibilities remain outside P5-06.
 - **Expected result:** Activity content is grounded and typed.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 11,18,19; ADR-0006
-- **Evidence / link:** ADR-0006 implemented. V22 preserves generated-artifact provenance and V23 adds durable represented action, question intent, and template signature metadata. Learning Engine reuse emits the exact compatible LearningActivity identity; materialization resolves that identity, reconstructs represented actions, rejects required/visual empty evidence before AI, and rejects deleted or unauthorized source provenance. Final focused validation passed: `NextLearningActionTests`, `AiRagFailurePolicyTests`, `UnderstandRetrievePolicyTests`, `ApplicationPolicyTests`, `LearningEngineTests`, `LearningEngineScenarioTests`, `Phase6LearningEngineGateTests`, `MaterializeLearningActivityUseCaseTests`, `ActivityMaterializationPersistenceIntegrationTests`, `FlywayMigrationApplicationTests`, and `HippocampusArchitectureTests` — 722 tests, 0 failures, 0 errors, 0 skipped; Maven `BUILD SUCCESS`; `HippocampusArchitectureTests` passed; `git diff --check` passed. General external implementation review: **APPROVED**. Independent security review: **SECURITY PASS** (2026-09-29).
-- **Notes / blockers:** External implementation and security gates are complete. P7-04 is not Done.
+- **Evidence / link:** PR #207; merge SHA `c402222c8e7adb5731b678c40ec69565ce4c8a46`; merged 2026-09-29. ADR-0006 implemented. V22 preserves generated-artifact provenance and V23 adds durable represented action, question intent, and template signature metadata. Learning Engine reuse emits the exact compatible LearningActivity identity; materialization resolves that identity, reconstructs represented actions, rejects required/visual empty evidence before AI, and rejects deleted or unauthorized source provenance. Final focused validation passed: `NextLearningActionTests`, `AiRagFailurePolicyTests`, `UnderstandRetrievePolicyTests`, `ApplicationPolicyTests`, `LearningEngineTests`, `LearningEngineScenarioTests`, `Phase6LearningEngineGateTests`, `MaterializeLearningActivityUseCaseTests`, `ActivityMaterializationPersistenceIntegrationTests`, `FlywayMigrationApplicationTests`, and `HippocampusArchitectureTests` — 722 tests, 0 failures, 0 errors, 0 skipped; Maven `BUILD SUCCESS`; `HippocampusArchitectureTests` passed; `git diff --check` passed. General external implementation review: **APPROVED**. Independent security review: **SECURITY PASS** (2026-09-29).
+- **Notes / blockers:** _None_
 
 ## P7-05 — Implement SubmitActivityResponseUseCase
 
@@ -1930,7 +1930,7 @@ responsibilities remain outside P5-06.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 19
 - **Evidence / link:** Implemented the response-submission application flow with owner-scoped attempt preparation, evaluation outside database transactions, validated result persistence, stale/duplicate-state protection, and Learning Engine next-action progression. Final controller/profile regression validation passed 10 tests with 0 failures, 0 errors, and 0 skipped. The complete backend suite passed 1,983 tests with 0 failures, 0 errors, and 11 skipped; Maven `BUILD SUCCESS` (2026-09-29). `git diff --check` passed.
-- **Notes / blockers:** Implementation and user validation are complete. External implementation review and the independent security gate remain required.
+- **Notes / blockers:** Merged via PR #208 (merge SHA `daf1baf02093d2e952c9a5b2858bba86e2c07f6b`). Implementation and user validation are complete. External implementation review and independent security review remain unrecorded; P7-05 is not Done.
 
 ## P7-06 — Implement pause/resume/stop mission
 
@@ -1946,7 +1946,7 @@ responsibilities remain outside P5-06.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 06,18
 - **Evidence / link:** Implemented owner-scoped pause, resume, and stop mission transitions and endpoints while preserving the current activity and frozen material-version continuity. Final controller/profile regression validation passed 10 tests with 0 failures, 0 errors, and 0 skipped. The complete backend suite passed 1,983 tests with 0 failures, 0 errors, and 11 skipped; Maven `BUILD SUCCESS` (2026-09-29). `git diff --check` passed.
-- **Notes / blockers:** Implementation and user validation are complete. External implementation review and the independent security gate remain required.
+- **Notes / blockers:** Merged via PR #208 (merge SHA `daf1baf02093d2e952c9a5b2858bba86e2c07f6b`). Implementation and user validation are complete. External implementation review and independent security review remain unrecorded; P7-06 is not Done.
 
 ## P7-07 — Implement explanation task end-to-end
 
@@ -1962,7 +1962,7 @@ responsibilities remain outside P5-06.
 - **Definition of Done:** Tests/eval pass.
 - **Authority:** Documents 07,12,15
 - **Evidence / link:** Implemented production explanation execution through ADR-0008 task-specific runtime configuration, the existing Provider Router and `AiExecutionOrchestrator`, authorized/frozen-scope RAG retrieval, canonical source-reference materialization, `RagActivityEvidencePayload`, and `LearningActivityAiTaskAdapter`. The production bean graph now supplies `ActivityEvidencePort`, `ActivityAiTaskPort`, and `MaterializeLearningActivityUseCase` when their required configured provider, AI, RAG, persistence, and validation dependencies are present. Enabled AI runtime configuration fails closed for missing/incomplete task policy, absent evaluation-approved eligible routes, or an eligible route whose provider adapter is unavailable. User reported the focused 71-test validation command passes after the two stale ADR-0007 test fixtures were corrected; the two modified test methods also passed agent-run focused validation with 2 tests, 0 failures, and 0 errors.
-- **Notes / blockers:** Implementation and focused user validation are complete. External implementation re-review and the independent security gate remain required; P7-07 is not Done.
+- **Notes / blockers:** Merged via PR #209 (merge SHA `311e7d1cc3cda60981f6f740f54629cd0f0a9eb3`). Implementation and focused user validation are complete. External implementation re-review and independent security review remain unrecorded; P7-07 is not Done.
 
 ## P7-08 — Implement retrieval-question task end-to-end
 
@@ -1978,7 +1978,7 @@ responsibilities remain outside P5-06.
 - **Definition of Done:** Eval pass.
 - **Authority:** Documents 03,07
 - **Evidence / link:** Implemented production question generation through ADR-0008 task-specific configured routing without hard-coded model IDs, provider priority, routing preference, or token budgets. ADR-0007 now fails closed: `NextLearningAction` and `PolicyActions` no longer insert retrieval types, while `UnderstandRetrievePolicy`, `TimeAwareMissionPolicy`, `ConnectionPolicy`, and `ApplicationPolicy` explicitly select `IDENTIFICATION` for visual-required retrieval and `SHORT_ANSWER` otherwise. `AiOutputValidator` rejects generated difficulty or activity-type mismatches through the existing business-rule/schema failure path. `ActivityAiTaskPort.Request` carries immutable prior retrieval-question intents derived from already-authorized mission activity history for the same learning objective, newest first and bounded to the v1 three-activity anti-repetition window; the candidate question intent remains separate. User reported the focused 71-test validation command passes after explicit retrieval types were added only to the two stale test fixtures; agent-run validation of those two changed methods passed with 2 tests, 0 failures, and 0 errors.
-- **Notes / blockers:** Implementation and focused user validation are complete. External implementation re-review and the independent security gate remain required; P7-08 is not Done.
+- **Notes / blockers:** Merged via PR #209 (merge SHA `311e7d1cc3cda60981f6f740f54629cd0f0a9eb3`). Implementation and focused user validation are complete. External implementation re-review and independent security review remain unrecorded; P7-08 is not Done.
 
 ## P7-09 — Implement response-evaluation task end-to-end
 
@@ -1994,13 +1994,13 @@ responsibilities remain outside P5-06.
 - **Definition of Done:** Golden eval pass.
 - **Authority:** Documents 11,15
 - **Evidence / link:** Implemented production response-evaluation composition using ADR-0008 task-specific `RESPONSE_EVALUATION` execution options and the existing `INTERACTIVE_EVALUATION` priority, Provider Router, orchestrator, structured-output validation, diagnostics, request management, and bounded P7-09 response-evaluation adapter contract. The completed production graph supplies `ResponseEvaluationPort` and therefore `SubmitActivityResponseUseCase` when the required configured AI and persistence dependencies are available. Runtime configuration remains provider-neutral and evaluation-gated, and no Learning Engine authority, P7-05 submission authority, transaction boundary, or Phase 8 evidence persistence was changed. User reported the focused 71-test validation command passes after the two unrelated stale ADR-0007 fixtures were corrected; the changed fixture methods passed agent-run focused validation with 2 tests, 0 failures, and 0 errors.
-- **Notes / blockers:** Implementation and focused user validation are complete. External implementation re-review and the independent security gate remain required; P7-09 is not Done.
+- **Notes / blockers:** Merged via PR #209 (merge SHA `311e7d1cc3cda60981f6f740f54629cd0f0a9eb3`). Implementation and focused user validation are complete. External implementation re-review and independent security review remain unrecorded; P7-09 is not Done.
 
 ## P7-10 — Implement concept-connection task
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Generate bounded relationship activity.
 - **Build:** Create connection explanation/question linking relevant concepts using evidence.
 - **How it works:** Engine decides when connection is needed.
@@ -2010,13 +2010,13 @@ responsibilities remain outside P5-06.
 - **Definition of Done:** Eval pass.
 - **Authority:** Documents 03,11
 - **Evidence / link:** PR #210; merged head `56429f8b70f433f0dfb17a7b852575f8ef60ee9b`; merge SHA `68d2c28d89a0a175acc38e9f6c011de63f37fec5`; merged 2026-09-30. User-owned `node scripts/validation/validate.mjs backend` PASS. `backend-clean-verify` PASS; `git-diff-check` PASS; GitHub Actions quality run #591 PASS; `backend-quality` PASS; `frontend-quality` PASS; `auth-e2e` PASS; `security` job PASS; Phase 1–6 gates PASS; external implementation review APPROVED; task/contract-level concept-connection semantic evaluation PASS; independent security review SECURITY PASS; Critical 0 / High 0 / Medium 0.
-- **Notes / blockers:** `CONCEPT_CONNECTION` provider/model approval remains an operational evaluation requirement before a real provider/model is enabled for `evaluationApprovedTasks`. Routing fails closed until that approval exists, so this does not block Ready for Review. P7-10 is not Done.
+- **Notes / blockers:** _None_
 
 ## P7-11 — Implement application-scenario task
 
 - **Workstream:** AI
 - **Priority:** Must
-- **Status:** Ready for Review
+- **Status:** Done
 - **Goal:** Generate practical scaffolded medical scenario.
 - **Build:** Create learner-appropriate scenario focused on target concept with expected reasoning and safety/educational framing.
 - **How it works:** Not patient-specific advice.
@@ -2026,7 +2026,7 @@ responsibilities remain outside P5-06.
 - **Definition of Done:** Eval pass.
 - **Authority:** Documents 03,07,15
 - **Evidence / link:** Implemented ADR-0009 learning-owned application-level selection, AI-backed `APPLY` contextual-application execution, complete validated payload materialization, deterministic output validation, and evaluation-gated runtime routing configuration requirements. PR #211; reviewed head `aa67391e667e9601d1d3a0ab63c01a5d21ed815f`; merge SHA `d84bf1fc4d2ab4e6de586925508a26c6ee82a901`; merged 2026-10-01 local project date context (GitHub `merged_at` 2026-09-30T17:09:08Z). Focused tests: 48 passed, 0 failures/errors/skipped. `node scripts/validation/validate.mjs backend`: PASS. `backend-clean-verify`: PASS. `git-diff-check`: PASS. GitHub Actions quality run #593: PASS. External implementation review: APPROVED. P7-11 task/contract-level semantic application evaluation: PASS. Independent security review: SECURITY PASS; Critical 0 / High 0 / Medium 0.
-- **Notes / blockers:** Do not mark Done. Provider/model `CONTEXTUAL_APPLICATION` approval remains operationally separate and routing remains fail closed.
+- **Notes / blockers:** _None_
 
 ## P7-12 — Build Study Mission route and ActivityRenderer
 
@@ -2062,7 +2062,7 @@ Critical 0 / High 0 / Medium 0.
 
 - **Workstream:** Frontend
 - **Priority:** Must
-- **Status:** Not Started
+- **Status:** Done
 - **Goal:** Make mission reliable in real browser use.
 - **Build:** Build useStudyMission hook, submit states, stale 409 refetch, pause/resume, timer display and source drawer.
 - **How it works:** Critical state changes wait for backend confirmation.
@@ -2071,8 +2071,8 @@ Critical 0 / High 0 / Medium 0.
 - **Expected result:** Mission survives refresh and rejects double submission.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 20
-- **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** ADR-0010 is accepted. Source-of-Truth alignment and the Mission Interaction API backend prerequisite/remediation are included in PR #214, including the preserved SEC-001 request-size controls. User validation, external implementation review, and independent security review remain required. Frontend P7-13 has not started.
+- **Evidence / link:** PR #218; reviewed head `b2c37832855b898b0d90937bff923c39e23fbe6c`; merge SHA `8f5b951622bc6869e467bd1a558e025e94a883f0`; merged 2026-10-04 project-local date. User validation passed for focused backend tests and backend/frontend validation scripts. GitHub Actions quality run #619 (`37144033463`) passed: `backend-quality`, `frontend-quality`, `auth-e2e`, `security`, and Phase 1–6 gates all succeeded. Two-tab stale-conflict handling, refresh/resume continuity, duplicate-write protection, pause/resume, learner-safe presentation, and version-aware Concept Connection structured-output repair were verified. External implementation review: **APPROVED**. Independent security review: **SECURITY PASS**; Critical 0 / High 0 / Medium 0.
+- **Notes / blockers:** _None_
 
 ## P7-14 — Phase 7 First Hippocampus gate
 
