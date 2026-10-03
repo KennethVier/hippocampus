@@ -150,10 +150,13 @@ function NativeOverlay({
       if (dialog?.open) {
         dialog.close()
       }
+      wasOpenRef.current = false
       if (previousBodyOverflowRef.current !== null) {
         document.body.style.overflow = previousBodyOverflowRef.current
+        previousBodyOverflowRef.current = null
       }
       restoreFocusRef.current?.focus()
+      restoreFocusRef.current = null
     }
   }, [dialogRef])
 

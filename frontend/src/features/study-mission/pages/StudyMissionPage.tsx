@@ -1,26 +1,24 @@
-import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router'
 import { z } from 'zod'
 import { ApiError } from '../../../api/apiClient'
 import { Button, ErrorState, Skeleton } from '../../../components/ui'
-import { getStudyMission } from '../api/studyMissionApi'
 import { ActivityRenderer } from '../components/ActivityRenderer'
+import { MissionInteraction } from '../components/MissionInteraction'
+import { MissionTimer } from '../components/MissionTimer'
 import { SourcePanel } from '../components/SourcePanel'
-import { studyMissionKeys } from '../queries/studyMissionQueries'
+import { useStudyMission } from '../hooks/useStudyMission'
 import '../studyMission.css'
 
 export function StudyMissionPage() {
   const rawMissionId = useParams().missionId
   const missionId = rawMissionId && z.uuid().safeParse(rawMissionId).success ? rawMissionId : null
-  const mission = useQuery({
-    queryKey: studyMissionKeys.detail(missionId ?? 'invalid'),
-    queryFn: ({ signal }) => getStudyMission(missionId ?? '', signal),
-    enabled: missionId !== null,
-  })
+  const studyMission = useStudyMission(missionId ?? '')
+  const { mission } = studyMission
 
-  if (missionId === null || isMissingMission(mission.error)) return <UnavailableMission />
+  if (missionId === null) return <UnavailableMission />
   if (mission.isPending) return <MissionLoading />
-  if (mission.isError) {
+  if (mission.data === undefined) {
+    if (isMissingMission(mission.error)) return <UnavailableMission />
     return <ErrorState title="Study mission could not be loaded" description="Try again when you are ready." action={<Button onClick={() => void mission.refetch()}>Try again</Button>} />
   }
 
@@ -32,12 +30,19 @@ export function StudyMissionPage() {
           <p className="mission-eyebrow">Focused study</p>
           <h1 id="study-mission-title">Study Mission</h1>
         </div>
-        <dl className="mission-context">
-          {current.stage !== null ? <div><dt>Stage</dt><dd>{displayLabel(current.stage)}</dd></div> : null}
-          <div><dt>Status</dt><dd>{displayLabel(current.status)}</dd></div>
-          {current.availableTimeMinutes !== null ? <div><dt>Available time</dt><dd>{current.availableTimeMinutes} minutes</dd></div> : null}
-        </dl>
+        <div className="mission-header-actions">
+          <dl className="mission-context">
+            {current.stage !== null ? <div><dt>Stage</dt><dd>{displayLabel(current.stage)}</dd></div> : null}
+            <div><dt>Status</dt><dd>{displayLabel(current.status)}</dd></div>
+          </dl>
+          <MissionTimer availableTimeMinutes={current.availableTimeMinutes} status={current.status} />
+          {current.status === 'ACTIVE' ? <Button disabled={studyMission.isPausing} onClick={studyMission.pause} variant="secondary">{studyMission.isPausing ? 'Pausing…' : 'Pause'}</Button> : null}
+          {current.status === 'PAUSED' ? <Button disabled={studyMission.isResuming} onClick={studyMission.resume}>{studyMission.isResuming ? 'Resuming…' : 'Resume'}</Button> : null}
+        </div>
       </header>
+
+      {studyMission.notice ? <div className="mission-conflict" role="status"><span>{studyMission.notice}</span><Button onClick={studyMission.dismissNotice} variant="tertiary">Dismiss</Button></div> : null}
+      {mission.isError && mission.data !== undefined ? <div className="mission-refetch-error" role="alert"><span>The latest mission state could not be loaded.</span><Button onClick={() => void mission.refetch()} variant="secondary">Try again</Button></div> : null}
 
       {current.currentActivity === null ? (
         <section className="mission-empty" aria-labelledby="mission-empty-heading">
@@ -47,7 +52,23 @@ export function StudyMissionPage() {
         </section>
       ) : (
         <div className="mission-learning-layout">
-          <ActivityRenderer activity={current.currentActivity} />
+          <div className="mission-main-column">
+            <ActivityRenderer activity={current.currentActivity} />
+            <MissionInteraction
+              activity={current.currentActivity}
+              confirmedContinue={studyMission.confirmedContinueId === current.currentActivity.id}
+              confirmedSubmission={studyMission.confirmedSubmissionId === current.currentActivity.id}
+              error={studyMission.interactionError}
+              isContinuing={studyMission.isContinuing}
+              isSubmitting={studyMission.isSubmitting}
+              key={current.currentActivity.id}
+              missionStatus={current.status}
+              onContinue={() => studyMission.continueMission(current.currentActivity!.id)}
+              onRetryState={() => void mission.refetch()}
+              onSubmit={(input) => studyMission.submitResponse(current.currentActivity!.id, input)}
+              submission={studyMission.submission}
+            />
+          </div>
           <SourcePanel sources={current.currentActivity.sources} />
         </div>
       )}

@@ -7,7 +7,13 @@ vi.mock('../../../api/apiClient', async (importOriginal) => {
   return { ...original, apiClient: { requestJson: transport.json } }
 })
 
-import { getStudyMission } from './studyMissionApi'
+import {
+  continueStudyMission,
+  getStudyMission,
+  pauseStudyMission,
+  resumeStudyMission,
+  submitActivityResponse,
+} from './studyMissionApi'
 
 const missionId = '3f2504e0-4f89-41d3-9a0c-0305e82c3301'
 const activityId = '9a7b3302-b431-45e1-90e3-298c9d80918f'
@@ -70,5 +76,64 @@ describe('study mission API contract', () => {
   it('returns the established ApiError shape for invalid responses', async () => {
     transport.json.mockResolvedValue({})
     await expect(getStudyMission(missionId)).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('submits an activity response and validates learner-safe feedback', async () => {
+    const result = {
+      missionId,
+      activityId,
+      outcome: 'PARTIAL',
+      correctConcepts: ['Preload'],
+      missingConcepts: ['Afterload'],
+      misconceptions: [],
+      feedback: 'Review the effect of afterload.',
+      missionStatus: 'ACTIVE',
+      stage: 'RETRIEVE',
+      updatedAt: '2026-10-02T01:02:00Z',
+      continuationAvailable: true,
+    }
+    transport.json.mockResolvedValue(result)
+
+    await expect(submitActivityResponse(missionId, activityId, { selectedOption: 'option-b' })).resolves.toEqual(result)
+    expect(transport.json).toHaveBeenCalledWith(
+      `/api/study-missions/${missionId}/activities/${activityId}/responses`,
+      { method: 'POST', body: { selectedOption: 'option-b' } },
+    )
+  })
+
+  it('rejects submission responses containing private evaluation fields', async () => {
+    transport.json.mockResolvedValue({
+      missionId, activityId, outcome: 'CORRECT', correctConcepts: [], missingConcepts: [], misconceptions: [],
+      feedback: 'Good work.', missionStatus: 'ACTIVE', stage: 'RETRIEVE', updatedAt: '2026-10-02T01:02:00Z',
+      continuationAvailable: true, expectedAnswer: 'private',
+    })
+    await expect(submitActivityResponse(missionId, activityId, { responseText: 'answer' })).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+
+  it('continues without sending a client-selected next action', async () => {
+    transport.json.mockResolvedValue(undefined)
+    await expect(continueStudyMission(missionId, activityId)).resolves.toBeUndefined()
+    expect(transport.json).toHaveBeenCalledWith(
+      `/api/study-missions/${missionId}/activities/${activityId}/continue`,
+      { method: 'POST' },
+    )
+  })
+
+  it.each(['pause', 'resume'] as const)('validates the %s lifecycle response', async (action) => {
+    const lifecycle = {
+      id: missionId,
+      status: action === 'pause' ? 'PAUSED' : 'ACTIVE',
+      currentActivityId: activityId,
+      sourceScopes: [{
+        materialId: '22222222-2222-4222-8222-222222222222',
+        materialVersionId: '33333333-3333-4333-8333-333333333333',
+        documentNodeId: '44444444-4444-4444-8444-444444444444',
+      }],
+      startedAt: '2026-10-02T01:00:00Z', completedAt: null, stoppedAt: null, updatedAt: '2026-10-02T01:02:00Z',
+    }
+    transport.json.mockResolvedValue(lifecycle)
+    const request = action === 'pause' ? pauseStudyMission : resumeStudyMission
+    await expect(request(missionId)).resolves.toEqual(lifecycle)
+    expect(transport.json).toHaveBeenCalledWith(`/api/study-missions/${missionId}/${action}`, { method: 'POST' })
   })
 })

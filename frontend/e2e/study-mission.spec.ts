@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 const missionId = '3f2504e0-4f89-41d3-9a0c-0305e82c3301'
 
-test('student opens a Study Mission and inspects learner-safe sources', async ({ page }) => {
+test('student opens a Study Mission and inspects learner-safe sources', async ({ page }, testInfo) => {
   await mockSession(page)
   await page.route(`**/api/study-missions/${missionId}`, async (route) => {
     await route.fulfill({
@@ -45,10 +45,27 @@ test('student opens a Study Mission and inspects learner-safe sources', async ({
   await expect(page.getByRole('heading', { level: 1, name: 'Study Mission' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Explanation' })).toBeVisible()
   await expect(page.getByText('Additional medical context')).toBeVisible()
-  await expect(page.getByText('Cardiovascular Physiology')).toBeVisible()
-  await page.getByRole('button', { name: 'Hide sources' }).click()
-  await expect(page.getByText('Cardiovascular Physiology')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Show sources' })).toHaveAttribute('aria-expanded', 'false')
+
+  if (testInfo.project.name === 'mobile-chromium') {
+    await expect(page.getByRole('button', { name: 'View sources' })).toBeVisible()
+    await expect(page.getByText('Cardiovascular Physiology')).not.toBeVisible()
+    await page.getByRole('button', { name: 'View sources' }).click()
+    const sources = page.getByRole('dialog', { name: 'Sources' })
+    await expect(sources).toBeVisible()
+    await expect(sources.getByText('Cardiovascular Physiology')).toBeVisible()
+    await sources.getByRole('button', { name: 'Close sources' }).click()
+    await expect(sources).toHaveCount(0)
+  } else {
+    const sources = page.getByRole('complementary', { name: 'Sources' })
+    await expect(sources).toBeVisible()
+    await expect(sources.getByText('Cardiovascular Physiology')).toBeVisible()
+    await sources.getByRole('button', { name: 'Hide sources' }).click()
+    await expect(sources.getByText('Cardiovascular Physiology')).toHaveCount(0)
+    await expect(sources.getByRole('button', { name: 'Show sources' })).toHaveAttribute('aria-expanded', 'false')
+    await sources.getByRole('button', { name: 'Show sources' }).click()
+    await expect(sources.getByText('Cardiovascular Physiology')).toBeVisible()
+  }
+
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
 })
 
@@ -67,6 +84,73 @@ test('conceals a missing Study Mission', async ({ page }) => {
   await expect(page.getByText('Private ownership detail')).toHaveCount(0)
 })
 
+test('a stale tab refetches authoritative mission state without resubmitting', async ({ browser }) => {
+  const context = await browser.newContext()
+  let completed = false
+  let responseWrites = 0
+  await mockContextSession(context)
+  await context.route(`**/api/study-missions/${missionId}`, async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback()
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(missionPresentation(completed ? 'COMPLETED' : 'PRESENTED')) })
+  })
+  await context.route(`**/api/study-missions/${missionId}/activities/*/responses`, async (route) => {
+    responseWrites += 1
+    if (completed) {
+      await route.fulfill({ status: 409, contentType: 'application/problem+json', body: JSON.stringify({ status: 409, code: 'MISSION_CONFLICT', message: 'stale version' }) })
+      return
+    }
+    completed = true
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      missionId, activityId: '9a7b3302-b431-45e1-90e3-298c9d80918f', outcome: 'CORRECT',
+      correctConcepts: ['Cardiac output'], missingConcepts: [], misconceptions: [], feedback: 'Correct.',
+      missionStatus: 'ACTIVE', stage: 'RETRIEVE', updatedAt: '2026-10-02T01:02:00Z', continuationAvailable: true,
+    }) })
+  })
+
+  const tabA = await context.newPage()
+  const tabB = await context.newPage()
+  await Promise.all([tabA.goto(`/missions/${missionId}`), tabB.goto(`/missions/${missionId}`)])
+  await Promise.all([
+    tabA.getByRole('radio', { name: 'Increased stroke volume' }).click(),
+    tabB.getByRole('radio', { name: 'Increased stroke volume' }).click(),
+  ])
+  await tabA.getByRole('button', { name: 'Submit response' }).click()
+  await expect(tabA.getByText('Correct.')).toBeVisible()
+
+  await tabB.getByRole('button', { name: 'Submit response' }).click()
+  await expect(tabB.getByText('This mission changed in another tab. The latest state has been loaded.')).toBeVisible()
+  await expect(tabB.getByRole('button', { name: 'Continue' })).toBeVisible()
+  await expect(tabB.getByRole('button', { name: 'Submit response' })).toHaveCount(0)
+  expect(responseWrites).toBe(2)
+  await context.close()
+})
+
+test('pause survives refresh and resume restores authoritative ACTIVE state', async ({ page }) => {
+  let status = 'ACTIVE'
+  await mockSession(page)
+  await page.route('**/api/auth/csrf', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ token: 'test-token' }) }))
+  await page.route(`**/api/study-missions/${missionId}`, async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback()
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...missionPresentation('PRESENTED'), status }) })
+  })
+  await page.route(`**/api/study-missions/${missionId}/pause`, async (route) => {
+    status = 'PAUSED'
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(lifecyclePresentation(status)) })
+  })
+  await page.route(`**/api/study-missions/${missionId}/resume`, async (route) => {
+    status = 'ACTIVE'
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(lifecyclePresentation(status)) })
+  })
+
+  await page.goto(`/missions/${missionId}`)
+  await page.getByRole('button', { name: 'Pause' }).click()
+  await expect(page.getByRole('button', { name: 'Resume' })).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Resume' })).toBeVisible()
+  await page.getByRole('button', { name: 'Resume' }).click()
+  await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible()
+})
+
 async function mockSession(page: Page) {
   await page.route('**/api/auth/me', async (route) => {
     await route.fulfill({
@@ -75,4 +159,34 @@ async function mockSession(page: Page) {
       body: JSON.stringify({ userId: '22222222-2222-4222-8222-222222222222' }),
     })
   })
+}
+
+async function mockContextSession(context: import('@playwright/test').BrowserContext) {
+  await context.route('**/api/auth/me', async (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ userId: '22222222-2222-4222-8222-222222222222' }),
+  }))
+  await context.route('**/api/auth/csrf', async (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ token: 'test-token' }),
+  }))
+}
+
+function missionPresentation(activityStatus: string) {
+  return {
+    id: missionId, status: 'ACTIVE', stage: 'RETRIEVE',
+    currentActivity: {
+      id: '9a7b3302-b431-45e1-90e3-298c9d80918f', type: 'RETRIEVAL', status: activityStatus,
+      difficulty: 'STANDARD', classification: null,
+      content: { subtype: 'MCQ', concept: 'Cardiac output', question: 'Which factor increases cardiac output?',
+        options: [{ id: 'option-a', text: 'Reduced heart rate' }, { id: 'option-b', text: 'Increased stroke volume' }], difficulty: 'STANDARD', limitations: [] },
+      sources: [],
+    },
+    availableTimeMinutes: 20, startedAt: '2026-10-02T01:00:00Z', completedAt: null, stoppedAt: null, updatedAt: '2026-10-02T01:01:00Z',
+  }
+}
+
+function lifecyclePresentation(status: string) {
+  return {
+    id: missionId, status, currentActivityId: '9a7b3302-b431-45e1-90e3-298c9d80918f', sourceScopes: [],
+    startedAt: '2026-10-02T01:00:00Z', completedAt: null, stoppedAt: null, updatedAt: '2026-10-02T01:02:00Z',
+  }
 }
