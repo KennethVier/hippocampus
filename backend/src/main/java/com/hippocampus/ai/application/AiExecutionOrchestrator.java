@@ -260,7 +260,7 @@ public final class AiExecutionOrchestrator {
                 AiTaskType.STRUCTURED_OUTPUT_REPAIR,
                 PromptId.STRUCTURED_OUTPUT_REPAIR_V1.name(),
                 originalRequest.learnerContext(),
-                new StructuredOutputRepairInput(malformedOutput),
+                new StructuredOutputRepairInput(malformedOutput, originalPrompt.taskPromptId().name()),
                 originalRequest.evidencePackage(),
                 originalRequest.groundingMode(),
                 originalRequest.outputContract());

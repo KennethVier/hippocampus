@@ -66,6 +66,9 @@ import com.hippocampus.ai.domain.ExplanationMode;
 import com.hippocampus.ai.domain.ExplanationResult;
 import com.hippocampus.ai.domain.LearnerContext;
 import com.hippocampus.ai.domain.StructuredOutputRepairInput;
+import com.hippocampus.ai.domain.ConceptConnectionInput;
+import com.hippocampus.ai.domain.ConceptConnectionResult;
+import com.hippocampus.ai.domain.ConceptConnectionV2Result;
 import com.hippocampus.ai.domain.ValidatedAiResult;
 import com.hippocampus.ai.infrastructure.validation.JacksonAiStructuredOutputDecoder;
 import com.hippocampus.identity.domain.AuthenticatedUser;
@@ -610,7 +613,7 @@ class AiExecutionOrchestratorTests {
                     AiTaskType.STRUCTURED_OUTPUT_REPAIR,
                     PromptId.STRUCTURED_OUTPUT_REPAIR_V1.name(),
                     learnerContext(),
-                    new StructuredOutputRepairInput("previous invalid output"),
+                    new StructuredOutputRepairInput("previous invalid output", "EXPLANATION_V1"),
                     evidence(List.of()),
                     GroundingMode.GENERAL_KNOWLEDGE,
                     AiOutputContract.EXPLANATION);
@@ -618,6 +621,34 @@ class AiExecutionOrchestratorTests {
             assertThatThrownBy(() -> join(harness.execute(repairRequest)))
                     .isInstanceOf(AiSchemaValidationException.class);
             assertThat(harness.adapter.requests).hasSize(1);
+        }
+    }
+
+    @Test
+    void malformedConceptConnectionV1RepairsWithV1SchemaAndValidatesAsV1() {
+        try (Harness harness = harness(sequence("{\"broken\":", validConceptConnectionV1()))) {
+            ValidatedAiResult<?> result = join(harness.execute(
+                    conceptConnectionRequest(PromptId.CONCEPT_CONNECTION_V1)));
+
+            assertThat(result.result()).isInstanceOf(ConceptConnectionResult.class);
+            assertThat(harness.adapter.requests).hasSize(2);
+            String repairPrompt = harness.adapter.requests.get(1).promptContext().taskPrompt();
+            assertThat(repairPrompt)
+                    .contains("\"whyItMatters\": \"string\"")
+                    .doesNotContain("\"question\"", "\"expectedAnswer\"");
+        }
+    }
+
+    @Test
+    void malformedConceptConnectionV2RepairsWithV2SchemaAndValidatesAsV2() {
+        try (Harness harness = harness(sequence("{\"broken\":", validConceptConnectionV2()))) {
+            ValidatedAiResult<?> result = join(harness.execute(
+                    conceptConnectionRequest(PromptId.CONCEPT_CONNECTION_V2)));
+
+            assertThat(result.result()).isInstanceOf(ConceptConnectionV2Result.class);
+            assertThat(harness.adapter.requests).hasSize(2);
+            assertThat(harness.adapter.requests.get(1).promptContext().taskPrompt())
+                    .contains("\"question\": \"string\"", "\"expectedAnswer\": \"string\"");
         }
     }
 
@@ -760,6 +791,47 @@ class AiExecutionOrchestratorTests {
                 evidence(chunks),
                 groundingMode,
                 AiOutputContract.EXPLANATION);
+    }
+
+    private static AiTaskRequest<ConceptConnectionInput> conceptConnectionRequest(PromptId promptId) {
+        return new AiTaskRequest<>(
+                AiTaskType.CONCEPT_CONNECTION,
+                promptId.name(),
+                learnerContext(),
+                new ConceptConnectionInput("AV node", "Connect conduction to filling", List.of()),
+                evidence(List.of()),
+                GroundingMode.GENERAL_KNOWLEDGE,
+                AiOutputContract.CONCEPT_CONNECTION);
+    }
+
+    private static String validConceptConnectionV1() {
+        return """
+                {
+                  "fromConcept": "AV node",
+                  "toConcept": "ventricular filling",
+                  "relationshipType": "mechanism-effect",
+                  "relationship": "AV nodal delay allows ventricular filling.",
+                  "whyItMatters": "Timing preserves cardiac output.",
+                  "sourceReferences": [],
+                  "limitations": []
+                }
+                """;
+    }
+
+    private static String validConceptConnectionV2() {
+        return """
+                {
+                  "fromConcept": "AV node",
+                  "toConcept": "ventricular filling",
+                  "relationshipType": "mechanism-effect",
+                  "relationship": "AV nodal delay allows ventricular filling.",
+                  "whyItMatters": "Timing preserves cardiac output.",
+                  "question": "How does AV nodal delay affect ventricular filling?",
+                  "expectedAnswer": "It delays ventricular activation so filling can complete.",
+                  "sourceReferences": [],
+                  "limitations": []
+                }
+                """;
     }
 
     private static LearnerContext learnerContext() {

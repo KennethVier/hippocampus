@@ -59,7 +59,7 @@ class AiTaskContractsTests {
         for (AiOutputContract outputContract : AiOutputContract.values()) {
             AiTaskRequest<StructuredOutputRepairInput> request = request(
                     AiTaskType.STRUCTURED_OUTPUT_REPAIR,
-                    new StructuredOutputRepairInput("{malformed"),
+                    new StructuredOutputRepairInput("{malformed", "EXPLANATION_V1"),
                     outputContract);
 
             assertThat(request.outputContract()).isEqualTo(outputContract);
@@ -133,7 +133,7 @@ class AiTaskContractsTests {
                 new ConceptConnectionInput("cord", "connect", List.of("cord-radial nerve")),
                 new ContextualApplicationInput(
                         "cord", "apply", ApplicationLevel.MECHANISM_TO_FINDING),
-                new StructuredOutputRepairInput("{malformed"),
+                new StructuredOutputRepairInput("{malformed", "EXPLANATION_V1"),
                 new ExplanationResult(
                         "cord", "explanation", List.of("point"), List.of(),
                         List.of("chunk-1"), false, List.of()),

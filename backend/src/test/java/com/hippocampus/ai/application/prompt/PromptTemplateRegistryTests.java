@@ -152,23 +152,75 @@ class PromptTemplateRegistryTests {
     }
 
     @Test
-    void resolvesCanonicalRepairSchemaForEveryOutputContract() {
+    void resolvesCanonicalRepairSchemaForEveryOutputContractAndPromptVersion() {
         for (AiOutputContract outputContract : AiOutputContract.values()) {
             AiTaskType taskType = AiTaskType.valueOf(outputContract.name());
-            PromptId promptId = taskType == AiTaskType.CONCEPT_CONNECTION
-                    ? PromptId.CONCEPT_CONNECTION_V2
-                    : PromptId.valueOf(taskType.name() + "_V1");
-            PromptTemplate primaryTemplate = registry.resolveTask(taskType, promptId.name());
-            String repairSchema = registry.resolveRepairSchema(outputContract);
+            List<PromptId> promptIds = List.of(PromptId.values()).stream()
+                    .filter(promptId -> promptId.supports(taskType))
+                    .toList();
+            assertThat(promptIds).isNotEmpty();
+            for (PromptId promptId : promptIds) {
+                PromptTemplate primaryTemplate = registry.resolveTask(taskType, promptId.name());
+                String repairSchema = registry.resolveRepairSchema(outputContract, promptId.name());
 
-            assertThat(repairSchema).startsWith("{").endsWith("}");
-            assertThat(primaryTemplate.content())
-                    .contains("Return valid structured output matching:\n\n" + repairSchema);
+                assertThat(repairSchema).startsWith("{").endsWith("}");
+                assertThat(primaryTemplate.content())
+                        .contains("Return valid structured output matching:\n\n" + repairSchema);
+            }
         }
 
-        assertThat(registry.resolveRepairSchema(AiOutputContract.EXPLANATION))
+        assertThat(registry.resolveRepairSchema(AiOutputContract.EXPLANATION, "EXPLANATION_V1"))
                 .contains("\"supplementalKnowledgeUsed\": true | false")
                 .doesNotContain("\"supplementalKnowledgeUsed\":\"boolean\"");
+    }
+
+    @Test
+    void conceptConnectionRepairSchemaFollowsTheOriginatingPromptVersion() {
+        String v1 = registry.resolveRepairSchema(
+                AiOutputContract.CONCEPT_CONNECTION, PromptId.CONCEPT_CONNECTION_V1);
+        String v2 = registry.resolveRepairSchema(
+                AiOutputContract.CONCEPT_CONNECTION, PromptId.CONCEPT_CONNECTION_V2);
+
+        assertThat(v1)
+                .contains("\"relationship\": \"string\"", "\"whyItMatters\": \"string\"")
+                .doesNotContain("\"question\"", "\"expectedAnswer\"");
+        assertThat(v2).contains("\"question\": \"string\"", "\"expectedAnswer\": \"string\"");
+        assertThat(v1).isNotEqualTo(v2);
+
+        assertThat(registry.resolveRepairSchema(
+                        AiOutputContract.CONCEPT_CONNECTION, PromptId.CONCEPT_CONNECTION_V1.name()))
+                .isEqualTo(v1);
+        assertThat(registry.resolveRepairSchema(
+                        AiOutputContract.CONCEPT_CONNECTION, PromptId.CONCEPT_CONNECTION_V2.name()))
+                .isEqualTo(v2);
+    }
+
+    @Test
+    void repairSchemaResolutionFailsClosedForUnsupportedOriginatingIdentity() {
+        assertThatThrownBy(() -> registry.resolveRepairSchema(AiOutputContract.CONCEPT_CONNECTION, (String) null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> registry.resolveRepairSchema(AiOutputContract.CONCEPT_CONNECTION, (PromptId) null))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> registry.resolveRepairSchema(AiOutputContract.CONCEPT_CONNECTION, " "))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> registry.resolveRepairSchema(
+                        AiOutputContract.CONCEPT_CONNECTION, "CONCEPT_CONNECTION_V3"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("unknown prompt version");
+        assertThatThrownBy(() -> registry.resolveRepairSchema(
+                        AiOutputContract.CONCEPT_CONNECTION, PromptId.EXPLANATION_V1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match output contract");
+        assertThatThrownBy(() -> registry.resolveRepairSchema(
+                        AiOutputContract.CONCEPT_CONNECTION, "EXPLANATION_V1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match output contract");
+        assertThatThrownBy(() -> registry.resolveRepairSchema(
+                        AiOutputContract.CONCEPT_CONNECTION, PromptId.HIPPOCAMPUS_SYSTEM_V1))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> registry.resolveRepairSchema(
+                        AiOutputContract.CONCEPT_CONNECTION, PromptId.STRUCTURED_OUTPUT_REPAIR_V1))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

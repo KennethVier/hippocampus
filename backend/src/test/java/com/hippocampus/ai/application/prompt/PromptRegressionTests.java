@@ -31,7 +31,8 @@ class PromptRegressionTests {
                 .contains("[TASK_CONTRACT]", "[OUTPUT_CONTRACT]")
                 .contains(goldenCase.requiredFragments().toArray(String[]::new))
                 .contains("Return valid structured output matching:\n\n"
-                        + registry.resolveRepairSchema(goldenCase.outputContract()))
+                        + registry.resolveRepairSchema(
+                                goldenCase.outputContract(), goldenCase.taskPromptId()))
                 .doesNotContain(goldenCase.forbiddenFragments().toArray(String[]::new));
     }
 

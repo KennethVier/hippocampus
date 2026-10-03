@@ -454,8 +454,7 @@ public final class PromptTemplateRegistry {
 
     private static final Map<PromptId, PromptTemplate> BY_ID = indexById();
     private static final Map<String, PromptTemplate> BY_VERSION_IDENTITY = indexByVersionIdentity();
-    private static final Map<AiTaskType, PromptTemplate> BY_TASK_TYPE = indexByTaskType();
-    private static final Map<AiOutputContract, String> REPAIR_SCHEMAS = indexRepairSchemas();
+    private static final Map<PromptId, String> REPAIR_SCHEMAS = indexRepairSchemas();
 
     public PromptTemplate resolveSystemPolicy() {
         return resolveSystemPolicy(PromptId.HIPPOCAMPUS_SYSTEM_V1.name());
@@ -494,9 +493,25 @@ public final class PromptTemplateRegistry {
         return TEMPLATES;
     }
 
-    public String resolveRepairSchema(AiOutputContract outputContract) {
+    public String resolveRepairSchema(AiOutputContract outputContract, PromptId originalPromptId) {
         Objects.requireNonNull(outputContract, "outputContract must not be null");
-        return REPAIR_SCHEMAS.get(outputContract);
+        Objects.requireNonNull(originalPromptId, "originalPromptId must not be null");
+        String schema = REPAIR_SCHEMAS.get(originalPromptId);
+        if (schema == null) {
+            throw new IllegalArgumentException(originalPromptId + " has no repairable output schema");
+        }
+        AiTaskType expectedTask = AiTaskType.valueOf(outputContract.name());
+        if (!originalPromptId.supports(expectedTask)) {
+            throw new IllegalArgumentException(
+                    originalPromptId + " does not match output contract " + outputContract);
+        }
+        return schema;
+    }
+
+    public String resolveRepairSchema(AiOutputContract outputContract, String originalTaskPromptVersion) {
+        Objects.requireNonNull(outputContract, "outputContract must not be null");
+        PromptTemplate original = resolveKnownVersion(originalTaskPromptVersion);
+        return resolveRepairSchema(outputContract, original.promptId());
     }
 
     private PromptTemplate resolveKnownVersion(String promptVersion) {
@@ -538,31 +553,21 @@ public final class PromptTemplateRegistry {
         return Map.copyOf(templates);
     }
 
-    private static Map<AiTaskType, PromptTemplate> indexByTaskType() {
-        EnumMap<AiTaskType, PromptTemplate> templates = new EnumMap<>(AiTaskType.class);
+    private static Map<PromptId, String> indexRepairSchemas() {
+        EnumMap<PromptId, String> schemas = new EnumMap<>(PromptId.class);
+        EnumMap<AiOutputContract, Boolean> covered = new EnumMap<>(AiOutputContract.class);
         for (PromptTemplate template : BY_ID.values()) {
-            template.promptId().taskType().ifPresent(taskType -> {
-                PromptTemplate current = templates.get(taskType);
-                if (current == null || template.version() > current.version()) {
-                    templates.put(taskType, template);
-                }
-            });
+            AiTaskType taskType = template.promptId().taskType().orElse(null);
+            if (taskType == null || taskType == AiTaskType.STRUCTURED_OUTPUT_REPAIR) {
+                continue;
+            }
+            schemas.put(template.promptId(), extractOutputSchema(template));
+            covered.put(AiOutputContract.valueOf(taskType.name()), Boolean.TRUE);
         }
-        if (templates.size() != AiTaskType.values().length) {
-            throw new IllegalStateException("every supported task type must have one prompt registration");
-        }
-        return Map.copyOf(templates);
-    }
-
-    private static Map<AiOutputContract, String> indexRepairSchemas() {
-        EnumMap<AiOutputContract, String> schemas = new EnumMap<>(AiOutputContract.class);
         for (AiOutputContract outputContract : AiOutputContract.values()) {
-            AiTaskType taskType = AiTaskType.valueOf(outputContract.name());
-            PromptTemplate template = BY_TASK_TYPE.get(taskType);
-            if (template == null) {
+            if (!covered.containsKey(outputContract)) {
                 throw new IllegalStateException("missing prompt registration for " + outputContract);
             }
-            schemas.put(outputContract, extractOutputSchema(template));
         }
         return Map.copyOf(schemas);
     }
