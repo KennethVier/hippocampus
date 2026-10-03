@@ -172,19 +172,20 @@ public class StudyMissionApplicationConfiguration {
     @Bean
     @Lazy
     @ConditionalOnMissingBean
-    @ConditionalOnBean({StudentAttemptRepository.class, MaterializeLearningActivityUseCase.class,
-            PersistPresentationCompletion.class})
+    @ConditionalOnBean({StudentAttemptRepository.class, ActivityResponseContractRepository.class,
+            MaterializeLearningActivityUseCase.class, PersistPresentationCompletion.class})
     ContinueStudyMissionUseCase continueStudyMissionUseCase(
             CurrentUser currentUser,
             StudyMissionRepository missions,
             StudentAttemptRepository attempts,
+            ActivityResponseContractRepository contracts,
             LearningEngine learningEngine,
             StudyMissionLearningStateAssembler learningStateAssembler,
             MaterializeLearningActivityUseCase materializeLearningActivity,
             PersistPresentationCompletion persistPresentationCompletion,
             Clock studyMissionClock) {
         return new ContinueStudyMissionUseCase(
-                currentUser, missions, attempts, learningEngine, learningStateAssembler,
+                currentUser, missions, attempts, contracts, learningEngine, learningStateAssembler,
                 materializeLearningActivity, persistPresentationCompletion, studyMissionClock);
     }
 

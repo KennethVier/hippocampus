@@ -60,6 +60,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("21");
         assertSuccessfulFlywayVersion("22");
         assertSuccessfulFlywayVersion("23");
+        assertSuccessfulFlywayVersion("24");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertLearningActivityCompatibilityColumns();
@@ -108,6 +109,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("21");
         assertSuccessfulFlywayVersion("22");
         assertSuccessfulFlywayVersion("23");
+        assertSuccessfulFlywayVersion("24");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertLearningActivityCompatibilityColumns();
@@ -147,6 +149,34 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 .hasStackTraceContaining(
                         "V23 cannot safely reconstruct represented pedagogical action for legacy VISUAL learning activities");
         assertThat(learningActivityColumn(activityId, "activity_type")).isEqualTo("VISUAL");
+    }
+
+    @Test
+    void v24AllowsUnderstandingCheckRepresentedActionToBePersisted() throws Exception {
+        try (var context = startMigrationApplicationAtTarget("22")) {
+            assertThat(context.isActive()).isTrue();
+        }
+        UUID activityId = insertLegacyLearningActivity("RETRIEVE");
+
+        try (var context = startMigrationApplication()) {
+            assertThat(context.isActive()).isTrue();
+        }
+        try (var connection = openPostgresConnection();
+                var statement = connection.prepareStatement("""
+                        UPDATE learning_activities
+                        SET represented_action_type = 'UNDERSTANDING_CHECK'
+                        WHERE id = ?
+                        """)) {
+            statement.setObject(1, activityId);
+            assertThat(statement.executeUpdate()).isOne();
+        }
+
+        assertThat(learningActivityColumn(activityId, "represented_action_type"))
+                .isEqualTo("UNDERSTANDING_CHECK");
+        assertCheckConstraintContains(
+                "learning_activities", "chk_learning_activities_represented_action_type",
+                "UNDERSTAND", "UNDERSTANDING_CHECK", "RETRIEVE", "CONNECT", "APPLY",
+                "HINT", "PREREQUISITE_SUPPORT", "FEEDBACK", "REFLECT");
     }
 
     @Test

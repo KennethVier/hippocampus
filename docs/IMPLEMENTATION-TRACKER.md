@@ -2072,7 +2072,7 @@ Critical 0 / High 0 / Medium 0.
 - **Definition of Done:** Tests pass.
 - **Authority:** Documents 20
 - **Evidence / link:** _To be recorded during implementation_
-- **Notes / blockers:** Mission Interaction API prerequisite is in PR #214. Frontend implementation has not started. Independent security review identified SEC-001: unbounded learner-response request resource consumption. Remediation implemented; user validation and security re-review pending. ADR-0010 accepted; doc alignment (docs 06, 11, 18, 19, 20) and backend implementation (Continue no-evidence path, UNDERSTANDING_CHECK action type, Understanding Check materialization and evidence mapping, stale/duplicate protection) implemented in PR #214 and require user validation and independent review before frontend P7-13 work starts.
+- **Notes / blockers:** ADR-0010 is accepted. Source-of-Truth alignment and the Mission Interaction API backend prerequisite/remediation are included in PR #214, including the preserved SEC-001 request-size controls. User validation, external implementation review, and independent security review remain required. Frontend P7-13 has not started.
 
 ## P7-14 — Phase 7 First Hippocampus gate
 

@@ -33,7 +33,8 @@ final class PolicyActions {
             String rationaleCode,
             boolean aiTaskRequired,
             LearningActionConstraints constraints) {
-        boolean generatesRetrieval = actionType == LearningActionType.RETRIEVE && aiTaskRequired;
+        boolean generatesRetrieval = (actionType == LearningActionType.RETRIEVE
+                || actionType == LearningActionType.UNDERSTANDING_CHECK) && aiTaskRequired;
         boolean generatesApplication = actionType == LearningActionType.APPLY && aiTaskRequired;
         LearningActionConstraints applicableConstraints = constraints;
         if (!generatesRetrieval) {

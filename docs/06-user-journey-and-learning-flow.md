@@ -1,12 +1,12 @@
 ---
 Document ID: 06
 Title: User Journey & Learning Flow
-Version: 1.0.0
+Version: 1.0.1
 Status: Final
 Owner: Project Hippocampus Team
 Authors: Project Hippocampus Team
 Created: 2026-08-23
-Last Updated: 2026-08-23
+Last Updated: 2026-10-03
 Purpose: Define the end-to-end student journey and evidence-aligned learning flow through Hippocampus.
 Scope: Entry paths, material intake, study planning, Study Mission stages, learning-state adaptation, review loops, continuity, exceptions, and requirement traceability.
 Audience: Product, UX, engineering, AI, research, and medical-education contributors.
@@ -549,6 +549,11 @@ Help the student build or repair an accurate mental model.
 - Prerequisite connection
 - Relevant visual explanation
 - Worked example
+
+## Product Behavior
+
+- The system should avoid overwhelming the learner with every available detail at once.
+- When the learner remains confused, Hippocampus should adapt the explanation rather than simply repeat the same wording.
 
 ## Presentation-Only Completion (ADR-0010)
 
@@ -1325,6 +1330,7 @@ Feature
 | Version | Date | Author | Changes |
 |---|---|---|---|
 | 1.0.0 | 2026-08-23 | Project Hippocampus Team | Initial finalized end-to-end student journey and learning flow |
+| 1.0.1 | 2026-10-03 | Project Hippocampus Team | Restored adaptive explanation requirements and aligned presentation completion and Understanding Checks with ADR-0010 |
 
 ---
 

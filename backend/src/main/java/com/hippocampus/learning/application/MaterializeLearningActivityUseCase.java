@@ -216,8 +216,8 @@ public class MaterializeLearningActivityUseCase {
 
     private static LearningActivityType mapActivityType(NextLearningAction action) {
         LearningActivityType mapped = switch (action.actionType()) {
-            case UNDERSTAND, HINT, PREREQUISITE_SUPPORT, UNDERSTANDING_CHECK -> LearningActivityType.UNDERSTAND;
-            case RETRIEVE -> LearningActivityType.RETRIEVE;
+            case UNDERSTAND, HINT, PREREQUISITE_SUPPORT -> LearningActivityType.UNDERSTAND;
+            case RETRIEVE, UNDERSTANDING_CHECK -> LearningActivityType.RETRIEVE;
             case CONNECT -> LearningActivityType.CONNECT;
             case APPLY -> LearningActivityType.APPLY;
             case FEEDBACK -> LearningActivityType.FEEDBACK;
@@ -225,7 +225,8 @@ public class MaterializeLearningActivityUseCase {
             default -> throw failure(ActivityMaterializationException.Reason.NOT_MATERIALIZABLE,
                     action.actionType() + " requires reuse rather than direct materialization.");
         };
-        if (action.constraints().visualRequired()
+        if (action.actionType() != LearningActionType.UNDERSTANDING_CHECK
+                && action.constraints().visualRequired()
                 && switch (mapped) {
                     case UNDERSTAND, RETRIEVE, CONNECT, APPLY -> true;
                     default -> false;

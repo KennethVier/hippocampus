@@ -28,14 +28,16 @@ public final class UnderstandRetrievePolicy {
                     .findFirst()
                     .orElse(null);
             if (latestForConcept != null
-                    && PolicyHistory.represents(latestForConcept, LearningActionType.UNDERSTAND)
+                    && isUnderstandingPresentation(latestForConcept)
                     && latestForConcept.attemptOutcome() == null) {
                 return PolicyActions.action(
                         state,
                         LearningActionType.UNDERSTANDING_CHECK,
                         LearningDifficulty.FOUNDATIONAL,
                         UNDERSTANDING_CHECK_REQUIRED,
-                        true);
+                        true,
+                        state.actionConstraints().withRetrievalActivityType(
+                                RetrievalActivityType.SHORT_ANSWER));
             }
             return PolicyActions.action(
                     state,
@@ -74,5 +76,11 @@ public final class UnderstandRetrievePolicy {
                         state.actionConstraints().visualRequired()
                                 ? RetrievalActivityType.IDENTIFICATION
                                 : RetrievalActivityType.SHORT_ANSWER));
+    }
+
+    private static boolean isUnderstandingPresentation(RecentLearningActivity activity) {
+        return PolicyHistory.represents(activity, LearningActionType.UNDERSTAND)
+                || PolicyHistory.represents(activity, LearningActionType.HINT)
+                || PolicyHistory.represents(activity, LearningActionType.PREREQUISITE_SUPPORT);
     }
 }

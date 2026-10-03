@@ -26,6 +26,8 @@ import com.hippocampus.learning.domain.LearningActionType;
 import com.hippocampus.learning.domain.LearningActivity;
 import com.hippocampus.learning.domain.LearningActivityType;
 import com.hippocampus.learning.domain.LearningDifficulty;
+import com.hippocampus.learning.domain.EvidenceDimension;
+import com.hippocampus.learning.domain.EvidenceStrength;
 import com.hippocampus.learning.domain.LearningEngine;
 import com.hippocampus.learning.domain.LearningObjective;
 import com.hippocampus.learning.domain.LearningObjectiveStatus;
@@ -37,6 +39,7 @@ import com.hippocampus.learning.domain.StudyMission;
 import com.hippocampus.learning.domain.StudyMissionGroundingMode;
 import com.hippocampus.learning.domain.StudyMissionStatus;
 import com.hippocampus.learning.port.StudyMissionRepository;
+import com.hippocampus.learning.port.ActivityResponseContractRepository;
 import com.hippocampus.progress.domain.StudentAttempt;
 import com.hippocampus.progress.port.StudentAttemptRepository;
 import com.hippocampus.shared.application.error.ApplicationNotFoundException;
@@ -51,6 +54,7 @@ class ContinueStudyMissionUseCaseTests {
 
     private InMemoryMissions missions;
     private InMemoryAttempts attempts;
+    private StubContracts contracts;
     private LearningEngine learningEngine;
     private MaterializeLearningActivityUseCase materializer;
     private ContinueStudyMissionUseCase useCase;
@@ -61,6 +65,7 @@ class ContinueStudyMissionUseCaseTests {
         missions = new InMemoryMissions(mission(
                 StudyMissionStatus.ACTIVE, completedActivity(ACTIVITY_ID), ACTIVITY_ID));
         attempts = new InMemoryAttempts(List.of(attempt()));
+        contracts = new StubContracts();
         learningEngine = mock(LearningEngine.class);
         materializer = mock(MaterializeLearningActivityUseCase.class);
         when(learningEngine.decide(any())).thenReturn(retrieveAction());
@@ -136,6 +141,8 @@ class ContinueStudyMissionUseCaseTests {
         assertThat(state.getValue().recentActivityHistory().get(0).attemptOutcome()).isNull();
         assertThat(state.getValue().recentActivityHistory().get(0).activityType())
                 .isEqualTo(LearningActionType.UNDERSTAND.name());
+        assertThat(state.getValue().evidence().strengthOf(EvidenceDimension.UNDERSTANDING))
+                .isEqualTo(EvidenceStrength.INSUFFICIENT);
     }
 
     // --- Scenario 4: HINT-represented activity treated as presentation-only UNDERSTAND ---
@@ -221,6 +228,28 @@ class ContinueStudyMissionUseCaseTests {
         assertReason(
                 () -> execute(ACTIVITY_ID),
                 ActivityMaterializationException.Reason.UNFINISHED_CURRENT_ACTIVITY);
+        verify(materializer, times(0)).execute(any());
+    }
+
+    @Test
+    void responseBearingUnderstandingFamilyActivitiesCannotBeSkippedThroughContinue() {
+        for (LearningActionType represented : List.of(
+                LearningActionType.UNDERSTAND,
+                LearningActionType.HINT,
+                LearningActionType.PREREQUISITE_SUPPORT)) {
+            LearningActivity responseBearing = pendingResponseActivity(
+                    ACTIVITY_ID, 1, represented);
+            missions.current = mission(
+                    StudyMissionStatus.ACTIVE, responseBearing, ACTIVITY_ID);
+            contracts.responseBearingActivities.add(ACTIVITY_ID);
+            useCase = buildUseCase();
+
+            assertReason(
+                    () -> execute(ACTIVITY_ID),
+                    ActivityMaterializationException.Reason.UNFINISHED_CURRENT_ACTIVITY);
+            assertThat(contracts.lastOwnerId).isEqualTo(USER_ID);
+            assertThat(missions.current.activities().getFirst().status()).isEqualTo("PENDING");
+        }
         verify(materializer, times(0)).execute(any());
     }
 
@@ -316,6 +345,40 @@ class ContinueStudyMissionUseCaseTests {
         assertThat(cmd.getValue().action().actionType()).isEqualTo(LearningActionType.UNDERSTANDING_CHECK);
     }
 
+    @Test
+    void persistedPresentationCompletionIsReconstructedAfterMaterializationFailure() {
+        missions.current = mission(
+                StudyMissionStatus.ACTIVE,
+                pendingActivity(ACTIVITY_ID, 1, LearningActionType.UNDERSTAND), ACTIVITY_ID);
+        attempts = new InMemoryAttempts(List.of());
+        when(learningEngine.decide(any())).thenReturn(understandCheckAction());
+        LearningActivity next = pendingActivity(
+                UUID.randomUUID(), 2, LearningActionType.UNDERSTANDING_CHECK);
+        when(materializer.execute(any()))
+                .thenThrow(new RuntimeException("generation failed"))
+                .thenReturn(new MaterializeLearningActivityUseCase.Result(next, missions.current));
+
+        useCase = buildUseCase();
+        assertThatThrownBy(() -> execute(ACTIVITY_ID))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("generation failed");
+
+        assertThat(missions.current.activities().getFirst().status()).isEqualTo("COMPLETED");
+        assertThat(execute(ACTIVITY_ID).materializedActivityId()).isEqualTo(next.id());
+
+        ArgumentCaptor<LearningState> states = ArgumentCaptor.forClass(LearningState.class);
+        verify(learningEngine, times(2)).decide(states.capture());
+        assertThat(states.getAllValues()).allSatisfy(state -> {
+            assertThat(state.recentActivityHistory()).singleElement().satisfies(history -> {
+                assertThat(history.activityType()).isEqualTo(LearningActionType.UNDERSTAND.name());
+                assertThat(history.attemptOutcome()).isNull();
+            });
+            assertThat(state.evidence().strengthOf(EvidenceDimension.UNDERSTANDING))
+                    .isEqualTo(EvidenceStrength.INSUFFICIENT);
+        });
+        assertThat(attempts.persisted).isEmpty();
+    }
+
     private ContinueStudyMissionUseCase.Result execute(UUID activityId) {
         return useCase.execute(new ContinueStudyMissionUseCase.Command(MISSION_ID, activityId));
     }
@@ -324,7 +387,7 @@ class ContinueStudyMissionUseCaseTests {
         PersistPresentationCompletion presentationCompletion =
                 new PersistPresentationCompletion(missions);
         return new ContinueStudyMissionUseCase(
-                () -> new AuthenticatedUser(USER_ID), missions, attempts, learningEngine,
+                () -> new AuthenticatedUser(USER_ID), missions, attempts, contracts, learningEngine,
                 new StudyMissionLearningStateAssembler(), materializer,
                 presentationCompletion, Clock.fixed(NOW, ZoneOffset.UTC));
     }
@@ -349,7 +412,10 @@ class ContinueStudyMissionUseCaseTests {
     private static NextLearningAction understandCheckAction() {
         return new NextLearningAction(
                 LearningActionType.UNDERSTANDING_CHECK, OBJECTIVE_ID, "cardiac-output",
-                LearningDifficulty.FOUNDATIONAL, "UNDERSTANDING_CHECK_REQUIRED", true);
+                LearningDifficulty.FOUNDATIONAL, "UNDERSTANDING_CHECK_REQUIRED", true,
+                com.hippocampus.learning.domain.LearningActionConstraints.unconstrained()
+                        .withRetrievalActivityType(
+                                com.hippocampus.learning.domain.RetrievalActivityType.SHORT_ANSWER));
     }
 
     private static StudentAttempt attempt() {
@@ -369,7 +435,7 @@ class ContinueStudyMissionUseCaseTests {
     private static LearningActivity pendingActivity(
             UUID id, int sequence, LearningActionType represented) {
         LearningActivityType type = switch (represented) {
-            case UNDERSTAND, HINT, PREREQUISITE_SUPPORT, UNDERSTANDING_CHECK ->
+            case UNDERSTAND, HINT, PREREQUISITE_SUPPORT ->
                     LearningActivityType.UNDERSTAND;
             default -> LearningActivityType.RETRIEVE;
         };
@@ -377,6 +443,14 @@ class ContinueStudyMissionUseCaseTests {
                 id, OBJECTIVE_ID, type, represented,
                 null, null, "PENDING", LearningDifficulty.FOUNDATIONAL,
                 sequence, null, false, null, null, NOW, Set.of());
+    }
+
+    private static LearningActivity pendingResponseActivity(
+            UUID id, int sequence, LearningActionType represented) {
+        return new LearningActivity(
+                id, OBJECTIVE_ID, LearningActivityType.UNDERSTAND, represented,
+                null, null, "PENDING", LearningDifficulty.FOUNDATIONAL,
+                sequence, UUID.randomUUID(), false, null, null, NOW, Set.of());
     }
 
     private static StudyMission mission(
@@ -449,6 +523,22 @@ class ContinueStudyMissionUseCaseTests {
                     .filter(attempt -> attempt.learningActivityId().equals(activityId))
                     .filter(attempt -> attempt.userId().equals(ownerId))
                     .toList();
+        }
+    }
+
+    private static final class StubContracts implements ActivityResponseContractRepository {
+        private final Set<UUID> responseBearingActivities = new java.util.HashSet<>();
+        private UUID lastOwnerId;
+
+        @Override
+        public Optional<ResponseContract> findValidatedForActivity(
+                UUID activityId, UUID artifactId, UUID ownerId) {
+            lastOwnerId = ownerId;
+            if (!responseBearingActivities.contains(activityId)) {
+                return Optional.empty();
+            }
+            return Optional.of(new ResponseContract(
+                    "Question", List.of("concept"), "Expected answer", null, "Feedback"));
         }
     }
 }

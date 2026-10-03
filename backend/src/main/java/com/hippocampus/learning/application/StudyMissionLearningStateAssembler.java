@@ -40,7 +40,7 @@ public class StudyMissionLearningStateAssembler {
             AttemptOutcome pendingOutcome,
             Instant now) {
         Objects.requireNonNull(pendingOutcome, "pendingOutcome must not be null");
-        return assemble(mission, current, attempts, pendingOutcome, null, now);
+        return assemble(mission, current, attempts, pendingOutcome, now);
     }
 
     public LearningState assembleFromPersistedAttempts(
@@ -48,21 +48,7 @@ public class StudyMissionLearningStateAssembler {
             LearningActivity current,
             Map<UUID, List<StudentAttempt>> attempts,
             Instant now) {
-        return assemble(mission, current, attempts, null, null, now);
-    }
-
-    /**
-     * Assembles learning state after a presentation-only completion.
-     * The completed presentation activity is recorded in recent history with a null outcome
-     * so the UnderstandRetrievePolicy can detect the transition and select an UNDERSTANDING_CHECK.
-     */
-    public LearningState assembleAfterPresentationCompletion(
-            StudyMission mission,
-            LearningActivity current,
-            LearningActivity completedPresentation,
-            Map<UUID, List<StudentAttempt>> attempts,
-            Instant now) {
-        return assemble(mission, current, attempts, null, completedPresentation, now);
+        return assemble(mission, current, attempts, null, now);
     }
 
     private static LearningState assemble(
@@ -70,7 +56,6 @@ public class StudyMissionLearningStateAssembler {
             LearningActivity current,
             Map<UUID, List<StudentAttempt>> attempts,
             AttemptOutcome pendingOutcome,
-            LearningActivity completedPresentation,
             Instant now) {
         Objects.requireNonNull(mission, "mission must not be null");
         Objects.requireNonNull(current, "current must not be null");
@@ -94,7 +79,8 @@ public class StudyMissionLearningStateAssembler {
                                     objectivesById,
                                     activity,
                                     "A mission activity has no valid learning objective.");
-                    attempts.getOrDefault(activity.id(), List.of()).stream()
+                    List<StudentAttempt> activityAttempts = attempts.getOrDefault(activity.id(), List.of());
+                    activityAttempts.stream()
                             .sorted(Comparator.comparingInt(StudentAttempt::attemptNumber).reversed())
                             .forEach(attempt -> addHistory(
                                     recent, evidence, mission, currentObjective, activityObjective,
@@ -104,20 +90,16 @@ public class StudyMissionLearningStateAssembler {
                                 recent, evidence, mission, currentObjective, activityObjective,
                                 activity, pendingOutcome);
                     }
+                    if (activityAttempts.isEmpty()
+                            && !(activity.id().equals(current.id()) && pendingOutcome != null)
+                            && isDurablePresentationCompletion(activity)
+                            && activity.difficulty() != null) {
+                        recent.add(activity.toRecentLearningActivity(
+                                conceptKey(activityObjective), mission.id(), null,
+                                LearningActivityIntent.STANDARD,
+                                activity.generatedArtifactId() != null));
+                    }
                 });
-        // Record a presentation-only completion with a null outcome so the policy layer
-        // can distinguish a just-completed presentation from an activity with an assessed response.
-        if (completedPresentation != null && completedPresentation.difficulty() != null) {
-            LearningObjective presentationObjective = objectiveFor(
-                    objectivesById, completedPresentation,
-                    "The completed presentation has no valid learning objective.");
-            if (presentationObjective.id().equals(currentObjective.id())) {
-                recent.add(completedPresentation.toRecentLearningActivity(
-                        conceptKey(presentationObjective), mission.id(),
-                        null, LearningActivityIntent.STANDARD,
-                        completedPresentation.generatedArtifactId() != null));
-            }
-        }
         int available = mission.availableTimeMinutes() == null ? 0 : mission.availableTimeMinutes();
         int age = mission.startedAt() == null ? 0
                 : Math.max(0, Math.toIntExact(Math.min(Integer.MAX_VALUE,
@@ -128,6 +110,14 @@ public class StudyMissionLearningStateAssembler {
                 mission.learningState(), new LearningEvidenceSnapshot(evidence),
                 sourceCapability(mission), new LearningTimeContext(available, remaining, age),
                 recent, false, constraintsFor(mission.groundingMode()));
+    }
+
+    private static boolean isDurablePresentationCompletion(LearningActivity activity) {
+        return "COMPLETED".equals(activity.status())
+                && activity.completedAt() != null
+                && (activity.representedActionType() == LearningActionType.UNDERSTAND
+                        || activity.representedActionType() == LearningActionType.HINT
+                        || activity.representedActionType() == LearningActionType.PREREQUISITE_SUPPORT);
     }
 
     private static LearningObjective objectiveFor(

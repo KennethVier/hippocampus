@@ -82,5 +82,43 @@ class UnderstandRetrievePolicyTests {
 
         assertThat(action.actionType()).isEqualTo(LearningActionType.UNDERSTANDING_CHECK);
         assertThat(action.rationaleCode()).isEqualTo(UNDERSTANDING_CHECK_REQUIRED);
+        assertThat(action.constraints().retrievalActivityType())
+                .isEqualTo(com.hippocampus.learning.domain.RetrievalActivityType.SHORT_ANSWER);
+    }
+
+    @Test
+    void selectsUnderstandingCheckOnlyForPersistedUnderstandingFamilyPresentationHistory() {
+        for (LearningActionType presentationType : List.of(
+                LearningActionType.UNDERSTAND,
+                LearningActionType.HINT,
+                LearningActionType.PREREQUISITE_SUPPORT)) {
+            LearningState state = PolicyTestFixtures.state(
+                    MissionLifecycleState.ACTIVE,
+                    LearningStage.UNDERSTANDING,
+                    Map.of(EvidenceDimension.UNDERSTANDING, EvidenceStrength.INSUFFICIENT),
+                    List.of(PolicyTestFixtures.activity(
+                            presentationType, LearningDifficulty.FOUNDATIONAL, null)),
+                    false,
+                    new SourceCapability(SourceReadiness.READY, true, false, false),
+                    new LearningTimeContext(15, 15, 0),
+                    LearningActionConstraints.unconstrained());
+
+            assertThat(policy.select(state).actionType())
+                    .isEqualTo(LearningActionType.UNDERSTANDING_CHECK);
+        }
+
+        LearningState unrelatedNullOutcome = PolicyTestFixtures.state(
+                MissionLifecycleState.ACTIVE,
+                LearningStage.UNDERSTANDING,
+                Map.of(EvidenceDimension.UNDERSTANDING, EvidenceStrength.INSUFFICIENT),
+                List.of(PolicyTestFixtures.activity(
+                        LearningActionType.CONNECT, LearningDifficulty.FOUNDATIONAL, null)),
+                false,
+                new SourceCapability(SourceReadiness.READY, true, false, false),
+                new LearningTimeContext(15, 15, 0),
+                LearningActionConstraints.unconstrained());
+
+        assertThat(policy.select(unrelatedNullOutcome).actionType())
+                .isEqualTo(LearningActionType.UNDERSTAND);
     }
 }

@@ -4,7 +4,7 @@ Audience: Backend, architecture, database, AI, QA, security, and DevOps
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 18
-Last Updated: 2026-10-01
+Last Updated: 2026-10-03
 Owner: Project Hippocampus Team
 Prerequisites:
 - 00 - Project Vision
@@ -47,7 +47,7 @@ Scope: Core entities, aggregate boundaries, PostgreSQL schema design,
   versioning, and migration rules.
 Status: Final
 Title: Domain Model & Database Design
-Version: 1.0.6
+Version: 1.0.7
 ---
 
 # 18 - Domain Model & Database Design
@@ -1015,17 +1015,19 @@ REDUCE_DIFFICULTY of APPLY
                             difficulty = engine-selected reduced difficulty
 ```
 
-For direct pedagogical actions (`UNDERSTAND`, `RETRIEVE`, `CONNECT`, `APPLY`,
-`HINT`, `PREREQUISITE_SUPPORT`, `FEEDBACK`, and `REFLECT`),
+For direct pedagogical actions (`UNDERSTAND`, `UNDERSTANDING_CHECK`, `RETRIEVE`,
+`CONNECT`, `APPLY`, `HINT`, `PREREQUISITE_SUPPORT`, `FEEDBACK`, and `REFLECT`),
 `represented_action_type` is the underlying pedagogical action being
 materialized. If `visualRequired` changes the concrete `activity_type` to
 `VISUAL`, the represented action remains unchanged.
 
 For `UNDERSTANDING_CHECK` (ADR-0010), `represented_action_type` is
 `UNDERSTANDING_CHECK`. It is a distinct pedagogical action that materializes
-as an `UNDERSTAND`-type activity and uses the existing response-submission and
-evaluation path. Its `EvidenceDimension` is `UNDERSTANDING`. It does not
-contribute to `RECALL`.
+with `activity_type = RETRIEVE` and uses the existing concrete question
+rendering, response-submission, and evaluation contract. Its durable
+pedagogical identity remains `represented_action_type = UNDERSTANDING_CHECK`,
+so its `EvidenceDimension` is `UNDERSTANDING`; the concrete rendering type does
+not make it `RECALL` evidence.
 
 For `RETRY`, `REDUCE_DIFFICULTY`, and `REUSE_VALIDATED_CONTENT`, the new
 LearningActivity inherits `activity_type` and `represented_action_type` from
@@ -1053,11 +1055,16 @@ duplicate it or store provider/model fields.
 
 `LearningActionConstraints` also carries nullable `retrievalActivityType` using
 the learning-owned values `SHORT_ANSWER`, `MCQ`, `IDENTIFICATION`, and
-`EXPLANATION`. It is non-null exactly for an AI-backed `RETRIEVE` action and
-null for actions that do not generate retrieval questions. This is a transient
+`EXPLANATION`. It is non-null exactly for an AI-backed `RETRIEVE` or
+`UNDERSTANDING_CHECK` action and null for actions that do not generate
+questions. The v1 Understanding Check uses `SHORT_ANSWER`. This is a transient
 Learning Engine/application contract mapped explicitly to the AI-domain
 activity type; it does not add a `learning_activities` column because the
 generated artifact payload already retains the generated question structure.
+
+Flyway V24 recreates `chk_learning_activities_represented_action_type` to add
+`UNDERSTANDING_CHECK` while preserving every previously allowed represented
+action. No new table or column is introduced for ADR-0010.
 
 `LearningActionConstraints` also carries nullable `applicationActivityLevel`
 using the learning-owned values `DIRECT`, `GUIDED`, `MECHANISM_TO_FINDING`, and
@@ -2682,6 +2689,12 @@ and:
                                       Hippocampus Team  application activity
                                                         level selection with
                                                         ADR-0009
+
+  1.0.7             2026-10-03        Project           Aligned the concrete
+                                      Hippocampus Team  question rendering,
+                                                        represented action,
+                                                        and V24 constraint for
+                                                        ADR-0010
 
   -----------------------------------------------------------------------
 

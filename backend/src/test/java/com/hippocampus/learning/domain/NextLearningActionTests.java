@@ -222,6 +222,27 @@ class NextLearningActionTests {
     }
 
     @Test
+    void understandingCheckRequiresExplicitQuestionFormat() {
+        UUID objectiveId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> new NextLearningAction(
+                LearningActionType.UNDERSTANDING_CHECK, objectiveId, "concept",
+                LearningDifficulty.FOUNDATIONAL, "CHECK", true,
+                LearningActionConstraints.unconstrained()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("retrievalActivityType");
+
+        NextLearningAction action = new NextLearningAction(
+                LearningActionType.UNDERSTANDING_CHECK, objectiveId, "concept",
+                LearningDifficulty.FOUNDATIONAL, "CHECK", true,
+                LearningActionConstraints.unconstrained()
+                        .withRetrievalActivityType(RetrievalActivityType.SHORT_ANSWER));
+
+        assertThat(action.constraints().retrievalActivityType())
+                .isEqualTo(RetrievalActivityType.SHORT_ANSWER);
+    }
+
+    @Test
     void preservesAndClearsApplicationActivityLevelAcrossConstraintTransformations() {
         LearningActionConstraints constraints = LearningActionConstraints.unconstrained()
                 .withApplicationActivityLevel(ApplicationActivityLevel.GUIDED);

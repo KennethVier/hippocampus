@@ -15,6 +15,7 @@ import com.hippocampus.learning.domain.LearningEngine;
 import com.hippocampus.learning.domain.NextLearningAction;
 import com.hippocampus.learning.domain.StudyMission;
 import com.hippocampus.learning.domain.StudyMissionStatus;
+import com.hippocampus.learning.port.ActivityResponseContractRepository;
 import com.hippocampus.learning.port.StudyMissionRepository;
 import com.hippocampus.progress.domain.StudentAttempt;
 import com.hippocampus.progress.port.StudentAttemptRepository;
@@ -28,6 +29,7 @@ public class ContinueStudyMissionUseCase {
     private final CurrentUser currentUser;
     private final StudyMissionRepository missions;
     private final StudentAttemptRepository attempts;
+    private final ActivityResponseContractRepository contracts;
     private final LearningEngine learningEngine;
     private final StudyMissionLearningStateAssembler learningStateAssembler;
     private final MaterializeLearningActivityUseCase materializeActivity;
@@ -38,6 +40,7 @@ public class ContinueStudyMissionUseCase {
             CurrentUser currentUser,
             StudyMissionRepository missions,
             StudentAttemptRepository attempts,
+            ActivityResponseContractRepository contracts,
             LearningEngine learningEngine,
             StudyMissionLearningStateAssembler learningStateAssembler,
             MaterializeLearningActivityUseCase materializeActivity,
@@ -46,6 +49,7 @@ public class ContinueStudyMissionUseCase {
         this.currentUser = Objects.requireNonNull(currentUser, "currentUser must not be null");
         this.missions = Objects.requireNonNull(missions, "missions must not be null");
         this.attempts = Objects.requireNonNull(attempts, "attempts must not be null");
+        this.contracts = Objects.requireNonNull(contracts, "contracts must not be null");
         this.learningEngine = Objects.requireNonNull(learningEngine, "learningEngine must not be null");
         this.learningStateAssembler = Objects.requireNonNull(
                 learningStateAssembler, "learningStateAssembler must not be null");
@@ -63,18 +67,15 @@ public class ContinueStudyMissionUseCase {
                 .orElseThrow(ContinueStudyMissionUseCase::missionNotFound);
         LearningActivity current = validateCurrentActivity(mission, command.activityId());
 
-        // ADR-0010: if the current activity is a presentation-only UNDERSTAND (unfinished, no response
-        // contract expected), persist completion without creating a StudentAttempt or evidence.
-        // The completed presentation is then passed to the state assembler so the policy layer can
-        // detect that a presentation was just completed and select UNDERSTANDING_CHECK if needed.
-        LearningActivity completedPresentation = null;
+        // ADR-0010: if the current activity is an unfinished understanding-family presentation with
+        // no validated response contract, persist completion without a StudentAttempt or evidence.
+        // The normal persisted-state assembler then reconstructs that completion for the policy layer.
         StudyMission missionForDecision = mission;
-        if (isPresentationOnlyUnderstand(current)) {
+        if (isPresentationOnlyUnderstand(current, userId)) {
             Instant now = clock.instant();
             PersistPresentationCompletion.Result persisted = presentationCompletion.persist(
                     new PersistPresentationCompletion.Command(
                             mission.id(), userId, current.id(), mission.updatedAt(), now));
-            completedPresentation = persisted.activity();
             missionForDecision = persisted.mission();
         } else {
             requireCompleted(current);
@@ -86,26 +87,13 @@ public class ContinueStudyMissionUseCase {
                     activity.id(), attempts.findOwnedByActivity(activity.id(), userId));
         }
 
-        // For a presentation-only UNDERSTAND: pass the completed presentation so the assembler
-        // records it with a null outcome; the UnderstandRetrievePolicy then selects UNDERSTANDING_CHECK.
-        // For an already-completed activity: assemble from persisted attempts as before.
-        NextLearningAction action;
-        if (completedPresentation != null) {
-            // The next activity is materialized after the presentation, so 'current' for state
-            // assembly is the mission's new current (the completed presentation itself).
-            action = learningEngine.decide(
-                    learningStateAssembler.assembleAfterPresentationCompletion(
-                            missionForDecision, completedPresentation, completedPresentation,
-                            attemptHistory, clock.instant()));
-        } else {
-            LearningActivity currentForDecision = missionForDecision.activities().stream()
-                    .filter(a -> a.id().equals(command.activityId()))
-                    .findFirst()
-                    .orElse(current);
-            action = learningEngine.decide(
-                    learningStateAssembler.assembleFromPersistedAttempts(
-                            missionForDecision, currentForDecision, attemptHistory, clock.instant()));
-        }
+        LearningActivity currentForDecision = missionForDecision.activities().stream()
+                .filter(a -> a.id().equals(command.activityId()))
+                .findFirst()
+                .orElse(current);
+        NextLearningAction action = learningEngine.decide(
+                learningStateAssembler.assembleFromPersistedAttempts(
+                        missionForDecision, currentForDecision, attemptHistory, clock.instant()));
 
         MaterializeLearningActivityUseCase.Result materialized = materializeActivity.execute(
                 new MaterializeLearningActivityUseCase.Command(
@@ -118,11 +106,14 @@ public class ContinueStudyMissionUseCase {
      * been given an evaluated response (status is PENDING or ACTIVE).
      * These activities are completed via Continue without producing a StudentAttempt.
      */
-    private static boolean isPresentationOnlyUnderstand(LearningActivity activity) {
-        return (activity.representedActionType() == LearningActionType.UNDERSTAND
+    private boolean isPresentationOnlyUnderstand(LearningActivity activity, UUID userId) {
+        boolean presentationFamily = activity.representedActionType() == LearningActionType.UNDERSTAND
                 || activity.representedActionType() == LearningActionType.HINT
-                || activity.representedActionType() == LearningActionType.PREREQUISITE_SUPPORT)
-                && PersistActivityResponse.isUnfinished(activity);
+                || activity.representedActionType() == LearningActionType.PREREQUISITE_SUPPORT;
+        return presentationFamily
+                && PersistActivityResponse.isUnfinished(activity)
+                && contracts.findValidatedForActivity(
+                        activity.id(), activity.generatedArtifactId(), userId).isEmpty();
     }
 
     private static void requireCompleted(LearningActivity current) {

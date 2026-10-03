@@ -129,7 +129,7 @@ public final class LearningActivityAiTaskAdapter implements ActivityAiTaskPort {
                 taskContext = new ExplanationInput(
                         request.objective(), request.targetDisplayName(), explanationMode(request.actionType()));
             }
-            case RETRIEVE -> {
+            case RETRIEVE, UNDERSTANDING_CHECK -> {
                 taskType = AiTaskType.QUESTION_GENERATION;
                 promptId = PromptId.QUESTION_GENERATION_V1;
                 outputContract = AiOutputContract.QUESTION_GENERATION;

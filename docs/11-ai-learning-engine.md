@@ -1,12 +1,12 @@
 ---
 Document ID: 11
 Title: AI Learning Engine
-Version: 1.0.3
+Version: 1.0.4
 Status: Final
 Owner: Project Hippocampus Team
 Authors: Project Hippocampus Team
 Created: 2026-08-23
-Last Updated: 2026-10-01
+Last Updated: 2026-10-03
 Purpose: Define how Hippocampus decides the next educational action using deterministic learning rules, learner context, Study Mission state, learning evidence, source readiness, time constraints, and bounded AI assistance.
 Scope: Learning-state evaluation, mission-state transitions, next-action policy, rule precedence, AI task invocation, retries, adaptation, evidence updates, anti-repetition behavior, time-aware decisions, review decisions, failure paths, and explainability.
 Audience: Product, AI, backend, architecture, QA, UX, and medical-education contributors.
@@ -616,9 +616,9 @@ This is a core evidence-based rule.
 
 ---
 
-# 14. Presentation Completion and Understanding Check (ADR-0010)
+## 13.1 Presentation Completion and Understanding Check (ADR-0010)
 
-## Presentation-Only Completion Is Not Evidence
+### Presentation-Only Completion Is Not Evidence
 
 An `UNDERSTAND` activity may be a presentation that does not require an
 evaluated learner response.
@@ -632,7 +632,7 @@ Completing such a presentation via **Continue**:
 
 The Learning Engine must not treat a Continue click as competence proof.
 
-## Understanding Check
+### Understanding Check
 
 After presentation completion, if persisted learning state still lacks
 sufficient `UNDERSTANDING` evidence, the Learning Engine selects an
@@ -666,7 +666,7 @@ INCORRECT → INSUFFICIENT
 An Understanding Check does **not** establish `RECALL`. Recall is a
 separate evidence dimension established only through normal retrieval.
 
-## Failed or Partial Understanding Check
+### Failed or Partial Understanding Check
 
 When a check is `PARTIAL` or `INCORRECT`, the Learning Engine remains
 responsible for choosing the next action. The system must not
@@ -683,7 +683,7 @@ another Understanding Check
 
 depending on existing deterministic policies and learner state.
 
-## Recall Separation
+### Recall Separation
 
 ```text
 UNDERSTAND presentation
@@ -696,7 +696,7 @@ UNDERSTAND presentation
 
 `RECALL` remains a separate dimension.
 
-## Authority
+### Authority
 
 The Learning Engine owns whether and when an Understanding Check occurs.
 
@@ -710,7 +710,7 @@ whether evidence thresholds have been satisfied.
 
 ---
 
-# 15. Anti-Repetition Engine
+# 14. Anti-Repetition Engine
 
 The Learning Engine should track recent activity signatures. A conceptual
 `RecentLearningActivity` entry that represents a durable LearningActivity
@@ -737,8 +737,8 @@ LearningActivity `representedActionType`, not from its concrete rendering
 activities. Provider-specific or artifact-specific concerns do not belong in
 this history contract.
 
-For direct pedagogical actions (`UNDERSTAND`, `RETRIEVE`, `CONNECT`, `APPLY`,
-`HINT`, `PREREQUISITE_SUPPORT`, `FEEDBACK`, and `REFLECT`), the durable
+For direct pedagogical actions (`UNDERSTAND`, `UNDERSTANDING_CHECK`, `RETRIEVE`,
+`CONNECT`, `APPLY`, `HINT`, `PREREQUISITE_SUPPORT`, `FEEDBACK`, and `REFLECT`), the durable
 represented action is the underlying pedagogical action being materialized.
 When `visualRequired` changes the concrete rendering to `VISUAL`, that
 represented action does not change.
@@ -1688,7 +1688,8 @@ The following decisions are approved for v1:
 22. The engine should minimize unnecessary AI usage to support cost and concurrency goals.
 23. For an AI-backed `RETRIEVE` action, the Learning Engine explicitly selects
     `RetrievalActivityType`: `IDENTIFICATION` when visual content is required,
-    otherwise `SHORT_ANSWER`. Other actions carry no retrieval activity type.
+    otherwise `SHORT_ANSWER`. An AI-backed `UNDERSTANDING_CHECK` explicitly
+    selects `SHORT_ANSWER`. Other actions carry no retrieval activity type.
     The v1 policy does not infer from difficulty or question intent, randomize,
     rotate, select by subject, or delegate format selection to AI. `MCQ` and
     `EXPLANATION` remain representable but are not automatically selected.
@@ -1778,6 +1779,7 @@ The prompt layer must implement decisions from the Learning Engine rather than i
 | 1.0.1 | 2026-09-29 | Project Hippocampus Team | Aligned exact reusable LearningActivity identity and Learning Engine selection authority with ADR-0006 |
 | 1.0.2 | 2026-09-30 | Project Hippocampus Team | Added explicit deterministic retrieval activity type selection aligned with ADR-0007 |
 | 1.0.3 | 2026-10-01 | Project Hippocampus Team | Added explicit deterministic application activity level selection and output-difficulty mapping aligned with ADR-0009 |
+| 1.0.4 | 2026-10-03 | Project Hippocampus Team | Integrated presentation completion and Understanding Check rules into retrieval progression without shifting established top-level numbering, aligned with ADR-0010 |
 
 ---
 
