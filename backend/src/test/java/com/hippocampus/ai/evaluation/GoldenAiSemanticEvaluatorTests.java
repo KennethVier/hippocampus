@@ -202,17 +202,25 @@ class GoldenAiSemanticEvaluatorTests {
         assertThat(avEvaluation.passed()).isTrue();
 
         GoldenAiDataset.ExplanationCase surfactantCase = explanation("P7-07-PHYS-002");
-        ExplanationResult surfactantResult = new ExplanationResult(
+        ExplanationResult preventsCollapseResult = new ExplanationResult(
                 "pulmonary surfactant and alveolar stability",
-                "Type II cells secrete surfactant, which lowers surface tension so that alveoli stay open and prevents alveolar collapse.",
-                List.of("Surfactant lowers surface tension.", "Alveoli stay open to prevent collapse."),
+                "Surfactant lowers surface tension and prevents the alveoli from collapsing.",
+                List.of("Surfactant lowers surface tension."),
+                List.of(),
+                List.of(surfactantCase.sourceEvidence().getFirst().sourceId()),
+                false,
+                List.of());
+        ExplanationResult stopsCollapseResult = new ExplanationResult(
+                "pulmonary surfactant and alveolar stability",
+                "Surfactant reduces surface tension and stops alveoli from collapsing.",
+                List.of("Surfactant reduces surface tension."),
                 List.of(),
                 List.of(surfactantCase.sourceEvidence().getFirst().sourceId()),
                 false,
                 List.of());
 
-        GoldenAiSemanticEvaluator.Result surfactantEvaluation = evaluator.evaluate(surfactantCase, surfactantResult);
-        assertThat(surfactantEvaluation.passed()).isTrue();
+        assertThat(evaluator.evaluate(surfactantCase, preventsCollapseResult).passed()).isTrue();
+        assertThat(evaluator.evaluate(surfactantCase, stopsCollapseResult).passed()).isTrue();
     }
 
     @Test

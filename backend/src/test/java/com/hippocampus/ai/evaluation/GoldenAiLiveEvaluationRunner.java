@@ -48,6 +48,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.function.LongConsumer;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatModel;
@@ -62,6 +63,8 @@ import tools.jackson.databind.ObjectMapper;
 class GoldenAiLiveEvaluationRunner {
 
     private static final PromptTokenBudget PROMPT_BUDGET = new PromptTokenBudget(131_072, 2_048);
+    private static final String TASK_ENVIRONMENT = "HIPPOCAMPUS_LIVE_AI_GOLDEN_TASK";
+    private static final String DELAY_ENVIRONMENT = "HIPPOCAMPUS_LIVE_AI_GOLDEN_DELAY_MS";
 
     private final GoldenAiSemanticEvaluator semanticEvaluator = new GoldenAiSemanticEvaluator();
     private final PromptContextBuilder promptBuilder = new PromptContextBuilder(
@@ -74,8 +77,11 @@ class GoldenAiLiveEvaluationRunner {
         Assumptions.assumeTrue(
                 "true".equalsIgnoreCase(System.getenv("HIPPOCAMPUS_LIVE_AI_GOLDEN")));
 
+        GoldenTask task = GoldenTask.parse(System.getenv(TASK_ENVIRONMENT));
+        long delayMillis = parseDelayMillis(System.getenv(DELAY_ENVIRONMENT));
         LiveProvider liveProvider = liveProvider();
-        GoldenAiDataset.All dataset = new GoldenAiDatasetLoader().loadAll();
+        GoldenAiDataset.All dataset = selectedDataset(new GoldenAiDatasetLoader().loadAll(), task);
+        RequestPacer requestPacer = new RequestPacer(delayMillis, GoldenAiLiveEvaluationRunner::sleep);
         List<ReportEntry> entries = new ArrayList<>();
 
         for (GoldenAiDataset.ExplanationCase golden : dataset.explanations()) {
@@ -92,6 +98,7 @@ class GoldenAiLiveEvaluationRunner {
                     golden.caseId(),
                     golden.reviewerNotes(),
                     request,
+                    requestPacer,
                     value -> semanticEvaluator.evaluate(golden, (ExplanationResult) value)));
         }
         for (GoldenAiDataset.QuestionCase golden : dataset.questions()) {
@@ -113,6 +120,7 @@ class GoldenAiLiveEvaluationRunner {
                     golden.caseId(),
                     golden.reviewerNotes(),
                     request,
+                    requestPacer,
                     value -> semanticEvaluator.evaluate(golden, (QuestionGenerationResult) value)));
         }
         for (GoldenAiDataset.ResponseEvaluationCase golden : dataset.responseEvaluations()) {
@@ -132,6 +140,7 @@ class GoldenAiLiveEvaluationRunner {
                     golden.caseId(),
                     golden.reviewerNotes(),
                     request,
+                    requestPacer,
                     value -> semanticEvaluator.evaluate(golden, (ResponseEvaluationResult) value)));
         }
 
@@ -157,7 +166,9 @@ class GoldenAiLiveEvaluationRunner {
             String caseId,
             String reviewerNotes,
             AiTaskRequest<?> request,
+            RequestPacer requestPacer,
             Function<Object, GoldenAiSemanticEvaluator.Result> evaluate) {
+        requestPacer.beforeRequest();
         PromptContext prompt = promptBuilder.build(request, PROMPT_BUDGET);
         ProviderExecutionRequest providerRequest = new ProviderExecutionRequest(
                 request.taskType(),
@@ -249,6 +260,48 @@ class GoldenAiLiveEvaluationRunner {
         return value;
     }
 
+    static GoldenAiDataset.All selectedDataset(GoldenAiDataset.All dataset, String task) {
+        return selectedDataset(dataset, GoldenTask.parse(task));
+    }
+
+    private static GoldenAiDataset.All selectedDataset(
+            GoldenAiDataset.All dataset, GoldenTask task) {
+        return switch (task) {
+            case ALL -> dataset;
+            case EXPLANATION -> new GoldenAiDataset.All(
+                    dataset.version(), dataset.explanations(), List.of(), List.of());
+            case QUESTION_GENERATION -> new GoldenAiDataset.All(
+                    dataset.version(), List.of(), dataset.questions(), List.of());
+            case RESPONSE_EVALUATION -> new GoldenAiDataset.All(
+                    dataset.version(), List.of(), List.of(), dataset.responseEvaluations());
+        };
+    }
+
+    static long parseDelayMillis(String value) {
+        if (value == null || value.isBlank()) {
+            return 0L;
+        }
+        try {
+            long delayMillis = Long.parseLong(value);
+            if (delayMillis < 0L) {
+                throw new IllegalArgumentException(DELAY_ENVIRONMENT + " must be zero or positive");
+            }
+            return delayMillis;
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException(
+                    DELAY_ENVIRONMENT + " must be a whole number of milliseconds", exception);
+        }
+    }
+
+    private static void sleep(long delayMillis) {
+        try {
+            Thread.sleep(delayMillis);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("live Golden AI request pacing interrupted", exception);
+        }
+    }
+
     static <C extends AiTaskContext> AiTaskRequest<C> request(
             AiTaskType taskType,
             C taskContext,
@@ -331,6 +384,50 @@ class GoldenAiLiveEvaluationRunner {
 
     private static UUID stableId(String value) {
         return UUID.nameUUIDFromBytes(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private enum GoldenTask {
+        ALL("all"),
+        EXPLANATION("explanation"),
+        QUESTION_GENERATION("question-generation"),
+        RESPONSE_EVALUATION("response-evaluation");
+
+        private final String environmentValue;
+
+        GoldenTask(String environmentValue) {
+            this.environmentValue = environmentValue;
+        }
+
+        private static GoldenTask parse(String value) {
+            String normalized = value == null || value.isBlank() ? "all" : value.trim();
+            for (GoldenTask task : values()) {
+                if (task.environmentValue.equals(normalized)) {
+                    return task;
+                }
+            }
+            throw new IllegalArgumentException("unsupported live Golden AI task: " + value);
+        }
+    }
+
+    static final class RequestPacer {
+        private final long delayMillis;
+        private final LongConsumer sleeper;
+        private boolean requestStarted;
+
+        RequestPacer(long delayMillis, LongConsumer sleeper) {
+            if (delayMillis < 0L) {
+                throw new IllegalArgumentException("delayMillis must be zero or positive");
+            }
+            this.delayMillis = delayMillis;
+            this.sleeper = sleeper;
+        }
+
+        void beforeRequest() {
+            if (requestStarted && delayMillis > 0L) {
+                sleeper.accept(delayMillis);
+            }
+            requestStarted = true;
+        }
     }
 
     private record LiveProvider(
