@@ -39,7 +39,8 @@ final class GoldenAiSemanticEvaluator {
                 != golden.expectedSupplementalKnowledgeUsed().booleanValue()) {
             failures.add("supplemental-knowledge-flag-mismatch");
         }
-        if (actual.keyPoints().isEmpty() || actual.keyPoints().stream().anyMatch(String::isBlank)) {
+        if ((!golden.requireLimitation() && actual.keyPoints().isEmpty())
+                || actual.keyPoints().stream().anyMatch(String::isBlank)) {
             failures.add("key-points-must-be-non-empty");
         }
         if (wordCount(actual.explanation()) > golden.maximumExplanationWords()) {

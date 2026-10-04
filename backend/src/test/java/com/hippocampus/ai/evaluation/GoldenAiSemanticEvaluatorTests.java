@@ -257,6 +257,56 @@ class GoldenAiSemanticEvaluatorTests {
                 .anyMatch(rule -> rule.startsWith("forbidden-claim:AV node initiates normal sinus rhythm"));
     }
 
+    @Test
+    void allowsEmptyKeyPointsWhenLimitationIsRequired() {
+        GoldenAiDataset.ExplanationCase golden = explanation("P7-07-LIMIT-001");
+        ExplanationResult limitationOnly = new ExplanationResult(
+                golden.targetConcept(),
+                "The source does not establish how coronary dominance determines atrioventricular nodal supply.",
+                List.of(),
+                List.of(),
+                List.of(),
+                false,
+                List.of("No source evidence was supplied, so a grounded explanation cannot be given."));
+
+        GoldenAiSemanticEvaluator.Result result = evaluator.evaluate(golden, limitationOnly);
+
+        assertThat(result.passed()).isTrue();
+        assertThat(result.failedRules()).doesNotContain("key-points-must-be-non-empty");
+    }
+
+    @Test
+    void rejectsBlankKeyPointWhenLimitationIsRequired() {
+        GoldenAiDataset.ExplanationCase golden = explanation("P7-07-LIMIT-001");
+        ExplanationResult blankKeyPoint = new ExplanationResult(
+                golden.targetConcept(),
+                "The source does not establish how coronary dominance determines atrioventricular nodal supply.",
+                List.of(" "),
+                List.of(),
+                List.of(),
+                false,
+                List.of("No source evidence was supplied, so a grounded explanation cannot be given."));
+
+        assertThat(evaluator.evaluate(golden, blankKeyPoint).failedRules())
+                .contains("key-points-must-be-non-empty");
+    }
+
+    @Test
+    void rejectsEmptyKeyPointsForOrdinaryExplanation() {
+        GoldenAiDataset.ExplanationCase golden = explanation("P7-07-ANAT-001");
+        ExplanationResult emptyKeyPoints = new ExplanationResult(
+                golden.targetConcept(),
+                "Radial nerve injury impairs wrist extension, so the hand falls into flexion as wrist drop.",
+                List.of(),
+                List.of(),
+                List.of(golden.sourceEvidence().getFirst().sourceId()),
+                false,
+                List.of());
+
+        assertThat(evaluator.evaluate(golden, emptyKeyPoints).failedRules())
+                .contains("key-points-must-be-non-empty");
+    }
+
     private GoldenAiDataset.ExplanationCase explanation(String caseId) {
         return dataset.explanations().stream()
                 .filter(value -> value.caseId().equals(caseId))
