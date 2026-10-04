@@ -191,8 +191,8 @@ class GoldenAiSemanticEvaluatorTests {
         GoldenAiDataset.ExplanationCase avDelayCase = explanation("P7-07-PHYS-001");
         ExplanationResult avDelayResult = new ExplanationResult(
                 "Atrioventricular nodal delay",
-                "Slower conduction through the atrioventricular node causes postponing ventricular activation and ventricular depolarization, allowing optimal ventricular filling before ventricular systole.",
-                List.of("AV node provides slower conduction.", "Postponing ventricular activation allows ventricles to fill."),
+                "The AV node conducts the impulse slowly, creating a delay before the ventricles begin to contract.",
+                List.of("This delay supports ventricular filling."),
                 List.of(),
                 List.of(avDelayCase.sourceEvidence().getFirst().sourceId()),
                 false,
