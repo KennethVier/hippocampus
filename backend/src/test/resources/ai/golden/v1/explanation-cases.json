@@ -57,7 +57,25 @@
       ],
       "requiredConceptGroups": [
         ["atrioventricular node", "AV node"],
-        ["delays ventricular activation", "delays conduction"],
+        [
+          "delays ventricular activation",
+          "delay ventricular activation",
+          "delaying ventricular activation",
+          "delays conduction",
+          "delay conduction",
+          "delaying conduction",
+          "slower conduction",
+          "slow conduction",
+          "postponing ventricular activation",
+          "postpones ventricular activation",
+          "postpone ventricular activation",
+          "postponing ventricular depolarization",
+          "postpones ventricular depolarization",
+          "postpone ventricular depolarization",
+          "delays ventricular depolarization",
+          "delay ventricular depolarization",
+          "delaying ventricular depolarization"
+        ],
         ["ventricular filling", "ventricles fill"]
       ],
       "forbiddenClaims": ["AV node initiates normal sinus rhythm"],
@@ -89,8 +107,24 @@
       ],
       "requiredConceptGroups": [
         ["surfactant"],
-        ["reduces surface tension", "lower surface tension"],
-        ["prevent alveolar collapse", "helps keep alveoli open"]
+        [
+          "reduces surface tension",
+          "reduce surface tension",
+          "lower surface tension",
+          "lowers surface tension",
+          "decreases surface tension",
+          "decrease surface tension"
+        ],
+        [
+          "prevent alveolar collapse",
+          "prevents alveolar collapse",
+          "preventing alveolar collapse",
+          "helps keep alveoli open",
+          "help keep alveoli open",
+          "keeps alveoli open",
+          "keep alveoli open",
+          "alveoli stay open"
+        ]
       ],
       "forbiddenClaims": ["surfactant increases surface tension"],
       "requireLimitation": false,

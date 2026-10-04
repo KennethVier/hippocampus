@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.google.genai.Client;
 import com.hippocampus.ai.application.prompt.PromptContext;
 import com.hippocampus.ai.application.prompt.PromptContextBuilder;
+import com.hippocampus.ai.application.prompt.PromptId;
 import com.hippocampus.ai.application.prompt.PromptTemplateRegistry;
 import com.hippocampus.ai.application.prompt.PromptTokenBudget;
 import com.hippocampus.ai.application.provider.AiProviderAdapter;
@@ -248,16 +249,22 @@ class GoldenAiLiveEvaluationRunner {
         return value;
     }
 
-    private static <C extends AiTaskContext> AiTaskRequest<C> request(
+    static <C extends AiTaskContext> AiTaskRequest<C> request(
             AiTaskType taskType,
             C taskContext,
             GoldenAiDataset.Learner learner,
             List<GoldenAiDataset.Source> sources,
             GroundingMode groundingMode,
             AiOutputContract outputContract) {
+        String promptVersion = switch (taskType) {
+            case EXPLANATION -> PromptId.EXPLANATION_V2.name();
+            case QUESTION_GENERATION -> PromptId.QUESTION_GENERATION_V2.name();
+            case RESPONSE_EVALUATION -> PromptId.RESPONSE_EVALUATION_V2.name();
+            default -> taskType.name() + "_V1";
+        };
         return new AiTaskRequest<>(
                 taskType,
-                taskType.name() + "_V1",
+                promptVersion,
                 new LearnerContext(
                         learner.learningState(),
                         learner.topicExposure(),

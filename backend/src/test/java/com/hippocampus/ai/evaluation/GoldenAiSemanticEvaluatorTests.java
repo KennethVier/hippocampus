@@ -167,6 +167,88 @@ class GoldenAiSemanticEvaluatorTests {
         }
     }
 
+    @Test
+    void allowsNonEmptyLimitationsWhenRequireLimitationIsFalse() {
+        GoldenAiDataset.ExplanationCase golden = explanation("P7-07-ANAT-001");
+        assertThat(golden.requireLimitation()).isFalse();
+
+        ExplanationResult resultWithLimitation = new ExplanationResult(
+                "Radial nerve injury and wrist drop",
+                "Radial nerve injury denervates wrist extensors, causing loss of wrist extension so the hand falls into flexion as wrist drop.",
+                List.of("The radial nerve supplies wrist extensors.", "Loss of wrist extension produces wrist drop."),
+                List.of(),
+                List.of(golden.sourceEvidence().getFirst().sourceId()),
+                false,
+                List.of("Source does not discuss sensory branch deficit."));
+
+        GoldenAiSemanticEvaluator.Result evaluation = evaluator.evaluate(golden, resultWithLimitation);
+        assertThat(evaluation.passed()).isTrue();
+        assertThat(evaluation.failedRules()).doesNotContain("unexpected-limitation");
+    }
+
+    @Test
+    void acceptsMedicallyEquivalentPhrasingForAvNodalDelayAndAlveolarStability() {
+        GoldenAiDataset.ExplanationCase avDelayCase = explanation("P7-07-PHYS-001");
+        ExplanationResult avDelayResult = new ExplanationResult(
+                "Atrioventricular nodal delay",
+                "Slower conduction through the atrioventricular node causes postponing ventricular activation and ventricular depolarization, allowing optimal ventricular filling before ventricular systole.",
+                List.of("AV node provides slower conduction.", "Postponing ventricular activation allows ventricles to fill."),
+                List.of(),
+                List.of(avDelayCase.sourceEvidence().getFirst().sourceId()),
+                false,
+                List.of());
+
+        GoldenAiSemanticEvaluator.Result avEvaluation = evaluator.evaluate(avDelayCase, avDelayResult);
+        assertThat(avEvaluation.passed()).isTrue();
+
+        GoldenAiDataset.ExplanationCase surfactantCase = explanation("P7-07-PHYS-002");
+        ExplanationResult surfactantResult = new ExplanationResult(
+                "pulmonary surfactant and alveolar stability",
+                "Type II cells secrete surfactant, which lowers surface tension so that alveoli stay open and prevents alveolar collapse.",
+                List.of("Surfactant lowers surface tension.", "Alveoli stay open to prevent collapse."),
+                List.of(),
+                List.of(surfactantCase.sourceEvidence().getFirst().sourceId()),
+                false,
+                List.of());
+
+        GoldenAiSemanticEvaluator.Result surfactantEvaluation = evaluator.evaluate(surfactantCase, surfactantResult);
+        assertThat(surfactantEvaluation.passed()).isTrue();
+    }
+
+    @Test
+    void preservesHardGatesForMissingMandatoryLimitationAndForbiddenClaims() {
+        GoldenAiDataset.ExplanationCase limitCase = explanation("P7-07-LIMIT-001");
+        assertThat(limitCase.requireLimitation()).isTrue();
+
+        ExplanationResult missingLimitation = new ExplanationResult(
+                limitCase.targetConcept(),
+                "Coronary dominance determines AV nodal supply based on whether the RCA or LCx gives off the PDA.",
+                List.of("RCA supplies AV node in right dominance."),
+                List.of(),
+                List.of(),
+                false,
+                List.of());
+
+        GoldenAiSemanticEvaluator.Result limitEvaluation = evaluator.evaluate(limitCase, missingLimitation);
+        assertThat(limitEvaluation.passed()).isFalse();
+        assertThat(limitEvaluation.failedRules()).contains("required-limitation-missing");
+
+        GoldenAiDataset.ExplanationCase avCase = explanation("P7-07-PHYS-001");
+        ExplanationResult forbiddenClaim = new ExplanationResult(
+                avCase.targetConcept(),
+                "The AV node initiates normal sinus rhythm and delays conduction for ventricular filling.",
+                List.of("AV node delays conduction."),
+                List.of(),
+                List.of(avCase.sourceEvidence().getFirst().sourceId()),
+                false,
+                List.of());
+
+        GoldenAiSemanticEvaluator.Result forbiddenEvaluation = evaluator.evaluate(avCase, forbiddenClaim);
+        assertThat(forbiddenEvaluation.passed()).isFalse();
+        assertThat(forbiddenEvaluation.failedRules())
+                .anyMatch(rule -> rule.startsWith("forbidden-claim:AV node initiates normal sinus rhythm"));
+    }
+
     private GoldenAiDataset.ExplanationCase explanation(String caseId) {
         return dataset.explanations().stream()
                 .filter(value -> value.caseId().equals(caseId))

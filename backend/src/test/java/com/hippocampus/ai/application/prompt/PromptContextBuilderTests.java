@@ -329,6 +329,61 @@ class PromptContextBuilderTests {
     }
 
     @Test
+    void rendersExplicitGroundingModeAndStrictSourceContractInV2Prompts() {
+        EvidencePackage evidence = evidence(
+                GroundingMode.STRICT_SOURCE, "rank-one evidence", "rank-two evidence");
+
+        List<AiTaskRequest<?>> v2Requests = List.of(
+                new AiTaskRequest<>(
+                        AiTaskType.EXPLANATION,
+                        PromptId.EXPLANATION_V2.name(),
+                        learnerContext(),
+                        new ExplanationInput("Explain conduction", "cardiac conduction", ExplanationMode.STEP_BY_STEP),
+                        evidence,
+                        GroundingMode.STRICT_SOURCE,
+                        AiOutputContract.EXPLANATION),
+                new AiTaskRequest<>(
+                        AiTaskType.QUESTION_GENERATION,
+                        PromptId.QUESTION_GENERATION_V2.name(),
+                        learnerContext(),
+                        new QuestionGenerationInput(
+                                "Recall conduction",
+                                "AV node",
+                                ActivityType.MCQ,
+                                QuestionDifficulty.FOUNDATIONAL,
+                                List.of("Locate the SA node"),
+                                null),
+                        evidence,
+                        GroundingMode.STRICT_SOURCE,
+                        AiOutputContract.QUESTION_GENERATION),
+                new AiTaskRequest<>(
+                        AiTaskType.RESPONSE_EVALUATION,
+                        PromptId.RESPONSE_EVALUATION_V2.name(),
+                        learnerContext(),
+                        new ResponseEvaluationInput(
+                                "What delays conduction?",
+                                List.of("AV node"),
+                                "The AV node",
+                                "AV nodal delay permits filling."),
+                        evidence,
+                        GroundingMode.STRICT_SOURCE,
+                        AiOutputContract.RESPONSE_EVALUATION));
+
+        for (AiTaskRequest<?> request : v2Requests) {
+            PromptContext context = builder.build(request, LARGE_BUDGET);
+            assertThat(context.taskPrompt())
+                    .contains("GROUNDING_MODE:\nSTRICT_SOURCE")
+                    .contains("For STRICT_SOURCE:")
+                    .contains("when required evidence is absent or insufficient, report the limitation rather than answering from memory")
+                    .contains("sourceReferences contains only exact chunkId UUID strings copied from the supplied <SOURCE ... chunkId=\"...\"> elements");
+            if (request.taskType() == AiTaskType.EXPLANATION) {
+                assertThat(context.taskPrompt())
+                        .contains("supplementalKnowledgeUsed must remain false under STRICT_SOURCE");
+            }
+        }
+    }
+
+    @Test
     void repairPromptFailsClosedWhenOriginatingIdentityDoesNotMatchTheContract() {
         for (String invalid : List.of("CONCEPT_CONNECTION_V3", "EXPLANATION_V1", "HIPPOCAMPUS_SYSTEM_V1")) {
             AiTaskRequest<StructuredOutputRepairInput> request = request(

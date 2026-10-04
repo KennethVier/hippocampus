@@ -48,7 +48,7 @@ public final class PromptContextBuilder {
 
         PromptTemplate systemTemplate = registry.resolveSystemPolicy();
         PromptTemplate taskTemplate = registry.resolveTask(request);
-        BuildState state = mandatoryState(request);
+        BuildState state = mandatoryState(request, taskTemplate);
         RenderedPrompt rendered = render(systemTemplate.content(), taskTemplate.content(), state.variables());
         int inputTokens = countInputTokens(rendered);
         if (inputTokens > budget.maxInputTokens()) {
@@ -78,7 +78,7 @@ public final class PromptContextBuilder {
                 state.includedSources());
     }
 
-    private BuildState mandatoryState(AiTaskRequest<?> request) {
+    private BuildState mandatoryState(AiTaskRequest<?> request, PromptTemplate taskTemplate) {
         if (request.taskType() == AiTaskType.STRUCTURED_OUTPUT_REPAIR) {
             StructuredOutputRepairInput input = (StructuredOutputRepairInput) request.taskContext();
             return new BuildState(
@@ -95,6 +95,9 @@ public final class PromptContextBuilder {
         LinkedHashMap<String, String> variables = new LinkedHashMap<>();
         variables.put("learnerContext", serializeLearnerContext(request.learnerContext(), 0, 0));
         variables.put("sourceContext", serializeSourceContext(List.of()));
+        if (taskTemplate.content().contains("{groundingMode}")) {
+            variables.put("groundingMode", request.groundingMode().name());
+        }
         switch (request.taskType()) {
             case EXPLANATION -> addExplanationVariables(variables, (ExplanationInput) request.taskContext());
             case QUESTION_GENERATION -> addQuestionVariables(

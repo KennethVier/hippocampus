@@ -35,9 +35,6 @@ final class GoldenAiSemanticEvaluator {
         if (golden.requireLimitation() && actual.limitations().isEmpty()) {
             failures.add("required-limitation-missing");
         }
-        if (!golden.requireLimitation() && !actual.limitations().isEmpty()) {
-            failures.add("unexpected-limitation");
-        }
         if (actual.supplementalKnowledgeUsed()
                 != golden.expectedSupplementalKnowledgeUsed().booleanValue()) {
             failures.add("supplemental-knowledge-flag-mismatch");

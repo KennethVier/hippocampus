@@ -89,6 +89,67 @@ class PromptRegressionTests {
                 .doesNotContain("\"question\": \"string\"", "\"expectedAnswer\": \"string\"");
     }
 
+    @Test
+    void v2PromptsContainExplicitStrictSourceAndInsufficiencyContract() {
+        for (PromptId promptId : List.of(
+                PromptId.EXPLANATION_V2,
+                PromptId.QUESTION_GENERATION_V2,
+                PromptId.RESPONSE_EVALUATION_V2)) {
+            AiTaskType taskType = promptId.taskType().orElseThrow();
+            PromptTemplate template = registry.resolveTask(taskType, promptId.name());
+
+            assertThat(template.content())
+                    .contains("GROUNDING_MODE:")
+                    .contains("{groundingMode}")
+                    .contains("For STRICT_SOURCE:")
+                    .contains("use only facts supported by SOURCE_CONTEXT")
+                    .contains("do not fill missing source evidence from general medical knowledge")
+                    .contains("when required evidence is absent or insufficient, report the limitation rather than answering from memory")
+                    .contains("source-grounded claims must remain within supplied evidence");
+
+            if (promptId == PromptId.EXPLANATION_V2) {
+                assertThat(template.content())
+                        .contains("supplementalKnowledgeUsed must remain false under STRICT_SOURCE");
+            }
+        }
+    }
+
+    @Test
+    void v2PromptsContainExactChunkIdSourceReferenceContract() {
+        for (PromptId promptId : List.of(
+                PromptId.EXPLANATION_V2,
+                PromptId.QUESTION_GENERATION_V2,
+                PromptId.RESPONSE_EVALUATION_V2)) {
+            AiTaskType taskType = promptId.taskType().orElseThrow();
+            PromptTemplate template = registry.resolveTask(taskType, promptId.name());
+
+            assertThat(template.content())
+                    .contains("sourceReferences contains only exact chunkId UUID strings copied from the supplied <SOURCE ... chunkId=\"...\"> elements")
+                    .contains("do not return materialId")
+                    .contains("do not return materialVersionId")
+                    .contains("do not return documentNodeId")
+                    .contains("do not return source text")
+                    .contains("do not prefix/suffix the UUID")
+                    .contains("do not construct composite references such as materialId:chunkId")
+                    .contains("when no source was used, return []");
+        }
+    }
+
+    @Test
+    void historicalV1PromptsDoNotContainGroundingModePlaceholder() {
+        for (PromptId promptId : List.of(
+                PromptId.EXPLANATION_V1,
+                PromptId.QUESTION_GENERATION_V1,
+                PromptId.RESPONSE_EVALUATION_V1)) {
+            AiTaskType taskType = promptId.taskType().orElseThrow();
+            PromptTemplate template = registry.resolveTask(taskType, promptId.name());
+
+            assertThat(template.content())
+                    .doesNotContain("{groundingMode}")
+                    .doesNotContain("GROUNDING_MODE:");
+        }
+    }
+
     static Stream<PromptGoldenCase> goldenCases() {
         return Stream.of(
                 new PromptGoldenCase(
