@@ -8,11 +8,24 @@ import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.hippocampus.learning.domain.LearningActivity;
+import com.hippocampus.learning.domain.LearningActionType;
+import com.hippocampus.learning.domain.LearningActivityType;
+import com.hippocampus.learning.domain.LearningObjective;
 import com.hippocampus.learning.domain.LearningStage;
 import com.hippocampus.learning.domain.StudyMission;
 import com.hippocampus.learning.domain.StudyMissionStatus;
 import com.hippocampus.learning.port.StudyMissionRepository;
+import com.hippocampus.progress.domain.EvidenceDimension;
+import com.hippocampus.progress.domain.EvidenceEvent;
+import com.hippocampus.progress.domain.EvidenceEventType;
+import com.hippocampus.progress.domain.EvidenceObservation;
+import com.hippocampus.progress.domain.EvidenceOutcome;
+import com.hippocampus.progress.domain.EvidenceProjectionKey;
+import com.hippocampus.progress.domain.EvidenceProjector;
+import com.hippocampus.progress.domain.LearningEvidence;
 import com.hippocampus.progress.domain.StudentAttempt;
+import com.hippocampus.progress.port.EvidenceEventRepository;
+import com.hippocampus.progress.port.LearningEvidenceRepository;
 import com.hippocampus.progress.port.StudentAttemptRepository;
 import com.hippocampus.shared.application.error.ApplicationNotFoundException;
 import com.hippocampus.shared.domain.error.ErrorCode;
@@ -23,12 +36,21 @@ public class PersistActivityResponse {
 
     private final StudyMissionRepository missions;
     private final StudentAttemptRepository attempts;
+    private final EvidenceEventRepository evidenceEvents;
+    private final LearningEvidenceRepository learningEvidence;
+    private final EvidenceProjector evidenceProjector;
 
     public PersistActivityResponse(
             StudyMissionRepository missions,
-            StudentAttemptRepository attempts) {
+            StudentAttemptRepository attempts,
+            EvidenceEventRepository evidenceEvents,
+            LearningEvidenceRepository learningEvidence,
+            EvidenceProjector evidenceProjector) {
         this.missions = Objects.requireNonNull(missions, "missions must not be null");
         this.attempts = Objects.requireNonNull(attempts, "attempts must not be null");
+        this.evidenceEvents = Objects.requireNonNull(evidenceEvents, "evidenceEvents must not be null");
+        this.learningEvidence = Objects.requireNonNull(learningEvidence, "learningEvidence must not be null");
+        this.evidenceProjector = Objects.requireNonNull(evidenceProjector, "evidenceProjector must not be null");
     }
 
     @Transactional
@@ -47,12 +69,37 @@ public class PersistActivityResponse {
             throw stale();
         }
 
+        EvidenceMapping evidenceMapping = evidenceMapping(current);
+        EvidenceProjectionKey projectionKey = evidenceMapping == null
+                ? null : projectionKey(mission, current, evidenceMapping.dimension());
+        LearningEvidence lockedEvidence = projectionKey == null
+                ? null : learningEvidence.lockOrCreate(
+                        projectionKey, UUID.randomUUID(), command.persistedAt());
+
         StudentAttempt proposed = command.attempt();
         StudentAttempt attempt = attempts.append(new StudentAttempt(
                 proposed.id(), proposed.userId(), proposed.learningActivityId(), maxAttempt + 1,
                 proposed.responseText(), proposed.responsePayload(), proposed.submittedAt(),
                 proposed.evaluationStatus(), proposed.evaluationArtifactId(),
                 proposed.deterministicResult(), proposed.createdAt()));
+
+        if (evidenceMapping != null) {
+            EvidenceOutcome evidenceOutcome = evidenceOutcome(attempt.evaluationStatus());
+            evidenceEvents.append(new EvidenceEvent(
+                    UUID.randomUUID(), mission.userId(), mission.topicId(), mission.subtopicId(),
+                    projectionKey.conceptKey(), attempt.id(), current.id(), evidenceMapping.eventType(),
+                    evidenceOutcome, current.difficulty() == null ? null : current.difficulty().name(),
+                    null, attempt.submittedAt(), command.persistedAt()));
+            var observations = evidenceEvents.findByProjectionKey(projectionKey).stream()
+                    .map(event -> new EvidenceObservation(
+                            event.id(), projectionKey.dimension(), event.outcome(), event.occurredAt()))
+                    .toList();
+            var projection = evidenceProjector.project(projectionKey.dimension(), observations);
+            learningEvidence.save(new LearningEvidence(
+                    lockedEvidence.id(), projectionKey, projection.state(),
+                    projection.supportingEventCount(), projection.lastObservedAt(),
+                    command.persistedAt()));
+        }
 
         LearningActivity completed = new LearningActivity(
                 current.id(), current.learningObjectiveId(), current.activityType(),
@@ -74,6 +121,72 @@ public class PersistActivityResponse {
                 mission.stoppedAt(), completed.id(), mission.materials(), mission.objectives(),
                 activities, mission.createdAt(), command.persistedAt());
         return new Result(attempt, missions.save(updated), completed);
+    }
+
+    private static EvidenceProjectionKey projectionKey(
+            StudyMission mission, LearningActivity activity, EvidenceDimension dimension) {
+        LearningObjective objective = mission.objectives().stream()
+                .filter(candidate -> Objects.equals(candidate.id(), activity.learningObjectiveId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "eligible evidence activity must identify an owned learning objective"));
+        String conceptKey = firstNonBlank(objective.conceptKey(), objective.objectiveText());
+        if (conceptKey == null) {
+            throw new IllegalArgumentException("learning objective must resolve an evidence concept key");
+        }
+        return new EvidenceProjectionKey(
+                mission.userId(), mission.topicId(), mission.subtopicId(), conceptKey, dimension);
+    }
+
+    private static EvidenceMapping evidenceMapping(LearningActivity activity) {
+        LearningActionType action = activity.representedActionType();
+        return switch (action) {
+            case UNDERSTAND, HINT, PREREQUISITE_SUPPORT, UNDERSTANDING_CHECK ->
+                    new EvidenceMapping(EvidenceEventType.UNDERSTANDING_ATTEMPT, EvidenceDimension.UNDERSTANDING);
+            case RETRIEVE -> activity.activityType() == LearningActivityType.VISUAL
+                    ? new EvidenceMapping(
+                            EvidenceEventType.VISUAL_IDENTIFICATION,
+                            EvidenceDimension.VISUAL_IDENTIFICATION)
+                    : new EvidenceMapping(
+                            EvidenceEventType.RETRIEVAL_ATTEMPT,
+                            EvidenceDimension.RETRIEVAL);
+            case CONNECT -> new EvidenceMapping(
+                    EvidenceEventType.CONNECTION_ATTEMPT, EvidenceDimension.CONNECTION);
+            case APPLY -> new EvidenceMapping(
+                    EvidenceEventType.APPLICATION_ATTEMPT, EvidenceDimension.APPLICATION);
+            case RETRY, REDUCE_DIFFICULTY, REUSE_VALIDATED_CONTENT ->
+                    evidenceMappingForUnderlyingActivity(activity.activityType());
+            default -> null;
+        };
+    }
+
+    private static EvidenceMapping evidenceMappingForUnderlyingActivity(LearningActivityType activityType) {
+        return switch (activityType) {
+            case UNDERSTAND -> new EvidenceMapping(
+                    EvidenceEventType.UNDERSTANDING_ATTEMPT, EvidenceDimension.UNDERSTANDING);
+            case RETRIEVE -> new EvidenceMapping(
+                    EvidenceEventType.RETRIEVAL_ATTEMPT, EvidenceDimension.RETRIEVAL);
+            case VISUAL -> new EvidenceMapping(
+                    EvidenceEventType.VISUAL_IDENTIFICATION, EvidenceDimension.VISUAL_IDENTIFICATION);
+            case CONNECT -> new EvidenceMapping(
+                    EvidenceEventType.CONNECTION_ATTEMPT, EvidenceDimension.CONNECTION);
+            case APPLY -> new EvidenceMapping(
+                    EvidenceEventType.APPLICATION_ATTEMPT, EvidenceDimension.APPLICATION);
+            case FEEDBACK, REFLECT -> null;
+        };
+    }
+
+    private static EvidenceOutcome evidenceOutcome(String evaluationStatus) {
+        try {
+            return EvidenceOutcome.valueOf(evaluationStatus);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException(
+                    "validated evidence outcome must be CORRECT, PARTIAL, or INCORRECT", exception);
+        }
+    }
+
+    private static String firstNonBlank(String first, String second) {
+        return first != null && !first.isBlank() ? first : second != null && !second.isBlank() ? second : null;
     }
 
     private static LearningActivity verifySnapshot(StudyMission mission, Command command) {
@@ -140,4 +253,6 @@ public class PersistActivityResponse {
             StudentAttempt attempt,
             StudyMission mission,
             LearningActivity activity) {}
+
+    private record EvidenceMapping(EvidenceEventType eventType, EvidenceDimension dimension) {}
 }

@@ -62,6 +62,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("23");
         assertSuccessfulFlywayVersion("24");
         assertSuccessfulFlywayVersion("25");
+        assertSuccessfulFlywayVersion("26");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertLearningActivityCompatibilityColumns();
@@ -113,6 +114,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("23");
         assertSuccessfulFlywayVersion("24");
         assertSuccessfulFlywayVersion("25");
+        assertSuccessfulFlywayVersion("26");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertLearningActivityCompatibilityColumns();
@@ -262,6 +264,25 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
             statement.executeUpdate(learningEvidenceInsert(
                     UUID.randomUUID(), userId, topicId, subtopicId,
                     "RETRIEVAL", "DEVELOPING", null));
+            assertThatThrownBy(() -> statement.executeUpdate(learningEvidenceInsert(
+                    UUID.randomUUID(), userId, topicId, subtopicId,
+                    "RETRIEVAL", "DEVELOPING", 1)))
+                    .isInstanceOf(SQLException.class);
+            statement.executeUpdate("""
+                    INSERT INTO learning_evidence (
+                        id, user_id, topic_id, subtopic_id, concept_key,
+                        evidence_dimension, state, updated_at)
+                    VALUES ('%s', '%s', '%s', NULL, NULL,
+                            'CONNECTION', 'INSUFFICIENT_EVIDENCE', now())
+                    """.formatted(UUID.randomUUID(), userId, topicId));
+            assertThatThrownBy(() -> statement.executeUpdate("""
+                    INSERT INTO learning_evidence (
+                        id, user_id, topic_id, subtopic_id, concept_key,
+                        evidence_dimension, state, updated_at)
+                    VALUES ('%s', '%s', '%s', NULL, NULL,
+                            'CONNECTION', 'INSUFFICIENT_EVIDENCE', now())
+                    """.formatted(UUID.randomUUID(), userId, topicId)))
+                    .isInstanceOf(SQLException.class);
             assertThatThrownBy(() -> statement.executeUpdate(learningEvidenceInsert(
                     UUID.randomUUID(), userId, otherTopicId, subtopicId,
                     "RETRIEVAL", "DEVELOPING", 1)))
@@ -650,6 +671,8 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 "FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE RESTRICT", "r");
         assertNamedConstraint("learning_evidence", "fk_learning_evidence_subtopic_same_topic",
                 "FOREIGN KEY (subtopic_id, topic_id) REFERENCES subtopics(id, topic_id) ON DELETE RESTRICT", "r");
+        assertNamedConstraint("learning_evidence", "uq_learning_evidence_projection_key",
+                "UNIQUE NULLS NOT DISTINCT (user_id, topic_id, subtopic_id, concept_key, evidence_dimension)", null);
         assertCheckConstraintContains("learning_evidence", "chk_learning_evidence_dimension",
                 "RETRIEVAL", "UNDERSTANDING", "CONNECTION", "APPLICATION",
                 "VISUAL_IDENTIFICATION", "REVIEW_RETENTION");
@@ -664,7 +687,6 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 "user_id", "topic_id", "evidence_dimension");
         assertNoConstraintType("evidence_events", "UNIQUE");
         assertNoCheckConstraints("evidence_events");
-        assertNoConstraintType("learning_evidence", "UNIQUE");
     }
 
     private static void assertAiDiagnosticsSchema() throws SQLException {

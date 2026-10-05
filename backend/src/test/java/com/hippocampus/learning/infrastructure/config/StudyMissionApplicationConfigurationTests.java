@@ -37,6 +37,8 @@ import com.hippocampus.learning.port.StudyMissionSourcePresentationRepository;
 import com.hippocampus.learning.port.SubtopicRepository;
 import com.hippocampus.learning.port.TopicRepository;
 import com.hippocampus.progress.port.StudentAttemptRepository;
+import com.hippocampus.progress.port.EvidenceEventRepository;
+import com.hippocampus.progress.port.LearningEvidenceRepository;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -137,6 +139,16 @@ class StudyMissionApplicationConfigurationTests {
         @Bean
         StudentAttemptRepository studentAttemptRepository() {
             return mock(StudentAttemptRepository.class);
+        }
+
+        @Bean
+        EvidenceEventRepository evidenceEventRepository() {
+            return mock(EvidenceEventRepository.class);
+        }
+
+        @Bean
+        LearningEvidenceRepository learningEvidenceRepository() {
+            return mock(LearningEvidenceRepository.class);
         }
 
         @Bean
