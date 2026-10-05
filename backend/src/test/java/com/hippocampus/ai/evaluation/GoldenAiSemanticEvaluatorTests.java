@@ -148,7 +148,7 @@ class GoldenAiSemanticEvaluatorTests {
     }
 
     @Test
-    void acceptsHarmlessArticleVariationInSemanticGroups() {
+    void assertionMatchingAcceptsHarmlessArticles() {
         assertThat(GoldenAiSemanticEvaluator.matchesSemanticGroup(
                         "activates wrist flexors", List.of("activates the wrist flexors")))
                 .isTrue();
@@ -168,7 +168,7 @@ class GoldenAiSemanticEvaluatorTests {
     }
 
     @Test
-    void rejectsNegatedOrRelationshipIncompleteSemanticMatches() {
+    void assertionMatchingRejectsNegatedOrRelationshipIncompleteClaims() {
         assertThat(GoldenAiSemanticEvaluator.matchesSemanticGroup(
                         "does not activate wrist flexors", List.of("activate the wrist flexors")))
                 .isFalse();
@@ -182,6 +182,70 @@ class GoldenAiSemanticEvaluatorTests {
                         wrongReasoningResult(
                                 golden, "Radial nerve injury does not activate wrist flexors"))
                 .failedRules()).contains("misconception-not-demonstrated-by-response");
+    }
+
+    @Test
+    void gapMentionMatchingAcceptsNegativeMissingPhrasingAndHarmlessArticles() {
+        assertThat(GoldenAiSemanticEvaluator.matchesSemanticGroup(
+                        "did not name the radial nerve",
+                        List.of("radial nerve"),
+                        GoldenAiSemanticEvaluator.SemanticMatchMode.GAP_MENTION))
+                .isTrue();
+        assertThat(GoldenAiSemanticEvaluator.matchesSemanticGroup(
+                        "No response provided",
+                        List.of("response"),
+                        GoldenAiSemanticEvaluator.SemanticMatchMode.GAP_MENTION))
+                .isTrue();
+        assertThat(GoldenAiSemanticEvaluator.matchesSemanticGroup(
+                        "the wrist extensors were not identified",
+                        List.of("wrist extensors"),
+                        GoldenAiSemanticEvaluator.SemanticMatchMode.GAP_MENTION))
+                .isTrue();
+    }
+
+    @Test
+    void responseEvaluationUsesAssertionAndGapMentionModesForTheirOwnedFields() {
+        GoldenAiDataset.ResponseEvaluationCase uncertain = response("P7-09-UNCERTAIN-001");
+        ResponseEvaluationResult gapMentions = new ResponseEvaluationResult(
+                Evaluation.UNCERTAIN,
+                List.of("wrist extensors"),
+                List.of("did not name the radial nerve"),
+                List.of(),
+                "You did not name the radial nerve specifically.",
+                EvaluationCertainty.LIMITED,
+                RecommendedAction.RETRY,
+                List.of(uncertain.sourceEvidence().getFirst().sourceId()),
+                List.of());
+
+        assertThat(evaluator.evaluate(uncertain, gapMentions).passed()).isTrue();
+
+        ResponseEvaluationResult negatedCorrectAssertion = new ResponseEvaluationResult(
+                Evaluation.UNCERTAIN,
+                List.of("did not identify wrist extensors"),
+                List.of("did not name the radial nerve"),
+                List.of(),
+                "You did not name the radial nerve specifically.",
+                EvaluationCertainty.LIMITED,
+                RecommendedAction.RETRY,
+                List.of(uncertain.sourceEvidence().getFirst().sourceId()),
+                List.of());
+
+        assertThat(evaluator.evaluate(uncertain, negatedCorrectAssertion).failedRules())
+                .anyMatch(rule -> rule.startsWith("required-correct-concept"));
+
+        GoldenAiDataset.ResponseEvaluationCase empty = response("P7-09-EMPTY-001");
+        ResponseEvaluationResult emptyGapMentions = new ResponseEvaluationResult(
+                Evaluation.INCORRECT,
+                List.of(),
+                List.of("The radial nerve and wrist extensors were not identified"),
+                List.of(),
+                "No response provided. Both expected concepts are missing.",
+                EvaluationCertainty.SUFFICIENT,
+                RecommendedAction.RETRY,
+                List.of(empty.sourceEvidence().getFirst().sourceId()),
+                List.of());
+
+        assertThat(evaluator.evaluate(empty, emptyGapMentions).passed()).isTrue();
     }
 
     @Test

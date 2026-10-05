@@ -100,7 +100,7 @@ class ResponseEvaluationAggregatorTests {
                 judgment(
                         0, "Provider echo", ResponseEvaluationJudgmentStatus.MISSING,
                         List.of(), List.of("Invented support"), List.of(), List.of()),
-                ResponseEvaluationAggregationFailureReason.INVALID_MISSING_SHAPE);
+                ResponseEvaluationAggregationFailureReason.MISSING_WITH_SUPPORTED_COMPONENTS);
     }
 
     @Test
@@ -109,7 +109,7 @@ class ResponseEvaluationAggregatorTests {
                 judgment(
                         0, "Provider echo", ResponseEvaluationJudgmentStatus.MISSING,
                         List.of(), List.of(), List.of(), List.of("Invented misconception")),
-                ResponseEvaluationAggregationFailureReason.INVALID_MISSING_SHAPE);
+                ResponseEvaluationAggregationFailureReason.MISSING_WITH_DEMONSTRATED_MISCONCEPTION);
     }
 
     @Test
@@ -141,12 +141,39 @@ class ResponseEvaluationAggregatorTests {
     }
 
     @Test
-    void rejectsBlankDiagnosticEntriesWithStatusSpecificReason() {
+    void distinguishesBlankStudentClaimInMissingJudgment() {
+        assertJudgmentShapeFailure(
+                judgment(
+                        0, "Provider echo", ResponseEvaluationJudgmentStatus.MISSING,
+                        List.of(" "), List.of(), List.of(), List.of()),
+                ResponseEvaluationAggregationFailureReason.MISSING_WITH_BLANK_STUDENT_CLAIM);
+    }
+
+    @Test
+    void distinguishesBlankSupportedComponentInMissingJudgment() {
+        assertJudgmentShapeFailure(
+                judgment(
+                        0, "Provider echo", ResponseEvaluationJudgmentStatus.MISSING,
+                        List.of(), List.of(" "), List.of(), List.of()),
+                ResponseEvaluationAggregationFailureReason.MISSING_WITH_BLANK_SUPPORTED_COMPONENT);
+    }
+
+    @Test
+    void distinguishesBlankMissingComponentInMissingJudgment() {
         assertJudgmentShapeFailure(
                 judgment(
                         0, "Provider echo", ResponseEvaluationJudgmentStatus.MISSING,
                         List.of(), List.of(), List.of(" "), List.of()),
-                ResponseEvaluationAggregationFailureReason.INVALID_MISSING_SHAPE);
+                ResponseEvaluationAggregationFailureReason.MISSING_WITH_BLANK_MISSING_COMPONENT);
+    }
+
+    @Test
+    void distinguishesBlankMisconceptionInMissingJudgment() {
+        assertJudgmentShapeFailure(
+                judgment(
+                        0, "Provider echo", ResponseEvaluationJudgmentStatus.MISSING,
+                        List.of(), List.of(), List.of(), List.of(" ")),
+                ResponseEvaluationAggregationFailureReason.MISSING_WITH_BLANK_MISCONCEPTION);
     }
 
     @Test

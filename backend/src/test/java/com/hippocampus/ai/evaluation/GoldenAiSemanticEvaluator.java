@@ -19,6 +19,11 @@ final class GoldenAiSemanticEvaluator {
     private static final Set<String> NEGATIONS = Set.of("no", "not", "never", "without");
     private static final int NEGATION_LOOKBACK_TOKENS = 3;
 
+    enum SemanticMatchMode {
+        ASSERTION,
+        GAP_MENTION
+    }
+
     record Result(boolean passed, List<String> failedRules) {
         Result {
             failedRules = List.copyOf(failedRules);
@@ -28,7 +33,9 @@ final class GoldenAiSemanticEvaluator {
     Result evaluate(GoldenAiDataset.ExplanationCase golden, ExplanationResult actual) {
         List<String> failures = new ArrayList<>();
         String claims = join(actual.concept(), actual.explanation(), actual.keyPoints());
-        requireConceptGroups(failures, "required-concept", golden.requiredConceptGroups(), claims);
+        requireConceptGroups(
+                failures, "required-concept", golden.requiredConceptGroups(), claims,
+                SemanticMatchMode.ASSERTION);
         rejectTerms(failures, "forbidden-claim", golden.forbiddenClaims(), claims);
         requireSourceSubset(failures, golden.sourceEvidence(), actual.sourceReferences());
         if (!golden.sourceEvidence().isEmpty()
@@ -58,7 +65,7 @@ final class GoldenAiSemanticEvaluator {
                     .collect(Collectors.joining(" "));
             requireConceptGroups(
                     failures, "required-concept-not-supported-by-source",
-                    golden.requiredConceptGroups(), sourceText);
+                    golden.requiredConceptGroups(), sourceText, SemanticMatchMode.ASSERTION);
         }
         return result(failures);
     }
@@ -80,16 +87,18 @@ final class GoldenAiSemanticEvaluator {
         String allContent = join(
                 actual.concept(), actual.question(), actual.expectedAnswer(), actual.explanation(),
                 actual.options().stream().map(QuestionOption::text).toList());
-        requireConceptGroups(failures, "required-concept", golden.requiredConceptGroups(), allContent);
+        requireConceptGroups(
+                failures, "required-concept", golden.requiredConceptGroups(), allContent,
+                SemanticMatchMode.ASSERTION);
         requireConceptGroups(
                 failures, "expected-answer-concept", golden.requiredAnswerConceptGroups(),
-                actual.expectedAnswer());
+                actual.expectedAnswer(), SemanticMatchMode.ASSERTION);
         String sourceText = golden.sourceEvidence().stream()
                 .map(GoldenAiDataset.Source::content)
                 .collect(Collectors.joining(" "));
         requireConceptGroups(
                 failures, "expected-answer-unsupported-by-source",
-                golden.requiredAnswerConceptGroups(), sourceText);
+                golden.requiredAnswerConceptGroups(), sourceText, SemanticMatchMode.ASSERTION);
         rejectTerms(failures, "answer-leakage", golden.answerLeakageTerms(), actual.question());
         rejectTerms(failures, "forbidden-claim", golden.forbiddenClaims(), allContent);
         requireSourceSubset(failures, golden.sourceEvidence(), actual.sourceReferences());
@@ -119,13 +128,16 @@ final class GoldenAiSemanticEvaluator {
         }
         requireConceptGroups(
                 failures, "required-correct-concept",
-                golden.requiredCorrectConceptGroups(), join(actual.correctConcepts()));
+                golden.requiredCorrectConceptGroups(), join(actual.correctConcepts()),
+                SemanticMatchMode.ASSERTION);
         requireConceptGroups(
                 failures, "required-missing-concept",
-                golden.requiredMissingConceptGroups(), join(actual.missingConcepts()));
+                golden.requiredMissingConceptGroups(), join(actual.missingConcepts()),
+                SemanticMatchMode.GAP_MENTION);
         requireConceptGroups(
                 failures, "feedback-does-not-identify-gap",
-                golden.requiredFeedbackConceptGroups(), actual.feedback());
+                golden.requiredFeedbackConceptGroups(), actual.feedback(),
+                SemanticMatchMode.GAP_MENTION);
         if (golden.requireNoMissingConcepts() && !actual.missingConcepts().isEmpty()) {
             failures.add("unexpected-missing-concept");
         }
@@ -134,7 +146,10 @@ final class GoldenAiSemanticEvaluator {
         }
         if (!actual.misconceptions().isEmpty()) {
             for (String misconception : actual.misconceptions()) {
-                if (!matchesAnyGroup(misconception, golden.allowedMisconceptionGroups())) {
+                if (!matchesAnyGroup(
+                        misconception,
+                        golden.allowedMisconceptionGroups(),
+                        SemanticMatchMode.ASSERTION)) {
                     failures.add("misconception-not-demonstrated-by-response");
                     break;
                 }
@@ -166,9 +181,13 @@ final class GoldenAiSemanticEvaluator {
     }
 
     private static void requireConceptGroups(
-            List<String> failures, String rule, List<List<String>> groups, String actualText) {
+            List<String> failures,
+            String rule,
+            List<List<String>> groups,
+            String actualText,
+            SemanticMatchMode mode) {
         for (List<String> group : groups) {
-            if (!containsAny(actualText, group)) {
+            if (!matchesSemanticGroup(actualText, group, mode)) {
                 failures.add(rule + ":" + String.join("|", group));
             }
         }
@@ -184,23 +203,27 @@ final class GoldenAiSemanticEvaluator {
         }
     }
 
-    private static boolean matchesAnyGroup(String value, List<List<String>> groups) {
-        return groups.stream().anyMatch(group -> matchesSemanticGroup(value, group));
-    }
-
-    private static boolean containsAny(String value, List<String> alternatives) {
-        return matchesSemanticGroup(value, alternatives);
+    private static boolean matchesAnyGroup(
+            String value, List<List<String>> groups, SemanticMatchMode mode) {
+        return groups.stream().anyMatch(group -> matchesSemanticGroup(value, group, mode));
     }
 
     static boolean matchesSemanticGroup(String value, List<String> alternatives) {
+        return matchesSemanticGroup(value, alternatives, SemanticMatchMode.ASSERTION);
+    }
+
+    static boolean matchesSemanticGroup(
+            String value, List<String> alternatives, SemanticMatchMode mode) {
         List<String> valueTokens = semanticTokens(value);
         return alternatives.stream()
                 .map(GoldenAiSemanticEvaluator::semanticTokens)
-                .anyMatch(alternative -> containsSemanticPhrase(valueTokens, alternative));
+                .anyMatch(alternative -> containsSemanticPhrase(valueTokens, alternative, mode));
     }
 
     private static boolean containsSemanticPhrase(
-            List<String> valueTokens, List<String> alternativeTokens) {
+            List<String> valueTokens,
+            List<String> alternativeTokens,
+            SemanticMatchMode mode) {
         if (alternativeTokens.isEmpty() || alternativeTokens.size() > valueTokens.size()) {
             return false;
         }
@@ -208,7 +231,9 @@ final class GoldenAiSemanticEvaluator {
         int lastStart = valueTokens.size() - alternativeTokens.size();
         for (int start = 0; start <= lastStart; start++) {
             if (valueTokens.subList(start, start + alternativeTokens.size()).equals(alternativeTokens)
-                    && (!positiveAlternative || !hasPrecedingNegation(valueTokens, start))) {
+                    && (mode == SemanticMatchMode.GAP_MENTION
+                            || !positiveAlternative
+                            || !hasPrecedingNegation(valueTokens, start))) {
                 return true;
             }
         }

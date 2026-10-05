@@ -102,10 +102,15 @@ public final class ResponseEvaluationAggregator {
     }
 
     private static void validateJudgment(ResponseEvaluationJudgment judgment) {
+        if (judgment.status() == ResponseEvaluationJudgmentStatus.MISSING) {
+            validateMissingJudgment(judgment);
+            return;
+        }
+
         ResponseEvaluationAggregationFailureReason invalidShapeReason = switch (judgment.status()) {
             case SUPPORTED -> ResponseEvaluationAggregationFailureReason.INVALID_SUPPORTED_SHAPE;
             case PARTIAL -> ResponseEvaluationAggregationFailureReason.INVALID_PARTIAL_SHAPE;
-            case MISSING -> ResponseEvaluationAggregationFailureReason.INVALID_MISSING_SHAPE;
+            case MISSING -> throw new IllegalStateException("MISSING handled separately");
             case CONTRADICTED -> ResponseEvaluationAggregationFailureReason.INVALID_CONTRADICTED_SHAPE;
         };
         if (containsBlank(judgment.studentClaims())
@@ -124,14 +129,37 @@ public final class ResponseEvaluationAggregator {
                     && !judgment.supportedComponents().isEmpty()
                     && (!judgment.missingComponents().isEmpty()
                             || !judgment.demonstratedMisconceptions().isEmpty());
-            case MISSING -> judgment.supportedComponents().isEmpty()
-                    && judgment.demonstratedMisconceptions().isEmpty();
+            case MISSING -> throw new IllegalStateException("MISSING handled separately");
             case CONTRADICTED -> !judgment.studentClaims().isEmpty()
                     && judgment.supportedComponents().isEmpty()
                     && !judgment.demonstratedMisconceptions().isEmpty();
         };
         if (!valid) {
             throw failure(invalidShapeReason);
+        }
+    }
+
+    private static void validateMissingJudgment(ResponseEvaluationJudgment judgment) {
+        if (containsBlank(judgment.studentClaims())) {
+            throw failure(ResponseEvaluationAggregationFailureReason.MISSING_WITH_BLANK_STUDENT_CLAIM);
+        }
+        if (containsBlank(judgment.supportedComponents())) {
+            throw failure(
+                    ResponseEvaluationAggregationFailureReason.MISSING_WITH_BLANK_SUPPORTED_COMPONENT);
+        }
+        if (containsBlank(judgment.missingComponents())) {
+            throw failure(
+                    ResponseEvaluationAggregationFailureReason.MISSING_WITH_BLANK_MISSING_COMPONENT);
+        }
+        if (containsBlank(judgment.demonstratedMisconceptions())) {
+            throw failure(ResponseEvaluationAggregationFailureReason.MISSING_WITH_BLANK_MISCONCEPTION);
+        }
+        if (!judgment.supportedComponents().isEmpty()) {
+            throw failure(ResponseEvaluationAggregationFailureReason.MISSING_WITH_SUPPORTED_COMPONENTS);
+        }
+        if (!judgment.demonstratedMisconceptions().isEmpty()) {
+            throw failure(
+                    ResponseEvaluationAggregationFailureReason.MISSING_WITH_DEMONSTRATED_MISCONCEPTION);
         }
     }
 

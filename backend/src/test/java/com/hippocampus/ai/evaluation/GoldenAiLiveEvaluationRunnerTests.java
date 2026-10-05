@@ -148,13 +148,13 @@ class GoldenAiLiveEvaluationRunnerTests {
         AiSchemaValidationException failure = new AiSchemaValidationException(
                 AiOutputContract.RESPONSE_EVALUATION,
                 AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION,
-                ResponseEvaluationAggregationFailureReason.INVALID_MISSING_SHAPE);
+                ResponseEvaluationAggregationFailureReason.MISSING_WITH_SUPPORTED_COMPONENTS);
 
         Map<String, String> metadata =
                 GoldenAiLiveEvaluationRunner.schemaValidationDiagnosticMetadata(failure);
 
         assertThat(metadata).containsExactlyEntriesOf(Map.of(
-                "responseEvaluationAggregationReason", "INVALID_MISSING_SHAPE"));
+                "responseEvaluationAggregationReason", "MISSING_WITH_SUPPORTED_COMPONENTS"));
         assertThat(metadata.toString()).doesNotContain(
                 "student response", "source text", "provider raw output", "medical content", "prompt");
     }
