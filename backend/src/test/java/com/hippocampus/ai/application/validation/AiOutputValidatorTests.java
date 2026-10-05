@@ -298,15 +298,18 @@ class AiOutputValidatorTests {
                 });
     }
 
-    @Test
-    void responseEvaluationV4DecodesAtomicJudgmentsAndReturnsDeterministicLegacyResult() {
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(
+            value = PromptId.class,
+            names = {"RESPONSE_EVALUATION_V4", "RESPONSE_EVALUATION_V5"})
+    void responseEvaluationAtomicPromptsReturnDeterministicLegacyResult(PromptId promptId) {
         ResponseEvaluationInput input = responseEvaluationInput();
 
         ValidatedAiResult<?> validated = validator.validate(
                 providerResult(validResponseEvaluationV4()),
                 AiOutputContract.RESPONSE_EVALUATION,
                 input,
-                PromptId.RESPONSE_EVALUATION_V4);
+                promptId);
 
         assertThat(validated.result()).isInstanceOf(ResponseEvaluationResult.class);
         ResponseEvaluationResult result = (ResponseEvaluationResult) validated.result();

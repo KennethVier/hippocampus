@@ -655,8 +655,8 @@ class AiExecutionOrchestratorTests {
     }
 
     @Test
-    void malformedResponseEvaluationV4RepairsOnceWithAtomicSchemaAndNormalizesResult() {
-        try (Harness harness = harness(sequence("{\"broken\":", validResponseEvaluationV4()))) {
+    void malformedResponseEvaluationV5RepairsOnceWithAtomicSchemaAndNormalizesResult() {
+        try (Harness harness = harness(sequence("{\"broken\":", validResponseEvaluationV5()))) {
             ValidatedAiResult<?> result = join(harness.execute(responseEvaluationRequest()));
 
             assertThat(result.result()).isInstanceOf(ResponseEvaluationResult.class);
@@ -671,9 +671,9 @@ class AiExecutionOrchestratorTests {
     }
 
     @Test
-    void responseEvaluationV4PreservesStrictSourceReferenceValidation() {
+    void responseEvaluationV5PreservesStrictSourceReferenceValidation() {
         EvidenceChunk source = chunk(1, CHUNK_ID, "AV nodal delay permits ventricular filling.");
-        try (Harness harness = harness(sequence(validResponseEvaluationV4(CHUNK_ID.toString())))) {
+        try (Harness harness = harness(sequence(validResponseEvaluationV5(CHUNK_ID.toString())))) {
             harness.repository.authorize(source);
 
             ValidatedAiResult<?> result = join(harness.execute(responseEvaluationRequest(List.of(source))));
@@ -848,7 +848,7 @@ class AiExecutionOrchestratorTests {
                 : GroundingMode.STRICT_SOURCE;
         return new AiTaskRequest<>(
                 AiTaskType.RESPONSE_EVALUATION,
-                PromptId.RESPONSE_EVALUATION_V4.name(),
+                PromptId.RESPONSE_EVALUATION_V5.name(),
                 learnerContext(),
                 new ResponseEvaluationInput(
                         "Why does AV nodal delay support filling?",
@@ -860,11 +860,11 @@ class AiExecutionOrchestratorTests {
                 AiOutputContract.RESPONSE_EVALUATION);
     }
 
-    private static String validResponseEvaluationV4() {
-        return validResponseEvaluationV4(null);
+    private static String validResponseEvaluationV5() {
+        return validResponseEvaluationV5(null);
     }
 
-    private static String validResponseEvaluationV4(String sourceReference) {
+    private static String validResponseEvaluationV5(String sourceReference) {
         String serializedReferences = sourceReference == null ? "" : "\"" + sourceReference + "\"";
         return """
                 {

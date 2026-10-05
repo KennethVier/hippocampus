@@ -91,6 +91,7 @@ class PromptTemplateRegistryTests {
                 PromptId.RESPONSE_EVALUATION_V2,
                 PromptId.RESPONSE_EVALUATION_V3,
                 PromptId.RESPONSE_EVALUATION_V4,
+                PromptId.RESPONSE_EVALUATION_V5,
                 PromptId.CONCEPT_CONNECTION_V1,
                 PromptId.CONCEPT_CONNECTION_V2,
                 PromptId.CONTEXTUAL_APPLICATION_V1,
@@ -135,6 +136,18 @@ class PromptTemplateRegistryTests {
         assertThat(template.content())
                 .contains("\"judgments\"", "SUPPORTED | PARTIAL | MISSING | CONTRADICTED")
                 .doesNotContain("\"evaluation\":", "\"correctConcepts\":", "\"missingConcepts\":");
+    }
+
+    @Test
+    void responseEvaluationV5RetainsTheV4AtomicRepairSchema() {
+        PromptTemplate template = registry.resolveTask(
+                AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V5.name());
+
+        assertThat(template.version()).isEqualTo(5);
+        assertThat(registry.resolveRepairSchema(
+                        AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V5))
+                .isEqualTo(registry.resolveRepairSchema(
+                        AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V4));
     }
 
     @Test
@@ -310,6 +323,9 @@ class PromptTemplateRegistryTests {
                 Map.entry(
                 PromptId.RESPONSE_EVALUATION_V4,
                         "840da202f57dfd6d441ced76f4083d4be8052720ec450fa2ec5a912c1e7c8078"),
+                Map.entry(
+                PromptId.RESPONSE_EVALUATION_V5,
+                        "9c4f13136f1c63f6e0e9ce943810dc54ca38928f2f95f356bff47745b376261a"),
                 Map.entry(
                 PromptId.CONCEPT_CONNECTION_V1,
                         "67697282f23f21c55221f44ca638e7c85c3c27f2565b2159fdd7c3b6384d246e"),

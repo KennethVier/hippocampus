@@ -61,7 +61,7 @@ class AiResponseEvaluationAdapterTests {
     }
 
     @Test
-    void usesResponseEvaluationV4Prompt() {
+    void usesResponseEvaluationV5Prompt() {
         ResponseEvaluationResult evaluationResult = new ResponseEvaluationResult(
                 Evaluation.CORRECT,
                 List.of("AV node delay"),
@@ -75,7 +75,7 @@ class AiResponseEvaluationAdapterTests {
         ValidatedAiResult<?> validated = new ValidatedAiResult<>(
                 evaluationResult,
                 new ValidatedAiResult.ExecutionMetadata(
-                        "GEMINI", "test-model", "test-version", PromptId.RESPONSE_EVALUATION_V4.name(), "4"));
+                        "GEMINI", "test-model", "test-version", PromptId.RESPONSE_EVALUATION_V5.name(), "5"));
         when(orchestrator.execute(any(), any(), any(), anyList(), any()))
                 .thenReturn(CompletableFuture.completedFuture(validated));
 
@@ -95,7 +95,7 @@ class AiResponseEvaluationAdapterTests {
                 any(), anyList(), any());
         AiTaskRequest<?> aiRequest = requestCaptor.getValue();
         assertThat(aiRequest.taskType()).isEqualTo(AiTaskType.RESPONSE_EVALUATION);
-        assertThat(aiRequest.promptVersion()).isEqualTo(PromptId.RESPONSE_EVALUATION_V4.name());
+        assertThat(aiRequest.promptVersion()).isEqualTo(PromptId.RESPONSE_EVALUATION_V5.name());
         assertThat(aiRequest.outputContract()).isEqualTo(AiOutputContract.RESPONSE_EVALUATION);
         assertThat(aiRequest.taskContext()).isInstanceOf(ResponseEvaluationInput.class);
     }
