@@ -71,7 +71,7 @@ class PromptTemplateRegistryTests {
 
     @Test
     void rejectsUnknownVersions() {
-        assertThatThrownBy(() -> registry.resolveTask(AiTaskType.EXPLANATION, "EXPLANATION_V2"))
+        assertThatThrownBy(() -> registry.resolveTask(AiTaskType.EXPLANATION, "EXPLANATION_V99"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("unknown prompt version");
         assertThatThrownBy(() -> registry.resolveTask(AiTaskType.EXPLANATION, " "))
@@ -84,8 +84,15 @@ class PromptTemplateRegistryTests {
         assertThat(EnumSet.allOf(PromptId.class)).containsExactly(
                 PromptId.HIPPOCAMPUS_SYSTEM_V1,
                 PromptId.EXPLANATION_V1,
+                PromptId.EXPLANATION_V2,
                 PromptId.QUESTION_GENERATION_V1,
+                PromptId.QUESTION_GENERATION_V2,
                 PromptId.RESPONSE_EVALUATION_V1,
+                PromptId.RESPONSE_EVALUATION_V2,
+                PromptId.RESPONSE_EVALUATION_V3,
+                PromptId.RESPONSE_EVALUATION_V4,
+                PromptId.RESPONSE_EVALUATION_V5,
+                PromptId.RESPONSE_EVALUATION_V6,
                 PromptId.CONCEPT_CONNECTION_V1,
                 PromptId.CONCEPT_CONNECTION_V2,
                 PromptId.CONTEXTUAL_APPLICATION_V1,
@@ -94,6 +101,66 @@ class PromptTemplateRegistryTests {
                 .extracting(PromptTemplate::promptId)
                 .doesNotHaveDuplicates()
                 .containsExactlyElementsOf(EnumSet.allOf(PromptId.class));
+    }
+
+    @Test
+    void resolvesV2TaskPrompts() {
+        for (PromptId promptId : List.of(
+                PromptId.EXPLANATION_V2,
+                PromptId.QUESTION_GENERATION_V2,
+                PromptId.RESPONSE_EVALUATION_V2)) {
+            AiTaskType taskType = promptId.taskType().orElseThrow();
+            PromptTemplate template = registry.resolveTask(taskType, promptId.name());
+            assertThat(template.promptId()).isEqualTo(promptId);
+            assertThat(template.version()).isEqualTo(2);
+            assertThat(template.authority()).isEqualTo(PromptAuthority.TASK_CONTRACT);
+        }
+    }
+
+    @Test
+    void resolvesResponseEvaluationV3Prompt() {
+        PromptTemplate template = registry.resolveTask(
+                AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V3.name());
+
+        assertThat(template.promptId()).isEqualTo(PromptId.RESPONSE_EVALUATION_V3);
+        assertThat(template.version()).isEqualTo(3);
+        assertThat(template.authority()).isEqualTo(PromptAuthority.TASK_CONTRACT);
+    }
+
+    @Test
+    void resolvesResponseEvaluationV4AtomicContract() {
+        PromptTemplate template = registry.resolveTask(
+                AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V4.name());
+
+        assertThat(template.promptId()).isEqualTo(PromptId.RESPONSE_EVALUATION_V4);
+        assertThat(template.version()).isEqualTo(4);
+        assertThat(template.content())
+                .contains("\"judgments\"", "SUPPORTED | PARTIAL | MISSING | CONTRADICTED")
+                .doesNotContain("\"evaluation\":", "\"correctConcepts\":", "\"missingConcepts\":");
+    }
+
+    @Test
+    void responseEvaluationV5RetainsTheV4AtomicRepairSchema() {
+        PromptTemplate template = registry.resolveTask(
+                AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V5.name());
+
+        assertThat(template.version()).isEqualTo(5);
+        assertThat(registry.resolveRepairSchema(
+                        AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V5))
+                .isEqualTo(registry.resolveRepairSchema(
+                        AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V4));
+    }
+
+    @Test
+    void responseEvaluationV6RetainsTheV5AtomicRepairSchema() {
+        PromptTemplate template = registry.resolveTask(
+                AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V6.name());
+
+        assertThat(template.version()).isEqualTo(6);
+        assertThat(registry.resolveRepairSchema(
+                        AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V6))
+                .isEqualTo(registry.resolveRepairSchema(
+                        AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V5));
     }
 
     @Test
@@ -249,11 +316,32 @@ class PromptTemplateRegistryTests {
                 PromptId.EXPLANATION_V1,
                         "ea7c31d8c0da7e8c29f6753e873dc2c8b65354d03d26ac447f0b5403e6745145"),
                 Map.entry(
+                PromptId.EXPLANATION_V2,
+                        "3aa09e11c8c13803ed3e0f16a297ee3a4bac13a07001d1aef554f0728c28a208"),
+                Map.entry(
                 PromptId.QUESTION_GENERATION_V1,
                         "228faf9bfe9eedd03618a99b7228f7b1e6104ac118918299ab52a92c317025fa"),
                 Map.entry(
+                PromptId.QUESTION_GENERATION_V2,
+                        "7ac29fd33ea16ba81b7a4ab8b238dab324a35eee3da338f3dac9b847ca419d29"),
+                Map.entry(
                 PromptId.RESPONSE_EVALUATION_V1,
                         "ed9c1c3aea9f37df64f38de727957a4b2950de66b661a5c518743159a678fdda"),
+                Map.entry(
+                PromptId.RESPONSE_EVALUATION_V2,
+                        "a4bb7c65856244f55b2962c1a5c9958b7ae06d9320c8416f66893a206d618a49"),
+                Map.entry(
+                PromptId.RESPONSE_EVALUATION_V3,
+                        "2831fa880912945739045c0199eef41a2bd54488be5517b8a66b78eeb39efc27"),
+                Map.entry(
+                PromptId.RESPONSE_EVALUATION_V4,
+                        "840da202f57dfd6d441ced76f4083d4be8052720ec450fa2ec5a912c1e7c8078"),
+                Map.entry(
+                PromptId.RESPONSE_EVALUATION_V5,
+                        "9c4f13136f1c63f6e0e9ce943810dc54ca38928f2f95f356bff47745b376261a"),
+                Map.entry(
+                PromptId.RESPONSE_EVALUATION_V6,
+                        "84717380a4a3d5464069132fb2663e41c456c2a900f052a2f4cd9bd7e0bcf528"),
                 Map.entry(
                 PromptId.CONCEPT_CONNECTION_V1,
                         "67697282f23f21c55221f44ca638e7c85c3c27f2565b2159fdd7c3b6384d246e"),

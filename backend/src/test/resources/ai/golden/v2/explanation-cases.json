@@ -1,0 +1,164 @@
+{
+  "version": "v2",
+  "task": "EXPLANATION",
+  "cases": [
+    {
+      "caseId": "P7-07-ANAT-001",
+      "subject": "Anatomy",
+      "topic": "Radial nerve injury",
+      "learningObjective": "Explain how radial nerve injury produces wrist drop.",
+      "targetConcept": "radial nerve injury and wrist drop",
+      "explanationMode": "STEP_BY_STEP",
+      "groundingMode": "STRICT_SOURCE",
+      "learner": {
+        "learningState": "CONCEPT_STRUGGLING",
+        "topicExposure": "FIRST_EXPOSURE",
+        "difficultyDirection": "MORE_SCAFFOLDING",
+        "relevantEvidence": {"retrieval": "WEAK"},
+        "relevantMisconceptions": []
+      },
+      "sourceEvidence": [
+        {
+          "sourceId": "00000000-0000-0000-0000-000000000101",
+          "content": "The radial nerve supplies the wrist extensor muscles. Radial nerve injury impairs wrist extension, allowing the hand to fall into flexion and producing wrist drop."
+        }
+      ],
+      "requiredConceptGroups": [
+        ["radial nerve"],
+        ["wrist extension", "extend the wrist", "wrist extensors"],
+        ["wrist drop", "hand falls into flexion"]
+      ],
+      "forbiddenClaims": ["median nerve causes wrist drop", "ulnar nerve causes wrist drop"],
+      "requireLimitation": false,
+      "expectedSupplementalKnowledgeUsed": false,
+      "maximumExplanationWords": 120,
+      "reviewerNotes": "Review nerve-muscle causal accuracy, grounding, clarity, and conciseness."
+    },
+    {
+      "caseId": "P7-07-PHYS-001",
+      "subject": "Physiology",
+      "topic": "Atrioventricular nodal delay",
+      "learningObjective": "Explain why atrioventricular nodal delay supports ventricular filling.",
+      "targetConcept": "atrioventricular nodal delay",
+      "explanationMode": "STEP_BY_STEP",
+      "groundingMode": "STRICT_SOURCE",
+      "learner": {
+        "learningState": "BUILDING_MECHANISM",
+        "topicExposure": "RECENT_EXPOSURE",
+        "difficultyDirection": "STANDARD",
+        "relevantEvidence": {},
+        "relevantMisconceptions": []
+      },
+      "sourceEvidence": [
+        {
+          "sourceId": "00000000-0000-0000-0000-000000000102",
+          "content": "Slow conduction through the atrioventricular node delays ventricular activation. This delay allows atrial contraction to complete and supports ventricular filling before ventricular systole."
+        }
+      ],
+      "requiredConceptGroups": [
+        ["atrioventricular node", "AV node"],
+        [
+          "delays ventricular activation",
+          "delay ventricular activation",
+          "delaying ventricular activation",
+          "delays conduction",
+          "delay conduction",
+          "delaying conduction",
+          "slower conduction",
+          "slow conduction",
+          "conducts the impulse slowly",
+          "conducts slowly",
+          "slows impulse conduction",
+          "postponing ventricular activation",
+          "postpones ventricular activation",
+          "postpone ventricular activation",
+          "postponing ventricular depolarization",
+          "postpones ventricular depolarization",
+          "postpone ventricular depolarization",
+          "delays ventricular depolarization",
+          "delay ventricular depolarization",
+          "delaying ventricular depolarization"
+        ],
+        ["ventricular filling", "ventricles fill"]
+      ],
+      "forbiddenClaims": ["AV node initiates normal sinus rhythm"],
+      "requireLimitation": false,
+      "expectedSupplementalKnowledgeUsed": false,
+      "maximumExplanationWords": 120,
+      "reviewerNotes": "Review temporal mechanism and preservation of atrial-to-ventricular sequence."
+    },
+    {
+      "caseId": "P7-07-PHYS-002",
+      "subject": "Physiology",
+      "topic": "Pulmonary surfactant",
+      "learningObjective": "Give a concise first-exposure explanation of how surfactant helps keep alveoli open.",
+      "targetConcept": "pulmonary surfactant and alveolar stability",
+      "explanationMode": "SIMPLE",
+      "groundingMode": "STRICT_SOURCE",
+      "learner": {
+        "learningState": "NEW_CONCEPT",
+        "topicExposure": "FIRST_EXPOSURE",
+        "difficultyDirection": "MORE_SCAFFOLDING",
+        "relevantEvidence": {},
+        "relevantMisconceptions": []
+      },
+      "sourceEvidence": [
+        {
+          "sourceId": "00000000-0000-0000-0000-000000000103",
+          "content": "Type II pneumocytes produce pulmonary surfactant. Surfactant reduces surface tension in alveoli and helps prevent alveolar collapse."
+        }
+      ],
+      "requiredConceptGroups": [
+        ["surfactant"],
+        [
+          "reduces surface tension",
+          "reduce surface tension",
+          "lower surface tension",
+          "lowers surface tension",
+          "decreases surface tension",
+          "decrease surface tension"
+        ],
+        [
+          "prevent alveolar collapse",
+          "prevents alveolar collapse",
+          "preventing alveolar collapse",
+          "prevents the alveoli from collapsing",
+          "stops alveoli from collapsing",
+          "helps keep alveoli open",
+          "help keep alveoli open",
+          "keeps alveoli open",
+          "keep alveoli open",
+          "alveoli stay open"
+        ]
+      ],
+      "forbiddenClaims": ["surfactant increases surface tension"],
+      "requireLimitation": false,
+      "expectedSupplementalKnowledgeUsed": false,
+      "maximumExplanationWords": 80,
+      "reviewerNotes": "Review learner-appropriate language without loss of the surface-tension mechanism."
+    },
+    {
+      "caseId": "P7-07-LIMIT-001",
+      "subject": "Anatomy",
+      "topic": "Coronary circulation",
+      "learningObjective": "Explain how coronary dominance determines atrioventricular nodal arterial supply from the supplied source.",
+      "targetConcept": "coronary dominance and atrioventricular nodal supply",
+      "explanationMode": "STANDARD",
+      "groundingMode": "STRICT_SOURCE",
+      "learner": {
+        "learningState": "NEW_CONCEPT",
+        "topicExposure": "FIRST_EXPOSURE",
+        "difficultyDirection": "STANDARD",
+        "relevantEvidence": {},
+        "relevantMisconceptions": []
+      },
+      "sourceEvidence": [],
+      "requiredConceptGroups": [["coronary dominance", "atrioventricular nodal supply"]],
+      "forbiddenClaims": ["right coronary artery always supplies the AV node", "left circumflex always supplies the AV node"],
+      "requireLimitation": true,
+      "expectedSupplementalKnowledgeUsed": false,
+      "maximumExplanationWords": 80,
+      "reviewerNotes": "The source is absent. Review that the response states the limitation and does not invent dominance-specific supply."
+    }
+  ]
+}

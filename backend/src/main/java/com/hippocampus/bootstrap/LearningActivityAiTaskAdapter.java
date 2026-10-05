@@ -124,14 +124,14 @@ public final class LearningActivityAiTaskAdapter implements ActivityAiTaskPort {
         switch (request.actionType()) {
             case UNDERSTAND, HINT, PREREQUISITE_SUPPORT -> {
                 taskType = AiTaskType.EXPLANATION;
-                promptId = PromptId.EXPLANATION_V1;
+                promptId = PromptId.EXPLANATION_V2;
                 outputContract = AiOutputContract.EXPLANATION;
                 taskContext = new ExplanationInput(
                         request.objective(), request.targetDisplayName(), explanationMode(request.actionType()));
             }
             case RETRIEVE, UNDERSTANDING_CHECK -> {
                 taskType = AiTaskType.QUESTION_GENERATION;
-                promptId = PromptId.QUESTION_GENERATION_V1;
+                promptId = PromptId.QUESTION_GENERATION_V2;
                 outputContract = AiOutputContract.QUESTION_GENERATION;
                 taskContext = new QuestionGenerationInput(
                         request.objective(),

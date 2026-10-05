@@ -182,6 +182,25 @@ class AiTaskContractsTests {
     }
 
     @Test
+    void responseEvaluationInputAcceptsAndPreservesEmptyOrBlankStudentResponse() {
+        ResponseEvaluationInput empty = new ResponseEvaluationInput(
+                "Which nerve?", List.of("radial nerve"), "Radial nerve", "");
+        ResponseEvaluationInput whitespace = new ResponseEvaluationInput(
+                "Which nerve?", List.of("radial nerve"), "Radial nerve", " \t\n");
+
+        assertThat(empty.studentResponse()).isEmpty();
+        assertThat(whitespace.studentResponse()).isEqualTo(" \t\n");
+    }
+
+    @Test
+    void responseEvaluationInputRejectsNullStudentResponse() {
+        assertThatThrownBy(() -> new ResponseEvaluationInput(
+                        "Which nerve?", List.of("radial nerve"), "Radial nerve", null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("studentResponse");
+    }
+
+    @Test
     void serializesRepresentativeRequestAndValidatedResult() throws Exception {
         AiTaskRequest<ExplanationInput> request = request(
                 AiTaskType.EXPLANATION,

@@ -174,7 +174,7 @@ class LearningActivityAiTaskAdapterTests {
                 any(), anyList(), any());
         AiTaskRequest<?> aiRequest = requestCaptor.getValue();
         assertThat(aiRequest.taskType()).isEqualTo(AiTaskType.QUESTION_GENERATION);
-        assertThat(aiRequest.promptVersion()).isEqualTo("QUESTION_GENERATION_V1");
+        assertThat(aiRequest.promptVersion()).isEqualTo("QUESTION_GENERATION_V2");
         assertThat(aiRequest.outputContract()).isEqualTo(AiOutputContract.QUESTION_GENERATION);
         assertThat(aiRequest.taskContext()).isEqualTo(new QuestionGenerationInput(
                 "Explain cardiac output", "Cardiac output", ActivityType.SHORT_ANSWER,
@@ -186,6 +186,23 @@ class LearningActivityAiTaskAdapterTests {
         assertThat(content.contentPayload()).contains(
                 "\"question\":\"Why can cardiac output rise?\"",
                 "\"expectedAnswer\":\"Heart rate or stroke volume rises.\"");
+    }
+
+    @Test
+    void executesUnderstandThroughExplanationV2() {
+        stubSupplementalExplanation();
+
+        adapter.execute(request(StudyMissionGroundingMode.SOURCE_FIRST, true));
+
+        ArgumentCaptor<AiTaskRequest<?>> requestCaptor = ArgumentCaptor.forClass(AiTaskRequest.class);
+        verify(orchestrator).execute(
+                requestCaptor.capture(),
+                org.mockito.ArgumentMatchers.eq(AiRequestPriority.INTERACTIVE_EXPLANATION),
+                any(), anyList(), any());
+        AiTaskRequest<?> aiRequest = requestCaptor.getValue();
+        assertThat(aiRequest.taskType()).isEqualTo(AiTaskType.EXPLANATION);
+        assertThat(aiRequest.promptVersion()).isEqualTo("EXPLANATION_V2");
+        assertThat(aiRequest.outputContract()).isEqualTo(AiOutputContract.EXPLANATION);
     }
 
     @Test

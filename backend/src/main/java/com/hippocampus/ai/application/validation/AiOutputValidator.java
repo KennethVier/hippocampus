@@ -16,7 +16,9 @@ import com.hippocampus.ai.domain.ExplanationResult;
 import com.hippocampus.ai.domain.QuestionGenerationResult;
 import com.hippocampus.ai.domain.QuestionGenerationInput;
 import com.hippocampus.ai.domain.QuestionOption;
+import com.hippocampus.ai.domain.ResponseEvaluationInput;
 import com.hippocampus.ai.domain.ResponseEvaluationResult;
+import com.hippocampus.ai.domain.ResponseEvaluationV4Result;
 import com.hippocampus.ai.domain.ValidatedAiResult;
 import com.hippocampus.ai.port.AiOutputDecodingException;
 import com.hippocampus.ai.port.AiStructuredOutputDecoder;
@@ -24,9 +26,11 @@ import com.hippocampus.ai.port.AiStructuredOutputDecoder;
 public final class AiOutputValidator {
 
     private final AiStructuredOutputDecoder decoder;
+    private final ResponseEvaluationAggregator responseEvaluationAggregator;
 
     public AiOutputValidator(AiStructuredOutputDecoder decoder) {
         this.decoder = Objects.requireNonNull(decoder, "decoder must not be null");
+        this.responseEvaluationAggregator = new ResponseEvaluationAggregator();
     }
 
     public ValidatedAiResult<?> validate(
@@ -53,7 +57,7 @@ public final class AiOutputValidator {
         Object decoded = decode(providerResult.rawContent(), outputContract, promptId);
         validateBusinessRules(decoded, outputContract);
         validateRequestedQuestionContract(decoded, outputContract, taskContext);
-        return new ValidatedAiResult<>(decoded);
+        return new ValidatedAiResult<>(normalize(decoded, outputContract, taskContext));
     }
 
     private static void validateRequestedQuestionContract(
@@ -77,7 +81,11 @@ public final class AiOutputValidator {
         Class<?> resultType = switch (outputContract) {
             case EXPLANATION -> ExplanationResult.class;
             case QUESTION_GENERATION -> QuestionGenerationResult.class;
-            case RESPONSE_EVALUATION -> ResponseEvaluationResult.class;
+            case RESPONSE_EVALUATION -> promptId == PromptId.RESPONSE_EVALUATION_V4
+                            || promptId == PromptId.RESPONSE_EVALUATION_V5
+                            || promptId == PromptId.RESPONSE_EVALUATION_V6
+                    ? ResponseEvaluationV4Result.class
+                    : ResponseEvaluationResult.class;
             case CONCEPT_CONNECTION -> promptId == PromptId.CONCEPT_CONNECTION_V1
                     ? ConceptConnectionResult.class
                     : ConceptConnectionV2Result.class;
@@ -92,6 +100,28 @@ public final class AiOutputValidator {
                 case CONTRACT_MISMATCH -> AiSchemaValidationException.Reason.CONTRACT_MISMATCH;
             };
             throw new AiSchemaValidationException(outputContract, reason);
+        }
+    }
+
+    private Object normalize(
+            Object decoded,
+            AiOutputContract outputContract,
+            AiTaskContext taskContext) {
+        if (!(decoded instanceof ResponseEvaluationV4Result assessment)) {
+            return decoded;
+        }
+        if (!(taskContext instanceof ResponseEvaluationInput input)) {
+            throw new AiSchemaValidationException(
+                    outputContract,
+                    AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION);
+        }
+        try {
+            return responseEvaluationAggregator.aggregate(input, assessment);
+        } catch (ResponseEvaluationAggregationException exception) {
+            throw new AiSchemaValidationException(
+                    outputContract,
+                    AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION,
+                    exception.reason());
         }
     }
 
