@@ -36,3 +36,4 @@ documentation patches.
 | [ADR-0009](ADR-0009-explicit-application-level-selection.md) | Explicit Application Level Selection | ACCEPTED | 2026-10-01 |
 | [ADR-0010](ADR-0010-presentation-only-understand-progression.md) | Presentation-Only UNDERSTAND Progression and Evidence | ACCEPTED | 2026-10-02 |
 | [ADR-0011](ADR-0011-isolated-pre-gate-phase-8-development.md) | Isolated Pre-Gate Phase 8 Development | ACCEPTED | 2026-10-05 |
+| [ADR-0012](ADR-0012-bounded-pre-gate-p8-02-evidence-projection.md) | Bounded Pre-Gate P8-02 Evidence Projection | ACCEPTED | 2026-10-05 |
