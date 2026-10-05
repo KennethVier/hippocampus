@@ -332,7 +332,10 @@ class AiOutputValidatorTests {
                         PromptId.RESPONSE_EVALUATION_V4))
                 .isInstanceOfSatisfying(AiSchemaValidationException.class, failure ->
                         assertThat(failure.reason())
-                                .isEqualTo(AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION));
+                                .isEqualTo(AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION))
+                .isInstanceOfSatisfying(AiSchemaValidationException.class, failure ->
+                        assertThat(failure.aggregationFailureReason())
+                                .contains(ResponseEvaluationAggregationFailureReason.DUPLICATE_CONCEPT_INDEX));
     }
 
     @Test

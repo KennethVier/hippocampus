@@ -115,10 +115,11 @@ public final class AiOutputValidator {
         }
         try {
             return responseEvaluationAggregator.aggregate(input, assessment);
-        } catch (IllegalArgumentException exception) {
+        } catch (ResponseEvaluationAggregationException exception) {
             throw new AiSchemaValidationException(
                     outputContract,
-                    AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION);
+                    AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION,
+                    exception.reason());
         }
     }
 

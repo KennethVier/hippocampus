@@ -13,9 +13,6 @@ public record ResponseEvaluationJudgment(
         List<String> demonstratedMisconceptions) {
 
     public ResponseEvaluationJudgment {
-        if (expectedConceptIndex < 0) {
-            throw new IllegalArgumentException("expectedConceptIndex must not be negative");
-        }
         expectedConcept = ContractChecks.requiredText(expectedConcept, "expectedConcept");
         studentClaims = ContractChecks.immutableList(studentClaims, "studentClaims");
         Objects.requireNonNull(status, "status must not be null");

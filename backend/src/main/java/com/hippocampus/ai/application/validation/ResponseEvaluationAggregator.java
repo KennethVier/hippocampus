@@ -33,23 +33,25 @@ public final class ResponseEvaluationAggregator {
             validateJudgment(judgment);
             correctConcepts.addAll(judgment.supportedComponents());
             misconceptions.addAll(judgment.demonstratedMisconceptions());
+            String canonicalExpectedConcept = input.expectedConcepts().get(judgment.expectedConceptIndex());
             switch (judgment.status()) {
                 case SUPPORTED -> {
                     // Complete coverage contributes no missing concept.
                 }
                 case PARTIAL -> missingConcepts.addAll(judgment.missingComponents());
-                case MISSING, CONTRADICTED -> missingConcepts.add(judgment.expectedConcept());
+                case MISSING, CONTRADICTED -> {
+                    missingConcepts.add(canonicalExpectedConcept);
+                    missingConcepts.addAll(judgment.missingComponents());
+                }
             }
         }
 
         boolean evaluable = assessment.assessability() == ResponseEvaluationAssessability.EVALUABLE;
-        if (!evaluable && assessment.limitations().isEmpty()) {
-            throw new IllegalArgumentException("non-evaluable assessment must explain its limitation");
-        }
-        if (!evaluable && judgments.stream().anyMatch(judgment ->
-                judgment.status() != ResponseEvaluationJudgmentStatus.MISSING)) {
-            throw new IllegalArgumentException(
-                    "non-evaluable assessment may contain only MISSING judgments");
+        if (assessment.limitations().stream().anyMatch(String::isBlank)
+                || (!evaluable && (assessment.limitations().isEmpty()
+                        || judgments.stream().anyMatch(judgment ->
+                                judgment.status() != ResponseEvaluationJudgmentStatus.MISSING)))) {
+            throw failure(ResponseEvaluationAggregationFailureReason.INVALID_ASSESSABILITY_SHAPE);
         }
 
         Evaluation evaluation;
@@ -81,7 +83,7 @@ public final class ResponseEvaluationAggregator {
             ResponseEvaluationV4Result assessment) {
         List<String> expectedConcepts = input.expectedConcepts();
         if (expectedConcepts.isEmpty() || assessment.judgments().size() != expectedConcepts.size()) {
-            throw new IllegalArgumentException("judgments must cover every expected concept exactly once");
+            throw failure(ResponseEvaluationAggregationFailureReason.INCOMPLETE_COVERAGE);
         }
 
         Set<Integer> coveredIndexes = new HashSet<>();
@@ -89,21 +91,29 @@ public final class ResponseEvaluationAggregator {
         ordered.sort(java.util.Comparator.comparingInt(ResponseEvaluationJudgment::expectedConceptIndex));
         for (ResponseEvaluationJudgment judgment : ordered) {
             int index = judgment.expectedConceptIndex();
-            if (index >= expectedConcepts.size() || !coveredIndexes.add(index)) {
-                throw new IllegalArgumentException("invalid or duplicate expected concept index");
+            if (index < 0 || index >= expectedConcepts.size()) {
+                throw failure(ResponseEvaluationAggregationFailureReason.OUT_OF_RANGE_CONCEPT_INDEX);
             }
-            if (!expectedConcepts.get(index).equals(judgment.expectedConcept())) {
-                throw new IllegalArgumentException("judgment expected concept does not match request");
+            if (!coveredIndexes.add(index)) {
+                throw failure(ResponseEvaluationAggregationFailureReason.DUPLICATE_CONCEPT_INDEX);
             }
         }
         return List.copyOf(ordered);
     }
 
     private static void validateJudgment(ResponseEvaluationJudgment judgment) {
-        requireNonBlank(judgment.studentClaims(), "studentClaims");
-        requireNonBlank(judgment.supportedComponents(), "supportedComponents");
-        requireNonBlank(judgment.missingComponents(), "missingComponents");
-        requireNonBlank(judgment.demonstratedMisconceptions(), "demonstratedMisconceptions");
+        ResponseEvaluationAggregationFailureReason invalidShapeReason = switch (judgment.status()) {
+            case SUPPORTED -> ResponseEvaluationAggregationFailureReason.INVALID_SUPPORTED_SHAPE;
+            case PARTIAL -> ResponseEvaluationAggregationFailureReason.INVALID_PARTIAL_SHAPE;
+            case MISSING -> ResponseEvaluationAggregationFailureReason.INVALID_MISSING_SHAPE;
+            case CONTRADICTED -> ResponseEvaluationAggregationFailureReason.INVALID_CONTRADICTED_SHAPE;
+        };
+        if (containsBlank(judgment.studentClaims())
+                || containsBlank(judgment.supportedComponents())
+                || containsBlank(judgment.missingComponents())
+                || containsBlank(judgment.demonstratedMisconceptions())) {
+            throw failure(invalidShapeReason);
+        }
 
         boolean valid = switch (judgment.status()) {
             case SUPPORTED -> !judgment.studentClaims().isEmpty()
@@ -115,21 +125,22 @@ public final class ResponseEvaluationAggregator {
                     && (!judgment.missingComponents().isEmpty()
                             || !judgment.demonstratedMisconceptions().isEmpty());
             case MISSING -> judgment.supportedComponents().isEmpty()
-                    && judgment.missingComponents().isEmpty()
                     && judgment.demonstratedMisconceptions().isEmpty();
             case CONTRADICTED -> !judgment.studentClaims().isEmpty()
                     && judgment.supportedComponents().isEmpty()
-                    && judgment.missingComponents().isEmpty()
                     && !judgment.demonstratedMisconceptions().isEmpty();
         };
         if (!valid) {
-            throw new IllegalArgumentException("judgment fields do not match status " + judgment.status());
+            throw failure(invalidShapeReason);
         }
     }
 
-    private static void requireNonBlank(List<String> values, String name) {
-        if (values.stream().anyMatch(String::isBlank)) {
-            throw new IllegalArgumentException(name + " must not contain blank values");
-        }
+    private static boolean containsBlank(List<String> values) {
+        return values.stream().anyMatch(String::isBlank);
+    }
+
+    private static ResponseEvaluationAggregationException failure(
+            ResponseEvaluationAggregationFailureReason reason) {
+        return new ResponseEvaluationAggregationException(reason);
     }
 }

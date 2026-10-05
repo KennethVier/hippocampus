@@ -7,8 +7,6 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-import com.hippocampus.ai.domain.Evaluation;
-import com.hippocampus.ai.domain.EvaluationCertainty;
 import com.hippocampus.ai.domain.RecommendedAction;
 import com.hippocampus.ai.domain.ResponseEvaluationAssessability;
 import com.hippocampus.ai.domain.ResponseEvaluationInput;
@@ -19,164 +17,207 @@ import com.hippocampus.ai.domain.ResponseEvaluationV4Result;
 
 class ResponseEvaluationAggregatorTests {
 
-    private static final String NERVE = "The radial nerve supplies wrist extensors";
-    private static final String EFFECT = "Loss of wrist extension produces wrist drop";
-
     private final ResponseEvaluationAggregator aggregator = new ResponseEvaluationAggregator();
-    private final ResponseEvaluationInput input = new ResponseEvaluationInput(
-            "Why can radial nerve injury cause wrist drop?",
-            List.of(NERVE, EFFECT),
-            "Radial nerve injury denervates wrist extensors, causing loss of extension.",
-            "student response");
 
     @Test
-    void derivesCorrectWhenEveryExpectedConceptIsSupported() {
-        ResponseEvaluationResult result = aggregate(
-                supported(0, NERVE, "Radial nerve supplies the wrist extensors"),
-                supported(1, EFFECT, "Loss of wrist extension causes wrist drop"));
+    void acceptsMissingDetailsAndUsesApplicationOwnedConceptIdentity() {
+        ResponseEvaluationResult result = aggregate(judgment(
+                0,
+                "  provider formatting differs  ",
+                ResponseEvaluationJudgmentStatus.MISSING,
+                List.of(),
+                List.of(),
+                List.of("Mechanism was not stated"),
+                List.of()));
 
-        assertThat(result.evaluation()).isEqualTo(Evaluation.CORRECT);
-        assertThat(result.correctConcepts()).containsExactly(
-                "Radial nerve supplies the wrist extensors",
-                "Loss of wrist extension causes wrist drop");
-        assertThat(result.missingConcepts()).isEmpty();
-        assertThat(result.misconceptions()).isEmpty();
-    }
-
-    @Test
-    void meaningfulSupportedComponentCannotDisappearOrBecomeIncorrect() {
-        ResponseEvaluationResult result = aggregate(
-                partial(0, NERVE, "Radial nerve injury is involved", "Wrist extensor supply is not explained"),
-                missing(1, EFFECT));
-
-        assertThat(result.evaluation()).isEqualTo(Evaluation.PARTIAL);
-        assertThat(result.correctConcepts()).containsExactly("Radial nerve injury is involved");
         assertThat(result.missingConcepts()).containsExactly(
-                "Wrist extensor supply is not explained", EFFECT);
+                "Canonical expected concept",
+                "Mechanism was not stated");
     }
 
     @Test
-    void wrongReasoningPreservesSupportedConclusionAndDerivesDemonstratedError() {
-        ResponseEvaluationJudgment wrongReasoning = new ResponseEvaluationJudgment(
-                1,
-                EFFECT,
-                List.of("Wrist drop occurs because flexors are activated"),
-                ResponseEvaluationJudgmentStatus.PARTIAL,
-                List.of("The conclusion identifies wrist drop after radial nerve injury"),
-                List.of("Loss of wrist extension is not explained"),
-                List.of("Radial nerve injury activates wrist flexors"));
+    void acceptsContradictedJudgmentWithMissingDetails() {
+        ResponseEvaluationResult result = aggregate(judgment(
+                0,
+                "CANONICAL EXPECTED CONCEPT.",
+                ResponseEvaluationJudgmentStatus.CONTRADICTED,
+                List.of("Relevant student claim"),
+                List.of(),
+                List.of("Correct mechanism was absent"),
+                List.of("Demonstrated error")));
 
-        ResponseEvaluationResult result = aggregate(missing(0, NERVE), wrongReasoning);
-
-        assertThat(result.evaluation()).isEqualTo(Evaluation.PARTIAL);
-        assertThat(result.correctConcepts())
-                .containsExactly("The conclusion identifies wrist drop after radial nerve injury");
-        assertThat(result.missingConcepts()).containsExactly(NERVE, "Loss of wrist extension is not explained");
-        assertThat(result.misconceptions()).containsExactly("Radial nerve injury activates wrist flexors");
+        assertThat(result.missingConcepts()).containsExactly(
+                "Canonical expected concept",
+                "Correct mechanism was absent");
+        assertThat(result.misconceptions()).containsExactly("Demonstrated error");
     }
 
     @Test
-    void uncertainButReasonableResponseWithSupportIsPartialRatherThanIncorrect() {
-        ResponseEvaluationResult result = aggregate(
-                partial(0, NERVE, "A nerve supplies the muscles that lift the wrist", "The radial nerve is not named"),
-                missing(1, EFFECT));
-
-        assertThat(result.evaluation()).isEqualTo(Evaluation.PARTIAL);
-        assertThat(result.correctConcepts()).isNotEmpty();
+    void rejectsIncompleteCoverage() {
+        assertFailure(
+                new ResponseEvaluationV4Result(
+                        List.of(),
+                        ResponseEvaluationAssessability.EVALUABLE,
+                        "Feedback",
+                        RecommendedAction.RETRY,
+                        List.of(),
+                        List.of()),
+                ResponseEvaluationAggregationFailureReason.INCOMPLETE_COVERAGE);
     }
 
     @Test
-    void genuinelyAmbiguousResponseWithoutReliableSupportIsUncertain() {
-        ResponseEvaluationV4Result assessment = assessment(
+    void rejectsDuplicateConceptIndex() {
+        ResponseEvaluationInput twoConcepts = new ResponseEvaluationInput(
+                "Question",
+                List.of("First canonical concept", "Second canonical concept"),
+                "Expected answer",
+                "Student response");
+        ResponseEvaluationJudgment first = judgment(
+                0, "First", ResponseEvaluationJudgmentStatus.MISSING,
+                List.of(), List.of(), List.of(), List.of());
+        ResponseEvaluationJudgment duplicate = judgment(
+                0, "Second", ResponseEvaluationJudgmentStatus.MISSING,
+                List.of(), List.of(), List.of(), List.of());
+
+        assertFailure(
+                twoConcepts,
+                assessment(List.of(first, duplicate)),
+                ResponseEvaluationAggregationFailureReason.DUPLICATE_CONCEPT_INDEX);
+    }
+
+    @Test
+    void rejectsOutOfRangeConceptIndex() {
+        assertFailure(
+                assessment(List.of(judgment(
+                        -1, "Provider echo", ResponseEvaluationJudgmentStatus.MISSING,
+                        List.of(), List.of(), List.of(), List.of()))),
+                ResponseEvaluationAggregationFailureReason.OUT_OF_RANGE_CONCEPT_INDEX);
+    }
+
+    @Test
+    void rejectsMissingJudgmentWithSupportedComponents() {
+        assertJudgmentShapeFailure(
+                judgment(
+                        0, "Provider echo", ResponseEvaluationJudgmentStatus.MISSING,
+                        List.of(), List.of("Invented support"), List.of(), List.of()),
+                ResponseEvaluationAggregationFailureReason.INVALID_MISSING_SHAPE);
+    }
+
+    @Test
+    void rejectsMissingJudgmentWithFabricatedMisconception() {
+        assertJudgmentShapeFailure(
+                judgment(
+                        0, "Provider echo", ResponseEvaluationJudgmentStatus.MISSING,
+                        List.of(), List.of(), List.of(), List.of("Invented misconception")),
+                ResponseEvaluationAggregationFailureReason.INVALID_MISSING_SHAPE);
+    }
+
+    @Test
+    void rejectsContradictedJudgmentWithoutDemonstratedMisconception() {
+        assertJudgmentShapeFailure(
+                judgment(
+                        0, "Provider echo", ResponseEvaluationJudgmentStatus.CONTRADICTED,
+                        List.of("Relevant claim"), List.of(), List.of("Missing mechanism"), List.of()),
+                ResponseEvaluationAggregationFailureReason.INVALID_CONTRADICTED_SHAPE);
+    }
+
+    @Test
+    void keepsSupportedShapeStrict() {
+        assertJudgmentShapeFailure(
+                judgment(
+                        0, "Provider echo", ResponseEvaluationJudgmentStatus.SUPPORTED,
+                        List.of("Relevant claim"), List.of("Supported component"),
+                        List.of("Unexpected gap"), List.of()),
+                ResponseEvaluationAggregationFailureReason.INVALID_SUPPORTED_SHAPE);
+    }
+
+    @Test
+    void keepsPartialShapeStrict() {
+        assertJudgmentShapeFailure(
+                judgment(
+                        0, "Provider echo", ResponseEvaluationJudgmentStatus.PARTIAL,
+                        List.of("Relevant claim"), List.of("Supported component"), List.of(), List.of()),
+                ResponseEvaluationAggregationFailureReason.INVALID_PARTIAL_SHAPE);
+    }
+
+    @Test
+    void rejectsBlankDiagnosticEntriesWithStatusSpecificReason() {
+        assertJudgmentShapeFailure(
+                judgment(
+                        0, "Provider echo", ResponseEvaluationJudgmentStatus.MISSING,
+                        List.of(), List.of(), List.of(" "), List.of()),
+                ResponseEvaluationAggregationFailureReason.INVALID_MISSING_SHAPE);
+    }
+
+    @Test
+    void keepsNonEvaluableShapeStrict() {
+        ResponseEvaluationV4Result invalid = new ResponseEvaluationV4Result(
+                List.of(judgment(
+                        0, "Provider echo", ResponseEvaluationJudgmentStatus.PARTIAL,
+                        List.of("Relevant claim"), List.of("Supported component"),
+                        List.of("Gap"), List.of())),
                 ResponseEvaluationAssessability.AMBIGUOUS_RESPONSE,
-                missing(0, NERVE),
-                missing(1, EFFECT));
+                "Feedback",
+                RecommendedAction.MANUAL_REVIEW,
+                List.of(),
+                List.of("Ambiguous response"));
 
-        ResponseEvaluationResult result = aggregator.aggregate(input, assessment);
-
-        assertThat(result.evaluation()).isEqualTo(Evaluation.UNCERTAIN);
-        assertThat(result.certainty()).isEqualTo(EvaluationCertainty.LIMITED);
-        assertThat(result.correctConcepts()).isEmpty();
-        assertThat(result.missingConcepts()).containsExactly(NERVE, EFFECT);
+        assertFailure(invalid, ResponseEvaluationAggregationFailureReason.INVALID_ASSESSABILITY_SHAPE);
     }
 
-    @Test
-    void emptyOrOffTopicResponseCannotFabricateCorrectConceptsOrMisconceptions() {
-        ResponseEvaluationResult result = aggregate(missing(0, NERVE), missing(1, EFFECT));
-
-        assertThat(result.evaluation()).isEqualTo(Evaluation.INCORRECT);
-        assertThat(result.correctConcepts()).isEmpty();
-        assertThat(result.missingConcepts()).containsExactly(NERVE, EFFECT);
-        assertThat(result.misconceptions()).isEmpty();
+    private ResponseEvaluationResult aggregate(ResponseEvaluationJudgment judgment) {
+        return aggregator.aggregate(input(), assessment(List.of(judgment)));
     }
 
-    @Test
-    void rejectsIncompleteDuplicateUnknownAndMismatchedCoverage() {
-        assertThatThrownBy(() -> aggregator.aggregate(input, assessment(
-                ResponseEvaluationAssessability.EVALUABLE, supported(0, NERVE, "radial nerve"))))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> aggregator.aggregate(input, assessment(
-                ResponseEvaluationAssessability.EVALUABLE,
-                supported(0, NERVE, "radial nerve"),
-                supported(0, NERVE, "wrist extensors"))))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> aggregator.aggregate(input, assessment(
-                ResponseEvaluationAssessability.EVALUABLE,
-                supported(0, NERVE, "radial nerve"),
-                supported(2, EFFECT, "wrist drop"))))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> aggregator.aggregate(input, assessment(
-                ResponseEvaluationAssessability.EVALUABLE,
-                supported(0, EFFECT, "radial nerve"),
-                supported(1, EFFECT, "wrist drop"))))
-                .isInstanceOf(IllegalArgumentException.class);
+    private void assertJudgmentShapeFailure(
+            ResponseEvaluationJudgment judgment,
+            ResponseEvaluationAggregationFailureReason reason) {
+        assertFailure(assessment(List.of(judgment)), reason);
     }
 
-    @Test
-    void rejectsJudgmentFieldsThatContradictTheirStatus() {
-        ResponseEvaluationJudgment fabricatedMissing = new ResponseEvaluationJudgment(
-                0, NERVE, List.of(), ResponseEvaluationJudgmentStatus.MISSING,
-                List.of("fabricated support"), List.of(), List.of());
-
-        assertThatThrownBy(() -> aggregate(fabricatedMissing, missing(1, EFFECT)))
-                .isInstanceOf(IllegalArgumentException.class);
+    private void assertFailure(
+            ResponseEvaluationV4Result assessment,
+            ResponseEvaluationAggregationFailureReason reason) {
+        assertFailure(input(), assessment, reason);
     }
 
-    private ResponseEvaluationResult aggregate(ResponseEvaluationJudgment... judgments) {
-        return aggregator.aggregate(
-                input, assessment(ResponseEvaluationAssessability.EVALUABLE, judgments));
+    private void assertFailure(
+            ResponseEvaluationInput input,
+            ResponseEvaluationV4Result assessment,
+            ResponseEvaluationAggregationFailureReason reason) {
+        assertThatThrownBy(() -> aggregator.aggregate(input, assessment))
+                .isInstanceOfSatisfying(ResponseEvaluationAggregationException.class,
+                        failure -> assertThat(failure.reason()).isEqualTo(reason));
+    }
+
+    private static ResponseEvaluationInput input() {
+        return new ResponseEvaluationInput(
+                "Question",
+                List.of("Canonical expected concept"),
+                "Expected answer",
+                "Student response");
     }
 
     private static ResponseEvaluationV4Result assessment(
-            ResponseEvaluationAssessability assessability,
-            ResponseEvaluationJudgment... judgments) {
+            List<ResponseEvaluationJudgment> judgments) {
         return new ResponseEvaluationV4Result(
-                List.of(judgments),
-                assessability,
-                "Use the supported component and address the remaining gap.",
+                judgments,
+                ResponseEvaluationAssessability.EVALUABLE,
+                "Feedback",
                 RecommendedAction.RETRY,
                 List.of(),
-                assessability == ResponseEvaluationAssessability.EVALUABLE
-                        ? List.of()
-                        : List.of("The response cannot be evaluated reliably."));
+                List.of());
     }
 
-    private static ResponseEvaluationJudgment supported(int index, String expected, String supported) {
+    private static ResponseEvaluationJudgment judgment(
+            int index,
+            String providerEcho,
+            ResponseEvaluationJudgmentStatus status,
+            List<String> claims,
+            List<String> supported,
+            List<String> missing,
+            List<String> misconceptions) {
         return new ResponseEvaluationJudgment(
-                index, expected, List.of(supported), ResponseEvaluationJudgmentStatus.SUPPORTED,
-                List.of(supported), List.of(), List.of());
-    }
-
-    private static ResponseEvaluationJudgment partial(
-            int index, String expected, String supported, String missing) {
-        return new ResponseEvaluationJudgment(
-                index, expected, List.of(supported), ResponseEvaluationJudgmentStatus.PARTIAL,
-                List.of(supported), List.of(missing), List.of());
-    }
-
-    private static ResponseEvaluationJudgment missing(int index, String expected) {
-        return new ResponseEvaluationJudgment(
-                index, expected, List.of(), ResponseEvaluationJudgmentStatus.MISSING,
-                List.of(), List.of(), List.of());
+                index, providerEcho, claims, status, supported, missing, misconceptions);
     }
 }

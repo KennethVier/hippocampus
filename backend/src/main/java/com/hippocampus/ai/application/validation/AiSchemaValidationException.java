@@ -1,6 +1,7 @@
 package com.hippocampus.ai.application.validation;
 
 import java.util.Objects;
+import java.util.Optional;
 
 import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.shared.application.error.ApplicationException;
@@ -13,11 +14,20 @@ public final class AiSchemaValidationException extends ApplicationException {
 
     private final AiOutputContract outputContract;
     private final Reason reason;
+    private final ResponseEvaluationAggregationFailureReason aggregationFailureReason;
 
     public AiSchemaValidationException(AiOutputContract outputContract, Reason reason) {
+        this(outputContract, reason, null);
+    }
+
+    public AiSchemaValidationException(
+            AiOutputContract outputContract,
+            Reason reason,
+            ResponseEvaluationAggregationFailureReason aggregationFailureReason) {
         super(ERROR_CODE, CLIENT_MESSAGE);
         this.outputContract = Objects.requireNonNull(outputContract, "outputContract must not be null");
         this.reason = Objects.requireNonNull(reason, "reason must not be null");
+        this.aggregationFailureReason = aggregationFailureReason;
     }
 
     public AiOutputContract outputContract() {
@@ -26,6 +36,10 @@ public final class AiSchemaValidationException extends ApplicationException {
 
     public Reason reason() {
         return reason;
+    }
+
+    public Optional<ResponseEvaluationAggregationFailureReason> aggregationFailureReason() {
+        return Optional.ofNullable(aggregationFailureReason);
     }
 
     public enum Reason {

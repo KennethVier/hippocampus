@@ -1,0 +1,12 @@
+package com.hippocampus.ai.application.validation;
+
+public enum ResponseEvaluationAggregationFailureReason {
+    INCOMPLETE_COVERAGE,
+    DUPLICATE_CONCEPT_INDEX,
+    OUT_OF_RANGE_CONCEPT_INDEX,
+    INVALID_SUPPORTED_SHAPE,
+    INVALID_PARTIAL_SHAPE,
+    INVALID_MISSING_SHAPE,
+    INVALID_CONTRADICTED_SHAPE,
+    INVALID_ASSESSABILITY_SHAPE
+}

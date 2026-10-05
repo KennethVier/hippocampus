@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.hippocampus.ai.application.prompt.PromptId;
+import com.hippocampus.ai.application.validation.AiSchemaValidationException;
+import com.hippocampus.ai.application.validation.ResponseEvaluationAggregationFailureReason;
 import com.hippocampus.ai.domain.ActivityType;
 import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.domain.AiTaskRequest;
@@ -132,5 +134,21 @@ class GoldenAiLiveEvaluationRunnerTests {
 
         pacer.beforeRequest();
         assertThat(sleptMillis).hasValue(5_000L);
+    }
+
+    @Test
+    void goldenReportUsesOnlySanitizedAggregationFailureMetadata() {
+        AiSchemaValidationException failure = new AiSchemaValidationException(
+                AiOutputContract.RESPONSE_EVALUATION,
+                AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION,
+                ResponseEvaluationAggregationFailureReason.INVALID_MISSING_SHAPE);
+
+        Map<String, String> metadata =
+                GoldenAiLiveEvaluationRunner.schemaValidationDiagnosticMetadata(failure);
+
+        assertThat(metadata).containsExactlyEntriesOf(Map.of(
+                "responseEvaluationAggregationReason", "INVALID_MISSING_SHAPE"));
+        assertThat(metadata.toString()).doesNotContain(
+                "student response", "source text", "provider raw output", "medical content", "prompt");
     }
 }

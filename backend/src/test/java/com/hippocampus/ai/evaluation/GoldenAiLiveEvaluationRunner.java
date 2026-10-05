@@ -190,20 +190,29 @@ class GoldenAiLiveEvaluationRunner {
                     semantic.passed(),
                     semantic.failedRules(),
                     validated.result(),
-                    reviewerNotes);
+                    reviewerNotes,
+                    Map.of());
         } catch (AiSchemaValidationException exception) {
             return failedEntry(
                     request, caseId, liveProvider.configuredModel(),
-                    "schema-validation:" + exception.reason(), reviewerNotes);
+                    "schema-validation:" + exception.reason(), reviewerNotes,
+                    schemaValidationDiagnosticMetadata(exception));
         } catch (ProviderExecutionException exception) {
             return failedEntry(
                     request, caseId, liveProvider.configuredModel(),
-                    "provider-execution:" + exception.failureType(), reviewerNotes);
+                    "provider-execution:" + exception.failureType(), reviewerNotes, Map.of());
         } catch (RuntimeException exception) {
             return failedEntry(
                     request, caseId, liveProvider.configuredModel(),
-                    "evaluation-runner:" + exception.getClass().getSimpleName(), reviewerNotes);
+                    "evaluation-runner:" + exception.getClass().getSimpleName(), reviewerNotes, Map.of());
         }
+    }
+
+    static Map<String, String> schemaValidationDiagnosticMetadata(
+            AiSchemaValidationException exception) {
+        return exception.aggregationFailureReason()
+                .map(reason -> Map.of("responseEvaluationAggregationReason", reason.name()))
+                .orElseGet(Map::of);
     }
 
     private static ReportEntry failedEntry(
@@ -211,9 +220,11 @@ class GoldenAiLiveEvaluationRunner {
             String caseId,
             String model,
             String rule,
-            String reviewerNotes) {
+            String reviewerNotes,
+            Map<String, String> diagnosticMetadata) {
         return new ReportEntry(
-                request.taskType().name(), caseId, model, false, List.of(rule), null, reviewerNotes);
+                request.taskType().name(), caseId, model, false, List.of(rule), null, reviewerNotes,
+                diagnosticMetadata);
     }
 
     private static LiveProvider liveProvider() {
@@ -449,5 +460,6 @@ class GoldenAiLiveEvaluationRunner {
             boolean passed,
             List<String> failedRules,
             Object validatedStructuredOutput,
-            String reviewerNotes) {}
+            String reviewerNotes,
+            Map<String, String> diagnosticMetadata) {}
 }
