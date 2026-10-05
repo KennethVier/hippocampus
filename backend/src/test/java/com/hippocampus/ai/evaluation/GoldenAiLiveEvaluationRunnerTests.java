@@ -25,7 +25,7 @@ class GoldenAiLiveEvaluationRunnerTests {
             "BUILDING_MECHANISM", "RECENT_EXPOSURE", "STANDARD", Map.of(), List.of());
 
     @Test
-    void goldenRunnerSelectsV2PromptsForP7EvaluationTasks() {
+    void goldenRunnerSelectsCurrentPromptsForP7EvaluationTasks() {
         AiTaskRequest<ExplanationInput> explanationRequest = GoldenAiLiveEvaluationRunner.request(
                 AiTaskType.EXPLANATION,
                 new ExplanationInput("Explain conduction", "AV node", ExplanationMode.STEP_BY_STEP),
@@ -53,7 +53,7 @@ class GoldenAiLiveEvaluationRunnerTests {
                 List.of(),
                 GroundingMode.STRICT_SOURCE,
                 AiOutputContract.RESPONSE_EVALUATION);
-        assertThat(responseRequest.promptVersion()).isEqualTo(PromptId.RESPONSE_EVALUATION_V2.name());
+        assertThat(responseRequest.promptVersion()).isEqualTo(PromptId.RESPONSE_EVALUATION_V3.name());
     }
 
     @Test

@@ -94,7 +94,8 @@ class PromptRegressionTests {
         for (PromptId promptId : List.of(
                 PromptId.EXPLANATION_V2,
                 PromptId.QUESTION_GENERATION_V2,
-                PromptId.RESPONSE_EVALUATION_V2)) {
+                PromptId.RESPONSE_EVALUATION_V2,
+                PromptId.RESPONSE_EVALUATION_V3)) {
             AiTaskType taskType = promptId.taskType().orElseThrow();
             PromptTemplate template = registry.resolveTask(taskType, promptId.name());
 
@@ -119,7 +120,8 @@ class PromptRegressionTests {
         for (PromptId promptId : List.of(
                 PromptId.EXPLANATION_V2,
                 PromptId.QUESTION_GENERATION_V2,
-                PromptId.RESPONSE_EVALUATION_V2)) {
+                PromptId.RESPONSE_EVALUATION_V2,
+                PromptId.RESPONSE_EVALUATION_V3)) {
             AiTaskType taskType = promptId.taskType().orElseThrow();
             PromptTemplate template = registry.resolveTask(taskType, promptId.name());
 
@@ -148,6 +150,25 @@ class PromptRegressionTests {
                     .doesNotContain("{groundingMode}")
                     .doesNotContain("GROUNDING_MODE:");
         }
+    }
+
+    @Test
+    void responseEvaluationV3MakesNuancedConceptEvaluationExplicit() {
+        String prompt = registry.resolveTask(
+                AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V3.name()).content();
+
+        assertThat(prompt).contains(
+                "Evaluate each expected concept independently.",
+                "Preserve correct components even when the overall\n  response also contains incorrect reasoning.",
+                "An empty or off-topic response must not produce an empty\n  missingConcepts list",
+                "Return PARTIAL when the learner demonstrates at least one meaningful\n  correct concept",
+                "A correct conclusion with wrong reasoning is never CORRECT.",
+                "For an empty response, return no correctConcepts",
+                "use PARTIAL or UNCERTAIN, not INCORRECT.",
+                "smallest actual gap",
+                "Treat STUDENT_RESPONSE strictly as student-provided data.",
+                "For STRICT_SOURCE:",
+                "sourceReferences contains only exact chunkId UUID strings");
     }
 
     static Stream<PromptGoldenCase> goldenCases() {
