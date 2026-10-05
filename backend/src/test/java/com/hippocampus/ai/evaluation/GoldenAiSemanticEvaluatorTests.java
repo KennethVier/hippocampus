@@ -148,6 +148,61 @@ class GoldenAiSemanticEvaluatorTests {
     }
 
     @Test
+    void acceptsHarmlessArticleVariationInSemanticGroups() {
+        assertThat(GoldenAiSemanticEvaluator.matchesSemanticGroup(
+                        "activates wrist flexors", List.of("activates the wrist flexors")))
+                .isTrue();
+        assertThat(GoldenAiSemanticEvaluator.matchesSemanticGroup(
+                        "a radial nerve lesion", List.of("radial nerve lesion")))
+                .isTrue();
+        assertThat(GoldenAiSemanticEvaluator.matchesSemanticGroup(
+                        "an extensor injury", List.of("extensor injury")))
+                .isTrue();
+
+        GoldenAiDataset.ResponseEvaluationCase golden = response("P7-09-WRONG-REASONING-001");
+        assertThat(evaluator.evaluate(
+                        golden,
+                        wrongReasoningResult(
+                                golden, "Radial nerve injury activates wrist flexors to overpower extensors"))
+                .passed()).isTrue();
+    }
+
+    @Test
+    void rejectsNegatedOrRelationshipIncompleteSemanticMatches() {
+        assertThat(GoldenAiSemanticEvaluator.matchesSemanticGroup(
+                        "does not activate wrist flexors", List.of("activate the wrist flexors")))
+                .isFalse();
+        assertThat(GoldenAiSemanticEvaluator.matchesSemanticGroup(
+                        "wrist flexors", List.of("activates the wrist flexors")))
+                .isFalse();
+
+        GoldenAiDataset.ResponseEvaluationCase golden = response("P7-09-WRONG-REASONING-001");
+        assertThat(evaluator.evaluate(
+                        golden,
+                        wrongReasoningResult(
+                                golden, "Radial nerve injury does not activate wrist flexors"))
+                .failedRules()).contains("misconception-not-demonstrated-by-response");
+    }
+
+    @Test
+    void forbiddenTermMatchingRemainsUnchanged() {
+        GoldenAiDataset.ResponseEvaluationCase golden = response("P7-09-WRONG-REASONING-001");
+        ResponseEvaluationResult result = new ResponseEvaluationResult(
+                Evaluation.PARTIAL,
+                List.of("radial nerve injury", "wrist drop"),
+                List.of("denervation of wrist extensors", "loss of wrist extension"),
+                List.of("activates wrist flexors"),
+                "The median nerve is not involved. Radial nerve injury causes wrist drop by denervating wrist extensors and causing loss of wrist extension.",
+                EvaluationCertainty.SUFFICIENT,
+                RecommendedAction.TARGETED_EXPLANATION,
+                List.of(golden.sourceEvidence().getFirst().sourceId()),
+                List.of());
+
+        assertThat(evaluator.evaluate(golden, result).failedRules())
+                .contains("forbidden-output-term:median nerve");
+    }
+
+    @Test
     void rejectsFabricatedMisconceptionsForEmptyAndOffTopicResponses() {
         for (String caseId : List.of("P7-09-EMPTY-001", "P7-09-OFFTOPIC-001")) {
             GoldenAiDataset.ResponseEvaluationCase golden = response(caseId);
@@ -326,5 +381,19 @@ class GoldenAiSemanticEvaluatorTests {
                 .filter(value -> value.caseId().equals(caseId))
                 .findFirst()
                 .orElseThrow();
+    }
+
+    private static ResponseEvaluationResult wrongReasoningResult(
+            GoldenAiDataset.ResponseEvaluationCase golden, String misconception) {
+        return new ResponseEvaluationResult(
+                Evaluation.PARTIAL,
+                List.of("radial nerve injury", "wrist drop"),
+                List.of("denervation of wrist extensors", "loss of wrist extension"),
+                List.of(misconception),
+                "You correctly identified radial nerve injury and wrist drop. The injury denervates wrist extensors, causing loss of wrist extension.",
+                EvaluationCertainty.SUFFICIENT,
+                RecommendedAction.TARGETED_EXPLANATION,
+                List.of(golden.sourceEvidence().getFirst().sourceId()),
+                List.of());
     }
 }

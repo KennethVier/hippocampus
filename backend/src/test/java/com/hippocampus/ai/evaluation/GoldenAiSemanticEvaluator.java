@@ -15,6 +15,10 @@ import java.util.stream.Collectors;
 
 final class GoldenAiSemanticEvaluator {
 
+    private static final Set<String> HARMLESS_ARTICLES = Set.of("a", "an", "the");
+    private static final Set<String> NEGATIONS = Set.of("no", "not", "never", "without");
+    private static final int NEGATION_LOOKBACK_TOKENS = 3;
+
     record Result(boolean passed, List<String> failedRules) {
         Result {
             failedRules = List.copyOf(failedRules);
@@ -181,13 +185,49 @@ final class GoldenAiSemanticEvaluator {
     }
 
     private static boolean matchesAnyGroup(String value, List<List<String>> groups) {
-        return groups.stream().anyMatch(group -> containsAny(value, group));
+        return groups.stream().anyMatch(group -> matchesSemanticGroup(value, group));
     }
 
     private static boolean containsAny(String value, List<String> alternatives) {
+        return matchesSemanticGroup(value, alternatives);
+    }
+
+    static boolean matchesSemanticGroup(String value, List<String> alternatives) {
+        List<String> valueTokens = semanticTokens(value);
+        return alternatives.stream()
+                .map(GoldenAiSemanticEvaluator::semanticTokens)
+                .anyMatch(alternative -> containsSemanticPhrase(valueTokens, alternative));
+    }
+
+    private static boolean containsSemanticPhrase(
+            List<String> valueTokens, List<String> alternativeTokens) {
+        if (alternativeTokens.isEmpty() || alternativeTokens.size() > valueTokens.size()) {
+            return false;
+        }
+        boolean positiveAlternative = alternativeTokens.stream().noneMatch(NEGATIONS::contains);
+        int lastStart = valueTokens.size() - alternativeTokens.size();
+        for (int start = 0; start <= lastStart; start++) {
+            if (valueTokens.subList(start, start + alternativeTokens.size()).equals(alternativeTokens)
+                    && (!positiveAlternative || !hasPrecedingNegation(valueTokens, start))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasPrecedingNegation(List<String> tokens, int phraseStart) {
+        int firstChecked = Math.max(0, phraseStart - NEGATION_LOOKBACK_TOKENS);
+        return tokens.subList(firstChecked, phraseStart).stream().anyMatch(NEGATIONS::contains);
+    }
+
+    private static List<String> semanticTokens(String value) {
         String normalized = normalize(value);
-        return alternatives.stream().map(GoldenAiSemanticEvaluator::normalize)
-                .anyMatch(normalized::contains);
+        if (normalized.isEmpty()) {
+            return List.of();
+        }
+        return Arrays.stream(normalized.split(" "))
+                .filter(token -> !HARMLESS_ARTICLES.contains(token))
+                .toList();
     }
 
     private static boolean aligned(String actual, String expected) {

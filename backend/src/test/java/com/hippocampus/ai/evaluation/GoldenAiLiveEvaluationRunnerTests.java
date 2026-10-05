@@ -98,8 +98,15 @@ class GoldenAiLiveEvaluationRunnerTests {
     void allTaskPreservesEveryCase() {
         GoldenAiDataset.All all = new GoldenAiDatasetLoader().loadAll();
 
+        assertThat(all.version()).isEqualTo("v2");
         assertThat(GoldenAiLiveEvaluationRunner.selectedDataset(all, "all")).isSameAs(all);
         assertThat(GoldenAiLiveEvaluationRunner.selectedDataset(all, null)).isSameAs(all);
+        assertThat(GoldenAiLiveEvaluationRunner.selectedDataset(all, "explanation").version())
+                .isEqualTo("v2");
+        assertThat(GoldenAiLiveEvaluationRunner.selectedDataset(all, "question-generation").version())
+                .isEqualTo("v2");
+        assertThat(GoldenAiLiveEvaluationRunner.selectedDataset(all, "response-evaluation").version())
+                .isEqualTo("v2");
     }
 
     @Test

@@ -14,8 +14,8 @@ import tools.jackson.databind.ObjectMapper;
 
 final class GoldenAiDatasetLoader {
 
-    static final String VERSION = "v1";
-    private static final String BASE_PATH = "ai/golden/v1/";
+    static final String VERSION = "v2";
+    private static final String BASE_PATH = "ai/golden/v2/";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
