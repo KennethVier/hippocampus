@@ -312,7 +312,7 @@ class GoldenAiLiveEvaluationRunner {
         String promptVersion = switch (taskType) {
             case EXPLANATION -> PromptId.EXPLANATION_V2.name();
             case QUESTION_GENERATION -> PromptId.QUESTION_GENERATION_V2.name();
-            case RESPONSE_EVALUATION -> PromptId.RESPONSE_EVALUATION_V3.name();
+            case RESPONSE_EVALUATION -> PromptId.RESPONSE_EVALUATION_V4.name();
             default -> taskType.name() + "_V1";
         };
         return new AiTaskRequest<>(

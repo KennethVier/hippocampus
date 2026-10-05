@@ -21,6 +21,7 @@ import com.hippocampus.ai.domain.ConceptConnectionV2Result;
 import com.hippocampus.ai.domain.ContextualApplicationResult;
 import com.hippocampus.ai.domain.ExplanationResult;
 import com.hippocampus.ai.domain.QuestionGenerationResult;
+import com.hippocampus.ai.domain.ResponseEvaluationInput;
 import com.hippocampus.ai.domain.ResponseEvaluationResult;
 import com.hippocampus.ai.domain.ValidatedAiResult;
 import com.hippocampus.ai.infrastructure.validation.JacksonAiStructuredOutputDecoder;
@@ -157,6 +158,31 @@ class AiOutputValidatorTests {
         assertThat(result.result()).isInstanceOf(ConceptConnectionResult.class);
     }
 
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(
+            value = PromptId.class,
+            names = {"RESPONSE_EVALUATION_V1", "RESPONSE_EVALUATION_V2", "RESPONSE_EVALUATION_V3"})
+    void preservesHistoricalResponseEvaluationContracts(PromptId promptId) {
+        String legacy = """
+                {
+                  "evaluation": "PARTIAL",
+                  "correctConcepts": ["AV node delay"],
+                  "missingConcepts": ["ventricular filling"],
+                  "misconceptions": [],
+                  "feedback": "Connect the delay to filling.",
+                  "certainty": "SUFFICIENT",
+                  "recommendedAction": "RETRY",
+                  "sourceReferences": [],
+                  "limitations": []
+                }
+                """;
+
+        ValidatedAiResult<?> result = validator.validate(
+                providerResult(legacy), AiOutputContract.RESPONSE_EVALUATION, null, promptId);
+
+        assertThat(result.result()).isInstanceOf(ResponseEvaluationResult.class);
+    }
+
     @Test
     void conceptConnectionV2RejectsMissingResponseBearingFields() {
         String output = validConceptConnection()
@@ -272,6 +298,59 @@ class AiOutputValidatorTests {
                 });
     }
 
+    @Test
+    void responseEvaluationV4DecodesAtomicJudgmentsAndReturnsDeterministicLegacyResult() {
+        ResponseEvaluationInput input = responseEvaluationInput();
+
+        ValidatedAiResult<?> validated = validator.validate(
+                providerResult(validResponseEvaluationV4()),
+                AiOutputContract.RESPONSE_EVALUATION,
+                input,
+                PromptId.RESPONSE_EVALUATION_V4);
+
+        assertThat(validated.result()).isInstanceOf(ResponseEvaluationResult.class);
+        ResponseEvaluationResult result = (ResponseEvaluationResult) validated.result();
+        assertThat(result.evaluation()).isEqualTo(com.hippocampus.ai.domain.Evaluation.PARTIAL);
+        assertThat(result.correctConcepts()).containsExactly("Radial nerve injury is involved");
+        assertThat(result.missingConcepts()).containsExactly(
+                "Wrist extensor supply is not explained",
+                "Loss of wrist extension produces wrist drop");
+        assertThat(result.sourceReferences())
+                .containsExactly("7d753d42-1f42-48fa-8fc1-530b7e319a23");
+    }
+
+    @Test
+    void responseEvaluationV4RejectsInvalidAtomicCoverageAsBusinessRuleViolation() {
+        String incomplete = validResponseEvaluationV4().replace(
+                "\"expectedConceptIndex\": 1",
+                "\"expectedConceptIndex\": 0");
+
+        assertThatThrownBy(() -> validator.validate(
+                        providerResult(incomplete),
+                        AiOutputContract.RESPONSE_EVALUATION,
+                        responseEvaluationInput(),
+                        PromptId.RESPONSE_EVALUATION_V4))
+                .isInstanceOfSatisfying(AiSchemaValidationException.class, failure ->
+                        assertThat(failure.reason())
+                                .isEqualTo(AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION));
+    }
+
+    @Test
+    void responseEvaluationV4RejectsLegacyIndependentSummaryFields() {
+        String withIndependentEvaluation = validResponseEvaluationV4().replace(
+                "  \"judgments\": [",
+                "  \"evaluation\": \"INCORRECT\",\n  \"correctConcepts\": [],\n  \"judgments\": [");
+
+        assertThatThrownBy(() -> validator.validate(
+                        providerResult(withIndependentEvaluation),
+                        AiOutputContract.RESPONSE_EVALUATION,
+                        responseEvaluationInput(),
+                        PromptId.RESPONSE_EVALUATION_V4))
+                .isInstanceOfSatisfying(AiSchemaValidationException.class, failure ->
+                        assertThat(failure.reason())
+                                .isEqualTo(AiSchemaValidationException.Reason.CONTRACT_MISMATCH));
+    }
+
     private void assertFailure(
             String output,
             AiOutputContract contract,
@@ -291,6 +370,48 @@ class AiOutputValidatorTests {
                 rawContent,
                 ProviderUsage.of(40, 20, 60),
                 Duration.ofMillis(25));
+    }
+
+    private static ResponseEvaluationInput responseEvaluationInput() {
+        return new ResponseEvaluationInput(
+                "Why can radial nerve injury cause wrist drop?",
+                java.util.List.of(
+                        "The radial nerve supplies wrist extensors",
+                        "Loss of wrist extension produces wrist drop"),
+                "Radial nerve injury denervates wrist extensors, causing loss of extension.",
+                "Because the radial nerve is injured.");
+    }
+
+    private static String validResponseEvaluationV4() {
+        return """
+                {
+                  "judgments": [
+                    {
+                      "expectedConceptIndex": 0,
+                      "expectedConcept": "The radial nerve supplies wrist extensors",
+                      "studentClaims": ["The radial nerve is injured"],
+                      "status": "PARTIAL",
+                      "supportedComponents": ["Radial nerve injury is involved"],
+                      "missingComponents": ["Wrist extensor supply is not explained"],
+                      "demonstratedMisconceptions": []
+                    },
+                    {
+                      "expectedConceptIndex": 1,
+                      "expectedConcept": "Loss of wrist extension produces wrist drop",
+                      "studentClaims": [],
+                      "status": "MISSING",
+                      "supportedComponents": [],
+                      "missingComponents": [],
+                      "demonstratedMisconceptions": []
+                    }
+                  ],
+                  "assessability": "EVALUABLE",
+                  "feedback": "Name the wrist extensors and loss of extension.",
+                  "recommendedAction": "RETRY",
+                  "sourceReferences": ["7d753d42-1f42-48fa-8fc1-530b7e319a23"],
+                  "limitations": []
+                }
+                """;
     }
 
     private static Stream<Arguments> validOutputs() {

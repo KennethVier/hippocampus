@@ -51,7 +51,7 @@ public final class AiResponseEvaluationAdapter implements ResponseEvaluationPort
         Objects.requireNonNull(request, "request must not be null");
         AiTaskRequest<ResponseEvaluationInput> aiRequest = new AiTaskRequest<>(
                 AiTaskType.RESPONSE_EVALUATION,
-                PromptId.RESPONSE_EVALUATION_V3.name(),
+                PromptId.RESPONSE_EVALUATION_V4.name(),
                 new LearnerContext(
                         "RESPONSE_EVALUATION", "CURRENT_ACTIVITY", "MAINTAIN", Map.of(), List.of()),
                 new ResponseEvaluationInput(

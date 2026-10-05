@@ -65,6 +65,8 @@ import com.hippocampus.ai.domain.ExplanationInput;
 import com.hippocampus.ai.domain.ExplanationMode;
 import com.hippocampus.ai.domain.ExplanationResult;
 import com.hippocampus.ai.domain.LearnerContext;
+import com.hippocampus.ai.domain.ResponseEvaluationInput;
+import com.hippocampus.ai.domain.ResponseEvaluationResult;
 import com.hippocampus.ai.domain.StructuredOutputRepairInput;
 import com.hippocampus.ai.domain.ConceptConnectionInput;
 import com.hippocampus.ai.domain.ConceptConnectionResult;
@@ -653,6 +655,37 @@ class AiExecutionOrchestratorTests {
     }
 
     @Test
+    void malformedResponseEvaluationV4RepairsOnceWithAtomicSchemaAndNormalizesResult() {
+        try (Harness harness = harness(sequence("{\"broken\":", validResponseEvaluationV4()))) {
+            ValidatedAiResult<?> result = join(harness.execute(responseEvaluationRequest()));
+
+            assertThat(result.result()).isInstanceOf(ResponseEvaluationResult.class);
+            assertThat(((ResponseEvaluationResult) result.result()).evaluation())
+                    .isEqualTo(com.hippocampus.ai.domain.Evaluation.PARTIAL);
+            assertThat(harness.adapter.requests).hasSize(2);
+            String repairPrompt = harness.adapter.requests.get(1).promptContext().taskPrompt();
+            assertThat(repairPrompt)
+                    .contains("\"judgments\"", "\"assessability\"")
+                    .doesNotContain("\"evaluation\":", "\"correctConcepts\":");
+        }
+    }
+
+    @Test
+    void responseEvaluationV4PreservesStrictSourceReferenceValidation() {
+        EvidenceChunk source = chunk(1, CHUNK_ID, "AV nodal delay permits ventricular filling.");
+        try (Harness harness = harness(sequence(validResponseEvaluationV4(CHUNK_ID.toString())))) {
+            harness.repository.authorize(source);
+
+            ValidatedAiResult<?> result = join(harness.execute(responseEvaluationRequest(List.of(source))));
+
+            assertThat(((ResponseEvaluationResult) result.result()).sourceReferences())
+                    .containsExactly(CHUNK_ID.toString());
+            assertThat(harness.adapter.requests.getFirst().promptContext().taskPrompt())
+                    .contains("GROUNDING_MODE:\nSTRICT_SOURCE", "For STRICT_SOURCE:");
+        }
+    }
+
+    @Test
     void cancellationBeforeRepairStartsCancelsLogicalRequestWithoutRepair() throws Exception {
         CountDownLatch providerStarted = new CountDownLatch(1);
         try (Harness harness = harness(request -> {
@@ -802,6 +835,57 @@ class AiExecutionOrchestratorTests {
                 evidence(List.of()),
                 GroundingMode.GENERAL_KNOWLEDGE,
                 AiOutputContract.CONCEPT_CONNECTION);
+    }
+
+    private static AiTaskRequest<ResponseEvaluationInput> responseEvaluationRequest() {
+        return responseEvaluationRequest(List.of());
+    }
+
+    private static AiTaskRequest<ResponseEvaluationInput> responseEvaluationRequest(
+            List<EvidenceChunk> chunks) {
+        GroundingMode groundingMode = chunks.isEmpty()
+                ? GroundingMode.GENERAL_KNOWLEDGE
+                : GroundingMode.STRICT_SOURCE;
+        return new AiTaskRequest<>(
+                AiTaskType.RESPONSE_EVALUATION,
+                PromptId.RESPONSE_EVALUATION_V4.name(),
+                learnerContext(),
+                new ResponseEvaluationInput(
+                        "Why does AV nodal delay support filling?",
+                        List.of("AV nodal delay permits ventricular filling"),
+                        "It delays ventricular activation so filling can complete.",
+                        "The AV node delays conduction."),
+                evidence(chunks),
+                groundingMode,
+                AiOutputContract.RESPONSE_EVALUATION);
+    }
+
+    private static String validResponseEvaluationV4() {
+        return validResponseEvaluationV4(null);
+    }
+
+    private static String validResponseEvaluationV4(String sourceReference) {
+        String serializedReferences = sourceReference == null ? "" : "\"" + sourceReference + "\"";
+        return """
+                {
+                  "judgments": [
+                    {
+                      "expectedConceptIndex": 0,
+                      "expectedConcept": "AV nodal delay permits ventricular filling",
+                      "studentClaims": ["The AV node delays conduction"],
+                      "status": "PARTIAL",
+                      "supportedComponents": ["The AV node delays conduction"],
+                      "missingComponents": ["The link to ventricular filling is missing"],
+                      "demonstratedMisconceptions": []
+                    }
+                  ],
+                  "assessability": "EVALUABLE",
+                  "feedback": "Connect the delay to ventricular filling.",
+                  "recommendedAction": "RETRY",
+                  "sourceReferences": [%s],
+                  "limitations": []
+                }
+                """.formatted(serializedReferences);
     }
 
     private static String validConceptConnectionV1() {
