@@ -136,7 +136,7 @@ jobs:
           HIPPOCAMPUS_LIVE_AI_GOLDEN: 'true'
           HIPPOCAMPUS_LIVE_AI_GOLDEN_PROVIDER: ollama-cloud
           HIPPOCAMPUS_LIVE_AI_GOLDEN_TASK: ${{ inputs.task }}
-          HIPPOCAMPUS_LIVE_AI_GOLDEN_DELAY_MS: '0'
+          HIPPOCAMPUS_LIVE_AI_GOLDEN_DELAY_MS: '15000'
           OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
           HIPPOCAMPUS_OLLAMA_CLOUD_SMOKE_MODEL: ${{ vars.HIPPOCAMPUS_OLLAMA_CLOUD_SMOKE_MODEL }}
         run: ./mvnw -B -ntp -Dtest=GoldenAiLiveEvaluationRunner test
