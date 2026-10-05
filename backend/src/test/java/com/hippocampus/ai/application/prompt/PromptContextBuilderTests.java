@@ -211,7 +211,7 @@ class PromptContextBuilderTests {
                 """.strip();
         AiTaskRequest<ResponseEvaluationInput> request = new AiTaskRequest<>(
                 AiTaskType.RESPONSE_EVALUATION,
-                PromptId.RESPONSE_EVALUATION_V5.name(),
+                PromptId.RESPONSE_EVALUATION_V6.name(),
                 learnerContext(),
                 new ResponseEvaluationInput(
                         "Which node delays conduction?",
@@ -361,7 +361,7 @@ class PromptContextBuilderTests {
                         AiOutputContract.QUESTION_GENERATION),
                 new AiTaskRequest<>(
                         AiTaskType.RESPONSE_EVALUATION,
-                        PromptId.RESPONSE_EVALUATION_V5.name(),
+                        PromptId.RESPONSE_EVALUATION_V6.name(),
                         learnerContext(),
                         new ResponseEvaluationInput(
                                 "What delays conduction?",

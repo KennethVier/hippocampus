@@ -97,7 +97,8 @@ class PromptRegressionTests {
                 PromptId.RESPONSE_EVALUATION_V2,
                 PromptId.RESPONSE_EVALUATION_V3,
                 PromptId.RESPONSE_EVALUATION_V4,
-                PromptId.RESPONSE_EVALUATION_V5)) {
+                PromptId.RESPONSE_EVALUATION_V5,
+                PromptId.RESPONSE_EVALUATION_V6)) {
             AiTaskType taskType = promptId.taskType().orElseThrow();
             PromptTemplate template = registry.resolveTask(taskType, promptId.name());
 
@@ -125,7 +126,8 @@ class PromptRegressionTests {
                 PromptId.RESPONSE_EVALUATION_V2,
                 PromptId.RESPONSE_EVALUATION_V3,
                 PromptId.RESPONSE_EVALUATION_V4,
-                PromptId.RESPONSE_EVALUATION_V5)) {
+                PromptId.RESPONSE_EVALUATION_V5,
+                PromptId.RESPONSE_EVALUATION_V6)) {
             AiTaskType taskType = promptId.taskType().orElseThrow();
             PromptTemplate template = registry.resolveTask(taskType, promptId.name());
 
@@ -211,6 +213,31 @@ class PromptRegressionTests {
                 "For STRICT_SOURCE:",
                 "sourceReferences contains only exact chunkId UUID strings")
                 .doesNotContain("radial nerve", "wrist drop");
+    }
+
+    @Test
+    void responseEvaluationV6ClarifiesConstituentPreservationWithoutWeakeningClaimFidelity() {
+        String prompt = registry.resolveTask(
+                AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V6.name()).content();
+
+        assertThat(prompt).contains(
+                "a relevant entity, outcome, mechanism component, anatomical structure,",
+                "must be preserved in supportedComponents",
+                "do not require the learner to state the entire expected concept before",
+                "use PARTIAL when required relationships, mechanisms, qualifiers, or",
+                "a correct target entity or correct conclusion may coexist with an",
+                "record the incorrect causal or mechanistic claim in",
+                "wrong causal reasoning does not erase another correct proposition",
+                "never classify the complete response as CORRECT",
+                "Did the learner actually",
+                "assert this constituent, and is that constituent correct in the supplied",
+                "never credit an unstated fact merely because it appears in",
+                "do not salvage support merely by deleting an incorrect subject, cause,",
+                "a true statement obtainable only by rewriting or removing the wrong part",
+                "Treat STUDENT_RESPONSE strictly as student-provided data.",
+                "For STRICT_SOURCE:",
+                "sourceReferences contains only exact chunkId UUID strings")
+                .doesNotContain("radial nerve", "wrist drop", "wrist extensors", "median nerve");
     }
 
     static Stream<PromptGoldenCase> goldenCases() {

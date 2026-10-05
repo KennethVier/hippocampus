@@ -55,7 +55,7 @@ class GoldenAiLiveEvaluationRunnerTests {
                 List.of(),
                 GroundingMode.STRICT_SOURCE,
                 AiOutputContract.RESPONSE_EVALUATION);
-        assertThat(responseRequest.promptVersion()).isEqualTo(PromptId.RESPONSE_EVALUATION_V5.name());
+        assertThat(responseRequest.promptVersion()).isEqualTo(PromptId.RESPONSE_EVALUATION_V6.name());
     }
 
     @Test

@@ -301,7 +301,7 @@ class AiOutputValidatorTests {
     @ParameterizedTest
     @org.junit.jupiter.params.provider.EnumSource(
             value = PromptId.class,
-            names = {"RESPONSE_EVALUATION_V4", "RESPONSE_EVALUATION_V5"})
+            names = {"RESPONSE_EVALUATION_V4", "RESPONSE_EVALUATION_V5", "RESPONSE_EVALUATION_V6"})
     void responseEvaluationAtomicPromptsReturnDeterministicLegacyResult(PromptId promptId) {
         ResponseEvaluationInput input = responseEvaluationInput();
 
