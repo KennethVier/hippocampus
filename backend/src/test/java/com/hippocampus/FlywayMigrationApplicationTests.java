@@ -61,9 +61,11 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("22");
         assertSuccessfulFlywayVersion("23");
         assertSuccessfulFlywayVersion("24");
+        assertSuccessfulFlywayVersion("25");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertLearningActivityCompatibilityColumns();
+        assertLearningEvidenceSchema();
         assertSpringSessionSchema();
         assertUsersColumnsMatchContract();
         assertUsersPrimaryKey();
@@ -110,9 +112,11 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("22");
         assertSuccessfulFlywayVersion("23");
         assertSuccessfulFlywayVersion("24");
+        assertSuccessfulFlywayVersion("25");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertLearningActivityCompatibilityColumns();
+        assertLearningEvidenceSchema();
         assertSpringSessionSchema();
         assertLearningOrganizationSchema();
         assertMaterialFoundationSchema();
@@ -177,6 +181,104 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                 "learning_activities", "chk_learning_activities_represented_action_type",
                 "UNDERSTAND", "UNDERSTANDING_CHECK", "RETRIEVE", "CONNECT", "APPLY",
                 "HINT", "PREREQUISITE_SUPPORT", "FEEDBACK", "REFLECT");
+    }
+
+    @Test
+    void learningEvidenceIntegrityConstraintsAreEnforcedByPostgres() throws Exception {
+        try (var context = startMigrationApplication()) {
+            assertThat(context.isActive()).isTrue();
+        }
+
+        UUID userId = UUID.randomUUID();
+        UUID subjectId = UUID.randomUUID();
+        UUID topicId = UUID.randomUUID();
+        UUID otherTopicId = UUID.randomUUID();
+        UUID subtopicId = UUID.randomUUID();
+        UUID missionId = UUID.randomUUID();
+        UUID objectiveId = UUID.randomUUID();
+        UUID activityId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        UUID evidenceEventId = UUID.randomUUID();
+
+        try (var connection = openPostgresConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    INSERT INTO users (id, email, status, created_at, updated_at)
+                    VALUES ('%s', '%s@example.test', 'ACTIVE', now(), now())
+                    """.formatted(userId, userId));
+            statement.executeUpdate("""
+                    INSERT INTO subjects (id, user_id, name, status, created_at, updated_at)
+                    VALUES ('%s', '%s', 'Evidence subject', 'ACTIVE', now(), now())
+                    """.formatted(subjectId, userId));
+            statement.executeUpdate("""
+                    INSERT INTO topics (id, subject_id, name, status, created_at, updated_at)
+                    VALUES
+                        ('%s', '%s', 'Evidence topic', 'ACTIVE', now(), now()),
+                        ('%s', '%s', 'Other evidence topic', 'ACTIVE', now(), now())
+                    """.formatted(topicId, subjectId, otherTopicId, subjectId));
+            statement.executeUpdate("""
+                    INSERT INTO subtopics (id, topic_id, name, status, created_at, updated_at)
+                    VALUES ('%s', '%s', 'Evidence subtopic', 'ACTIVE', now(), now())
+                    """.formatted(subtopicId, topicId));
+            statement.executeUpdate("""
+                    INSERT INTO study_missions (
+                        id, user_id, topic_id, status, grounding_mode, created_at, updated_at)
+                    VALUES ('%s', '%s', '%s', 'ACTIVE', 'STRICT_SOURCE', now(), now())
+                    """.formatted(missionId, userId, topicId));
+            statement.executeUpdate("""
+                    INSERT INTO learning_objectives (
+                        id, study_mission_id, objective_text, status, created_at)
+                    VALUES ('%s', '%s', 'Evidence objective', 'ACTIVE', now())
+                    """.formatted(objectiveId, missionId));
+            statement.executeUpdate("""
+                    INSERT INTO learning_activities (
+                        id, study_mission_id, learning_objective_id, activity_type,
+                        status, sequence_number, source_required, created_at,
+                        represented_action_type)
+                    VALUES ('%s', '%s', '%s', 'RETRIEVE', 'COMPLETED', 1, false, now(),
+                            'RETRIEVE')
+                    """.formatted(activityId, missionId, objectiveId));
+            statement.executeUpdate("""
+                    INSERT INTO student_attempts (
+                        id, user_id, learning_activity_id, attempt_number, submitted_at,
+                        evaluation_status, created_at)
+                    VALUES ('%s', '%s', '%s', 1, now(), 'VALIDATED', now())
+                    """.formatted(attemptId, userId, activityId));
+            statement.executeUpdate(evidenceEventInsert(
+                    evidenceEventId, userId, topicId, subtopicId, attemptId, activityId));
+
+            assertThatThrownBy(() -> statement.executeUpdate(
+                    "DELETE FROM student_attempts WHERE id = '" + attemptId + "'"))
+                    .isInstanceOf(SQLException.class);
+            assertThatThrownBy(() -> statement.executeUpdate(evidenceEventInsert(
+                    UUID.randomUUID(), userId, topicId, subtopicId, UUID.randomUUID(), activityId)))
+                    .isInstanceOf(SQLException.class);
+            assertThatThrownBy(() -> statement.executeUpdate(evidenceEventInsert(
+                    UUID.randomUUID(), userId, topicId, subtopicId, null, UUID.randomUUID())))
+                    .isInstanceOf(SQLException.class);
+            assertThatThrownBy(() -> statement.executeUpdate(evidenceEventInsert(
+                    UUID.randomUUID(), userId, otherTopicId, subtopicId, attemptId, activityId)))
+                    .isInstanceOf(SQLException.class);
+
+            statement.executeUpdate(learningEvidenceInsert(
+                    UUID.randomUUID(), userId, topicId, subtopicId,
+                    "RETRIEVAL", "DEVELOPING", null));
+            assertThatThrownBy(() -> statement.executeUpdate(learningEvidenceInsert(
+                    UUID.randomUUID(), userId, otherTopicId, subtopicId,
+                    "RETRIEVAL", "DEVELOPING", 1)))
+                    .isInstanceOf(SQLException.class);
+            assertThatThrownBy(() -> statement.executeUpdate(learningEvidenceInsert(
+                    UUID.randomUUID(), userId, topicId, subtopicId,
+                    "INVALID", "DEVELOPING", 1)))
+                    .isInstanceOf(SQLException.class);
+            assertThatThrownBy(() -> statement.executeUpdate(learningEvidenceInsert(
+                    UUID.randomUUID(), userId, topicId, subtopicId,
+                    "RETRIEVAL", "INVALID", 1)))
+                    .isInstanceOf(SQLException.class);
+            assertThatThrownBy(() -> statement.executeUpdate(learningEvidenceInsert(
+                    UUID.randomUUID(), userId, topicId, subtopicId,
+                    "RETRIEVAL", "DEVELOPING", -1)))
+                    .isInstanceOf(SQLException.class);
+        }
     }
 
     @Test
@@ -453,10 +555,12 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                     "chunk_visual_links",
                     "chunks",
                     "document_nodes",
+                    "evidence_events",
                     "generated_artifact_sources",
                     "generated_artifacts",
                     "index_generations",
                     "learning_activities",
+                    "learning_evidence",
                     "learning_objectives",
                     "material_topic_links",
                     "material_versions",
@@ -500,6 +604,67 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                     Map.entry("represented_action_type", "NO"),
                     Map.entry("template_signature", "YES"));
         }
+    }
+
+    private static void assertLearningEvidenceSchema() throws SQLException {
+        assertColumnsMatch("evidence_events", Map.ofEntries(
+                Map.entry("id", "uuid:NO"),
+                Map.entry("user_id", "uuid:NO"),
+                Map.entry("topic_id", "uuid:NO"),
+                Map.entry("subtopic_id", "uuid:YES"),
+                Map.entry("concept_key", "character varying:YES"),
+                Map.entry("student_attempt_id", "uuid:YES"),
+                Map.entry("learning_activity_id", "uuid:NO"),
+                Map.entry("event_type", "character varying:NO"),
+                Map.entry("outcome", "character varying:NO"),
+                Map.entry("difficulty", "character varying:YES"),
+                Map.entry("confidence", "character varying:YES"),
+                Map.entry("occurred_at", "timestamp with time zone:NO"),
+                Map.entry("created_at", "timestamp with time zone:NO")));
+        assertColumnsMatch("learning_evidence", Map.ofEntries(
+                Map.entry("id", "uuid:NO"),
+                Map.entry("user_id", "uuid:NO"),
+                Map.entry("topic_id", "uuid:NO"),
+                Map.entry("subtopic_id", "uuid:YES"),
+                Map.entry("concept_key", "character varying:YES"),
+                Map.entry("evidence_dimension", "character varying:NO"),
+                Map.entry("state", "character varying:NO"),
+                Map.entry("supporting_event_count", "integer:NO"),
+                Map.entry("last_observed_at", "timestamp with time zone:YES"),
+                Map.entry("updated_at", "timestamp with time zone:NO")));
+        assertNamedConstraint("evidence_events", "pk_evidence_events", "PRIMARY KEY (id)", null);
+        assertNamedConstraint("evidence_events", "fk_evidence_events_user",
+                "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT", "r");
+        assertNamedConstraint("evidence_events", "fk_evidence_events_topic",
+                "FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE RESTRICT", "r");
+        assertNamedConstraint("evidence_events", "fk_evidence_events_subtopic_same_topic",
+                "FOREIGN KEY (subtopic_id, topic_id) REFERENCES subtopics(id, topic_id) ON DELETE RESTRICT", "r");
+        assertNamedConstraint("evidence_events", "fk_evidence_events_student_attempt",
+                "FOREIGN KEY (student_attempt_id) REFERENCES student_attempts(id) ON DELETE RESTRICT", "r");
+        assertNamedConstraint("evidence_events", "fk_evidence_events_learning_activity",
+                "FOREIGN KEY (learning_activity_id) REFERENCES learning_activities(id) ON DELETE RESTRICT", "r");
+        assertNamedConstraint("learning_evidence", "pk_learning_evidence", "PRIMARY KEY (id)", null);
+        assertNamedConstraint("learning_evidence", "fk_learning_evidence_user",
+                "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT", "r");
+        assertNamedConstraint("learning_evidence", "fk_learning_evidence_topic",
+                "FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE RESTRICT", "r");
+        assertNamedConstraint("learning_evidence", "fk_learning_evidence_subtopic_same_topic",
+                "FOREIGN KEY (subtopic_id, topic_id) REFERENCES subtopics(id, topic_id) ON DELETE RESTRICT", "r");
+        assertCheckConstraintContains("learning_evidence", "chk_learning_evidence_dimension",
+                "RETRIEVAL", "UNDERSTANDING", "CONNECTION", "APPLICATION",
+                "VISUAL_IDENTIFICATION", "REVIEW_RETENTION");
+        assertCheckConstraintContains("learning_evidence", "chk_learning_evidence_state",
+                "STRONG", "DEVELOPING", "WEAK", "INSUFFICIENT_EVIDENCE");
+        assertCheckConstraintContains("learning_evidence", "chk_learning_evidence_supporting_event_count",
+                "supporting_event_count", ">= 0");
+        assertColumnDefault("learning_evidence", "supporting_event_count", "0");
+        assertIndex("evidence_events", "idx_evidence_events_user_topic_occurred_at", false,
+                "user_id", "topic_id", "occurred_at");
+        assertIndex("learning_evidence", "idx_learning_evidence_user_topic_dimension", false,
+                "user_id", "topic_id", "evidence_dimension");
+        assertNoConstraintType("evidence_events", "UNIQUE");
+        assertNoCheckConstraints("evidence_events");
+        assertNoConstraintType("learning_evidence", "UNIQUE");
     }
 
     private static void assertAiDiagnosticsSchema() throws SQLException {
@@ -639,6 +804,39 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                     """.formatted(activityId, missionId, objectiveId, activityType));
         }
         return activityId;
+    }
+
+    private static String evidenceEventInsert(
+            UUID id, UUID userId, UUID topicId, UUID subtopicId,
+            UUID studentAttemptId, UUID learningActivityId) {
+        String attemptValue = studentAttemptId == null ? "NULL" : "'" + studentAttemptId + "'";
+        return """
+                INSERT INTO evidence_events (
+                    id, user_id, topic_id, subtopic_id, student_attempt_id,
+                    learning_activity_id, event_type, outcome, occurred_at, created_at)
+                VALUES ('%s', '%s', '%s', '%s', %s, '%s',
+                        'RETRIEVAL_ATTEMPT', 'CORRECT', now(), now())
+                """.formatted(
+                id, userId, topicId, subtopicId, attemptValue, learningActivityId);
+    }
+
+    private static String learningEvidenceInsert(
+            UUID id, UUID userId, UUID topicId, UUID subtopicId,
+            String evidenceDimension, String state, Integer supportingEventCount) {
+        if (supportingEventCount == null) {
+            return """
+                    INSERT INTO learning_evidence (
+                        id, user_id, topic_id, subtopic_id, evidence_dimension, state, updated_at)
+                    VALUES ('%s', '%s', '%s', '%s', '%s', '%s', now())
+                    """.formatted(id, userId, topicId, subtopicId, evidenceDimension, state);
+        }
+        return """
+                INSERT INTO learning_evidence (
+                    id, user_id, topic_id, subtopic_id, evidence_dimension, state,
+                    supporting_event_count, updated_at)
+                VALUES ('%s', '%s', '%s', '%s', '%s', '%s', %d, now())
+                """.formatted(
+                id, userId, topicId, subtopicId, evidenceDimension, state, supportingEventCount);
     }
 
     private static String learningActivityColumn(UUID activityId, String column) throws SQLException {
@@ -786,6 +984,22 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                         """)) {
             statement.setString(1, tableName);
             statement.setString(2, constraintType);
+            try (var result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getInt(1)).isZero();
+            }
+        }
+    }
+
+    private static void assertNoCheckConstraints(String tableName) throws SQLException {
+        try (var connection = openPostgresConnection();
+                var statement = connection.prepareStatement("""
+                        SELECT COUNT(*)
+                        FROM pg_constraint
+                        WHERE conrelid = ('public.' || ?)::regclass
+                          AND contype = 'c'
+                        """)) {
+            statement.setString(1, tableName);
             try (var result = statement.executeQuery()) {
                 assertThat(result.next()).isTrue();
                 assertThat(result.getInt(1)).isZero();
