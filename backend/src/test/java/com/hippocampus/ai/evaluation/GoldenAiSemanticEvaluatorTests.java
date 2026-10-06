@@ -253,12 +253,14 @@ class GoldenAiSemanticEvaluatorTests {
         GoldenAiDataset.ResponseEvaluationCase partial = response("P7-09-PARTIAL-001");
         ResponseEvaluationResult acceptable = new ResponseEvaluationResult(
                 Evaluation.PARTIAL,
-                List.of("The radial nerve innervates the wrist extensors (injury causes denervation)"),
-                List.of("wrist drop"),
+                List.of("The radial nerve innervates the wrist extensors"),
+                List.of("Loss of wrist extension produces wrist drop"),
                 List.of(),
-                "The missing consequence is loss of wrist extension and wrist drop.",
+                "You correctly identified that a radial nerve injury denervates the wrist extensors. "
+                        + "To fully answer the question, what happens to the movement of the wrist "
+                        + "when these extensors are denervated?",
                 EvaluationCertainty.SUFFICIENT,
-                RecommendedAction.RETRY,
+                RecommendedAction.GUIDED_REASONING,
                 List.of(partial.sourceEvidence().getFirst().sourceId()),
                 List.of());
         ResponseEvaluationResult supplyAlone = new ResponseEvaluationResult(
