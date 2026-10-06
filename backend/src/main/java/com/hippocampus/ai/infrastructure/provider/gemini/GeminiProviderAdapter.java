@@ -156,7 +156,8 @@ public final class GeminiProviderAdapter implements AiProviderAdapter {
                 .model(request.target().modelId())
                 .maxOutputTokens(request.promptContext().reservedOutputTokens())
                 .responseMimeType(JSON_MIME_TYPE)
-                .responseSchema(ProviderStructuredOutputSchema.geminiSchema(request.outputContract()))
+                .responseSchema(ProviderStructuredOutputSchema.geminiSchema(
+                        request.outputContract(), request.promptContext().taskPromptId()))
                 .build();
         return new Prompt(List.of(
                 new SystemMessage(request.promptContext().systemPrompt()),
