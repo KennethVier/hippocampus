@@ -15,10 +15,10 @@ import tools.jackson.databind.ObjectMapper;
 
 final class GoldenAiDatasetLoader {
 
-    static final String VERSION = "v3";
+    static final String VERSION = "v4";
     private static final String SOURCE_VERSION = "v2";
     private static final String BASE_PATH = "ai/golden/v2/";
-    private static final String OVERRIDE_PATH = "ai/golden/v3/response-evaluation-rubric-overrides.json";
+    private static final String OVERRIDE_PATH = "ai/golden/v4/response-evaluation-rubric-overrides.json";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -246,10 +246,18 @@ final class GoldenAiDatasetLoader {
         Map<String, ResponseEvaluationOverride> byCase = new java.util.HashMap<>();
         for (ResponseEvaluationOverride override : overrides.overrides()) {
             requiredText(override.caseId(), "override caseId");
-            requireNonEmpty(override.requiredCorrectConceptAlternatives(),
+            requireNonNull(override.requiredCorrectConceptAlternatives(),
                     "requiredCorrectConceptAlternatives");
+            requireNonNull(override.requiredFeedbackConceptAlternatives(),
+                    "requiredFeedbackConceptAlternatives");
+            if (override.requiredCorrectConceptAlternatives().isEmpty()
+                    && override.requiredFeedbackConceptAlternatives().isEmpty()) {
+                throw invalid(override.caseId(), "override must add at least one rubric alternative");
+            }
             if (override.requiredCorrectConceptAlternatives().stream()
-                    .anyMatch(value -> value == null || value.isBlank())) {
+                            .anyMatch(value -> value == null || value.isBlank())
+                    || override.requiredFeedbackConceptAlternatives().stream()
+                            .anyMatch(value -> value == null || value.isBlank())) {
                 throw invalid(override.caseId(), "override contains blank alternative");
             }
             if (byCase.put(override.caseId(), override) != null) {
@@ -273,19 +281,32 @@ final class GoldenAiDatasetLoader {
             return value;
         }
         List<List<String>> correctGroups = new ArrayList<>(value.requiredCorrectConceptGroups());
-        if (correctGroups.isEmpty()) {
-            throw invalid(value.caseId(), "rubric override requires a correct-concept group");
+        if (!override.requiredCorrectConceptAlternatives().isEmpty()) {
+            if (correctGroups.isEmpty()) {
+                throw invalid(value.caseId(), "rubric override requires a correct-concept group");
+            }
+            List<String> firstGroup = new ArrayList<>(correctGroups.getFirst());
+            firstGroup.addAll(override.requiredCorrectConceptAlternatives());
+            correctGroups.set(0, List.copyOf(firstGroup));
         }
-        List<String> firstGroup = new ArrayList<>(correctGroups.getFirst());
-        firstGroup.addAll(override.requiredCorrectConceptAlternatives());
-        correctGroups.set(0, List.copyOf(firstGroup));
+
+        List<List<String>> feedbackGroups = new ArrayList<>(value.requiredFeedbackConceptGroups());
+        if (!override.requiredFeedbackConceptAlternatives().isEmpty()) {
+            if (feedbackGroups.isEmpty()) {
+                throw invalid(value.caseId(), "rubric override requires a feedback-concept group");
+            }
+            List<String> firstGroup = new ArrayList<>(feedbackGroups.getFirst());
+            firstGroup.addAll(override.requiredFeedbackConceptAlternatives());
+            feedbackGroups.set(0, List.copyOf(firstGroup));
+        }
+
         return new GoldenAiDataset.ResponseEvaluationCase(
                 value.caseId(), value.subject(), value.topic(), value.question(),
                 value.expectedConcepts(), value.expectedAnswer(), value.studentResponse(),
                 value.groundingMode(), value.learner(), value.sourceEvidence(),
                 value.allowedEvaluations(), value.forbiddenEvaluations(), List.copyOf(correctGroups),
                 value.requiredMissingConceptGroups(), value.allowedMisconceptionGroups(),
-                value.requiredFeedbackConceptGroups(), value.requireNoMissingConcepts(),
+                List.copyOf(feedbackGroups), value.requireNoMissingConcepts(),
                 value.requireNoMisconceptions(), value.forbiddenOutputTerms(), value.reviewerNotes());
     }
 
@@ -293,5 +314,7 @@ final class GoldenAiDatasetLoader {
             String version, String basedOn, List<ResponseEvaluationOverride> overrides) {}
 
     private record ResponseEvaluationOverride(
-            String caseId, List<String> requiredCorrectConceptAlternatives) {}
+            String caseId,
+            List<String> requiredCorrectConceptAlternatives,
+            List<String> requiredFeedbackConceptAlternatives) {}
 }
