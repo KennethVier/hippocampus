@@ -118,11 +118,14 @@ class GoldenAiDatasetValidationTests {
         assertThat(partial.requiredCorrectConceptGroups().getFirst())
                 .contains(
                         "radial nerve innervates the wrist extensors injury causes denervation",
-                        "radial nerve innervates the wrist extensors");
+                        "radial nerve innervates the wrist extensors",
+                        "radial nerve supplies the wrist extensors");
         assertThat(partial.requiredFeedbackConceptGroups().getFirst())
                 .contains("what happens to the movement of the wrist when these extensors are denervated");
         assertThat(response(dataset, "P7-09-UNCERTAIN-001").requiredCorrectConceptGroups().getFirst())
-                .contains("a nerve supplies the muscles that extend or lift the wrist");
+                .contains(
+                        "a nerve supplies the muscles that extend or lift the wrist",
+                        "a nerve supplies the muscles that lift extend the wrist");
     }
 
     @Test
