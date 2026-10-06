@@ -28,7 +28,7 @@ class GoldenAiDatasetValidationTests {
                 .flatMap(stream -> stream)
                 .toList();
 
-        assertThat(dataset.version()).isEqualTo("v2");
+        assertThat(dataset.version()).isEqualTo("v3");
         assertThat(new HashSet<>(caseIds)).hasSameSizeAs(caseIds);
         assertThat(dataset.explanations()).hasSizeGreaterThanOrEqualTo(4);
         assertThat(dataset.explanations())
@@ -107,6 +107,16 @@ class GoldenAiDatasetValidationTests {
                 .anyMatch(group -> group.contains("wrist drop"));
         assertThat(wrongReasoning.allowedMisconceptionGroups()).containsExactly(
                 List.of("activates the wrist flexors", "normal extensors"));
+    }
+
+    @Test
+    void v3AddsOnlyTheTwoConfirmedResponseEvaluationAlternatives() {
+        GoldenAiDataset.All dataset = loader.loadAll();
+
+        assertThat(response(dataset, "P7-09-PARTIAL-001").requiredCorrectConceptGroups().getFirst())
+                .contains("radial nerve innervates the wrist extensors injury causes denervation");
+        assertThat(response(dataset, "P7-09-UNCERTAIN-001").requiredCorrectConceptGroups().getFirst())
+                .contains("a nerve supplies the muscles that extend or lift the wrist");
     }
 
     @Test
@@ -208,8 +218,11 @@ class GoldenAiDatasetValidationTests {
 
     private static String sha256(byte[] content) {
         try {
+            byte[] normalized = normalizeNewlines(
+                    new String(content, StandardCharsets.UTF_8))
+                    .getBytes(StandardCharsets.UTF_8);
             return HexFormat.of().withUpperCase()
-                    .formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+                    .formatHex(MessageDigest.getInstance("SHA-256").digest(normalized));
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is unavailable", exception);
         }
