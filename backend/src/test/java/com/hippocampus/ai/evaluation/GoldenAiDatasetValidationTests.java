@@ -28,7 +28,7 @@ class GoldenAiDatasetValidationTests {
                 .flatMap(stream -> stream)
                 .toList();
 
-        assertThat(dataset.version()).isEqualTo("v3");
+        assertThat(dataset.version()).isEqualTo("v4");
         assertThat(new HashSet<>(caseIds)).hasSameSizeAs(caseIds);
         assertThat(dataset.explanations()).hasSizeGreaterThanOrEqualTo(4);
         assertThat(dataset.explanations())
@@ -110,11 +110,17 @@ class GoldenAiDatasetValidationTests {
     }
 
     @Test
-    void v3AddsOnlyTheTwoConfirmedResponseEvaluationAlternatives() {
+    void v4PreservesConfirmedAlternativesAndAcceptsTheObservedGuidedGapFeedback() {
         GoldenAiDataset.All dataset = loader.loadAll();
+        GoldenAiDataset.ResponseEvaluationCase partial =
+                response(dataset, "P7-09-PARTIAL-001");
 
-        assertThat(response(dataset, "P7-09-PARTIAL-001").requiredCorrectConceptGroups().getFirst())
-                .contains("radial nerve innervates the wrist extensors injury causes denervation");
+        assertThat(partial.requiredCorrectConceptGroups().getFirst())
+                .contains(
+                        "radial nerve innervates the wrist extensors injury causes denervation",
+                        "radial nerve innervates the wrist extensors");
+        assertThat(partial.requiredFeedbackConceptGroups().getFirst())
+                .contains("what happens to the movement of the wrist when these extensors are denervated");
         assertThat(response(dataset, "P7-09-UNCERTAIN-001").requiredCorrectConceptGroups().getFirst())
                 .contains("a nerve supplies the muscles that extend or lift the wrist");
     }
