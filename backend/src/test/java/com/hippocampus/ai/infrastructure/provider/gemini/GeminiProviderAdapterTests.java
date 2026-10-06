@@ -96,7 +96,7 @@ class GeminiProviderAdapterTests {
     }
 
     @Test
-    void usesAtomicResponseEvaluationSchemaForV6ButLeavesLegacyV3Unconstrained() {
+    void usesAtomicResponseEvaluationSchemaForCurrentPromptsButLeavesLegacyV3Unconstrained() {
         ChatModel currentModel = mock(ChatModel.class);
         when(currentModel.call(any(Prompt.class)))
                 .thenReturn(new ChatResponse(List.of(new Generation(new AssistantMessage("{}")))));
@@ -107,10 +107,11 @@ class GeminiProviderAdapterTests {
         verify(currentModel).call(currentPrompt.capture());
         GoogleGenAiChatOptions currentOptions =
                 (GoogleGenAiChatOptions) currentPrompt.getValue().getOptions();
+        String currentSchema = ProviderStructuredOutputSchema.geminiSchema(
+                AiOutputContract.RESPONSE_EVALUATION,
+                PromptId.RESPONSE_EVALUATION_V6);
         assertThat(currentOptions.getResponseSchema())
-                .isEqualTo(ProviderStructuredOutputSchema.geminiSchema(
-                        AiOutputContract.RESPONSE_EVALUATION,
-                        PromptId.RESPONSE_EVALUATION_V6))
+                .isEqualTo(currentSchema)
                 .contains(
                         "\"judgments\"",
                         "\"expectedConceptIndex\"",
@@ -118,6 +119,14 @@ class GeminiProviderAdapterTests {
                         "\"status\"",
                         "\"assessability\"",
                         "\"recommendedAction\"");
+        assertThat(ProviderStructuredOutputSchema.geminiSchema(
+                        AiOutputContract.RESPONSE_EVALUATION,
+                        PromptId.RESPONSE_EVALUATION_V4))
+                .isEqualTo(currentSchema);
+        assertThat(ProviderStructuredOutputSchema.geminiSchema(
+                        AiOutputContract.RESPONSE_EVALUATION,
+                        PromptId.RESPONSE_EVALUATION_V5))
+                .isEqualTo(currentSchema);
 
         ChatModel legacyModel = mock(ChatModel.class);
         when(legacyModel.call(any(Prompt.class)))
