@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import tools.jackson.core.JacksonException;
@@ -14,8 +15,10 @@ import tools.jackson.databind.ObjectMapper;
 
 final class GoldenAiDatasetLoader {
 
-    static final String VERSION = "v2";
+    static final String VERSION = "v3";
+    private static final String SOURCE_VERSION = "v2";
     private static final String BASE_PATH = "ai/golden/v2/";
+    private static final String OVERRIDE_PATH = "ai/golden/v3/response-evaluation-rubric-overrides.json";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -26,7 +29,9 @@ final class GoldenAiDatasetLoader {
                 "question-generation-cases.json", GoldenAiDataset.QuestionFile.class);
         GoldenAiDataset.ResponseEvaluationFile evaluations = readResource(
                 "response-evaluation-cases.json", GoldenAiDataset.ResponseEvaluationFile.class);
-        return validate(explanations, questions, evaluations);
+        ResponseEvaluationOverrides overrides = readResource(
+                OVERRIDE_PATH, ResponseEvaluationOverrides.class, false);
+        return validate(explanations, questions, applyOverrides(evaluations, overrides));
     }
 
     GoldenAiDataset.All parse(String explanations, String questions, String evaluations) {
@@ -43,8 +48,12 @@ final class GoldenAiDatasetLoader {
     }
 
     private <T> T readResource(String name, Class<T> type) {
+        return readResource(name, type, true);
+    }
+
+    private <T> T readResource(String name, Class<T> type, boolean relativeToBase) {
         try (InputStream input = Thread.currentThread().getContextClassLoader()
-                .getResourceAsStream(BASE_PATH + name)) {
+                .getResourceAsStream(relativeToBase ? BASE_PATH + name : name)) {
             if (input == null) {
                 throw new IllegalArgumentException("missing Golden AI dataset resource: " + name);
             }
@@ -128,7 +137,7 @@ final class GoldenAiDatasetLoader {
     }
 
     private static void validateHeader(String version, String task, AiTaskType expectedTask) {
-        if (!VERSION.equals(version)) {
+        if (!SOURCE_VERSION.equals(version)) {
             throw new IllegalArgumentException("unsupported Golden AI dataset version: " + version);
         }
         if (!expectedTask.name().equals(task)) {
@@ -227,4 +236,62 @@ final class GoldenAiDatasetLoader {
     private static String normalize(String value) {
         return value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " ").trim();
     }
+
+    private static GoldenAiDataset.ResponseEvaluationFile applyOverrides(
+            GoldenAiDataset.ResponseEvaluationFile evaluations,
+            ResponseEvaluationOverrides overrides) {
+        if (!VERSION.equals(overrides.version()) || !SOURCE_VERSION.equals(overrides.basedOn())) {
+            throw new IllegalArgumentException("unsupported Golden AI rubric override version");
+        }
+        Map<String, ResponseEvaluationOverride> byCase = new java.util.HashMap<>();
+        for (ResponseEvaluationOverride override : overrides.overrides()) {
+            requiredText(override.caseId(), "override caseId");
+            requireNonEmpty(override.requiredCorrectConceptAlternatives(),
+                    "requiredCorrectConceptAlternatives");
+            if (override.requiredCorrectConceptAlternatives().stream()
+                    .anyMatch(value -> value == null || value.isBlank())) {
+                throw invalid(override.caseId(), "override contains blank alternative");
+            }
+            if (byCase.put(override.caseId(), override) != null) {
+                throw invalid(override.caseId(), "duplicate rubric override");
+            }
+        }
+        List<GoldenAiDataset.ResponseEvaluationCase> cases = evaluations.cases().stream()
+                .map(value -> applyOverride(value, byCase.remove(value.caseId())))
+                .toList();
+        if (!byCase.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "rubric override references unknown case: " + byCase.keySet().iterator().next());
+        }
+        return new GoldenAiDataset.ResponseEvaluationFile(evaluations.version(), evaluations.task(), cases);
+    }
+
+    private static GoldenAiDataset.ResponseEvaluationCase applyOverride(
+            GoldenAiDataset.ResponseEvaluationCase value,
+            ResponseEvaluationOverride override) {
+        if (override == null) {
+            return value;
+        }
+        List<List<String>> correctGroups = new ArrayList<>(value.requiredCorrectConceptGroups());
+        if (correctGroups.isEmpty()) {
+            throw invalid(value.caseId(), "rubric override requires a correct-concept group");
+        }
+        List<String> firstGroup = new ArrayList<>(correctGroups.getFirst());
+        firstGroup.addAll(override.requiredCorrectConceptAlternatives());
+        correctGroups.set(0, List.copyOf(firstGroup));
+        return new GoldenAiDataset.ResponseEvaluationCase(
+                value.caseId(), value.subject(), value.topic(), value.question(),
+                value.expectedConcepts(), value.expectedAnswer(), value.studentResponse(),
+                value.groundingMode(), value.learner(), value.sourceEvidence(),
+                value.allowedEvaluations(), value.forbiddenEvaluations(), List.copyOf(correctGroups),
+                value.requiredMissingConceptGroups(), value.allowedMisconceptionGroups(),
+                value.requiredFeedbackConceptGroups(), value.requireNoMissingConcepts(),
+                value.requireNoMisconceptions(), value.forbiddenOutputTerms(), value.reviewerNotes());
+    }
+
+    private record ResponseEvaluationOverrides(
+            String version, String basedOn, List<ResponseEvaluationOverride> overrides) {}
+
+    private record ResponseEvaluationOverride(
+            String caseId, List<String> requiredCorrectConceptAlternatives) {}
 }

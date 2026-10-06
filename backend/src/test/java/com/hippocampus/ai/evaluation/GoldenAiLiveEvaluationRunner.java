@@ -3,19 +3,28 @@ package com.hippocampus.ai.evaluation;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.genai.Client;
-import com.hippocampus.ai.application.prompt.PromptContext;
+import com.hippocampus.ai.application.AiExecutionOrchestrator;
 import com.hippocampus.ai.application.prompt.PromptContextBuilder;
 import com.hippocampus.ai.application.prompt.PromptId;
 import com.hippocampus.ai.application.prompt.PromptTemplateRegistry;
 import com.hippocampus.ai.application.prompt.PromptTokenBudget;
 import com.hippocampus.ai.application.provider.AiProviderAdapter;
+import com.hippocampus.ai.application.provider.ProviderEventStream;
 import com.hippocampus.ai.application.provider.ProviderExecutionException;
 import com.hippocampus.ai.application.provider.ProviderExecutionRequest;
 import com.hippocampus.ai.application.provider.ProviderExecutionResult;
+import com.hippocampus.ai.application.provider.ProviderExecutionFailure;
+import com.hippocampus.ai.application.request.AiRequestManager;
+import com.hippocampus.ai.application.request.AiRequestManagerPolicy;
+import com.hippocampus.ai.application.request.AiRequestPriority;
+import com.hippocampus.ai.application.request.AiRequestTelemetry;
 import com.hippocampus.ai.application.routing.ProviderId;
-import com.hippocampus.ai.application.routing.ProviderRoute;
+import com.hippocampus.ai.application.routing.ProviderRouter;
+import com.hippocampus.ai.application.routing.ProviderRoutingCandidate;
+import com.hippocampus.ai.application.routing.ProviderRoutingPreference;
 import com.hippocampus.ai.application.validation.AiOutputValidator;
 import com.hippocampus.ai.application.validation.AiSchemaValidationException;
+import com.hippocampus.ai.application.validation.AiSourceReferenceValidator;
 import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.domain.AiTaskContext;
 import com.hippocampus.ai.domain.AiTaskRequest;
@@ -32,6 +41,15 @@ import com.hippocampus.ai.infrastructure.prompt.Utf8ByteLengthPromptTokenCounter
 import com.hippocampus.ai.infrastructure.provider.gemini.GeminiProviderAdapter;
 import com.hippocampus.ai.infrastructure.provider.ollama.OllamaCloudProviderAdapter;
 import com.hippocampus.ai.infrastructure.validation.JacksonAiStructuredOutputDecoder;
+import com.hippocampus.ai.port.AiDiagnosticsPersistence;
+import com.hippocampus.ai.port.AiRequestDiagnostic;
+import com.hippocampus.ai.port.ProviderUsageDiagnostic;
+import com.hippocampus.identity.domain.AuthenticatedUser;
+import com.hippocampus.materials.domain.ChunkSourceTarget;
+import com.hippocampus.materials.domain.SourceReference;
+import com.hippocampus.materials.domain.SourceReferenceTarget;
+import com.hippocampus.materials.port.SourceReferenceRepository;
+import com.hippocampus.materials.port.SourceReferenceSeed;
 import com.hippocampus.rag.domain.EvidenceChunk;
 import com.hippocampus.rag.domain.EvidencePackage;
 import com.hippocampus.rag.domain.EvidenceReferenceKind;
@@ -42,11 +60,18 @@ import com.hippocampus.rag.domain.RetrievalQuality;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Function;
 import java.util.function.LongConsumer;
 import org.junit.jupiter.api.Assumptions;
@@ -65,12 +90,10 @@ class GoldenAiLiveEvaluationRunner {
     private static final PromptTokenBudget PROMPT_BUDGET = new PromptTokenBudget(131_072, 2_048);
     private static final String TASK_ENVIRONMENT = "HIPPOCAMPUS_LIVE_AI_GOLDEN_TASK";
     private static final String DELAY_ENVIRONMENT = "HIPPOCAMPUS_LIVE_AI_GOLDEN_DELAY_MS";
+    private static final UUID QUALIFICATION_USER_ID =
+            UUID.fromString("00000000-0000-0000-0000-000000000709");
 
     private final GoldenAiSemanticEvaluator semanticEvaluator = new GoldenAiSemanticEvaluator();
-    private final PromptContextBuilder promptBuilder = new PromptContextBuilder(
-            new PromptTemplateRegistry(), new Utf8ByteLengthPromptTokenCounter());
-    private final AiOutputValidator outputValidator =
-            new AiOutputValidator(new JacksonAiStructuredOutputDecoder());
 
     @Test
     void runsP7GoldenEvaluationWhenExplicitlyEnabled() throws Exception {
@@ -161,51 +184,61 @@ class GoldenAiLiveEvaluationRunner {
                 () -> failures.size() + " Golden AI cases failed; inspect " + reportPath);
     }
 
-    private ReportEntry execute(
+    ReportEntry execute(
             LiveProvider liveProvider,
             String caseId,
             String reviewerNotes,
             AiTaskRequest<?> request,
             RequestPacer requestPacer,
             Function<Object, GoldenAiSemanticEvaluator.Result> evaluate) {
-        requestPacer.beforeRequest();
-        PromptContext prompt = promptBuilder.build(request, PROMPT_BUDGET);
-        ProviderExecutionRequest providerRequest = new ProviderExecutionRequest(
-                request.taskType(),
-                request.outputContract(),
-                prompt,
-                new ProviderRoute.Target(liveProvider.providerId(), liveProvider.configuredModel()));
+        QualificationExecution execution = new QualificationExecution(
+                liveProvider, requestPacer, request);
         try {
-            ProviderExecutionResult providerResult = liveProvider.adapter().execute(providerRequest);
-            ValidatedAiResult<?> validated = outputValidator.validate(
-                    providerResult,
-                    request.outputContract(),
-                    request.taskContext(),
-                    prompt.taskPromptId());
+            ValidatedAiResult<?> validated = execution.execute(request);
             GoldenAiSemanticEvaluator.Result semantic = evaluate.apply(validated.result());
             return new ReportEntry(
                     request.taskType().name(),
                     caseId,
-                    providerResult.modelId(),
+                    validated.executionMetadata().model(),
                     semantic.passed(),
                     semantic.failedRules(),
                     validated.result(),
                     reviewerNotes,
-                    Map.of());
-        } catch (AiSchemaValidationException exception) {
-            return failedEntry(
-                    request, caseId, liveProvider.configuredModel(),
-                    "schema-validation:" + exception.reason(), reviewerNotes,
-                    schemaValidationDiagnosticMetadata(exception));
-        } catch (ProviderExecutionException exception) {
-            return failedEntry(
-                    request, caseId, liveProvider.configuredModel(),
-                    "provider-execution:" + exception.failureType(), reviewerNotes, Map.of());
+                    execution.diagnosticMetadata(request));
         } catch (RuntimeException exception) {
+            Throwable failure = normalizedFailure(exception);
+            Map<String, String> executionMetadata = execution.diagnosticMetadata(request);
+            if (failure instanceof AiSchemaValidationException schemaFailure) {
+                Map<String, String> metadata = new LinkedHashMap<>(executionMetadata);
+                metadata.putAll(schemaValidationDiagnosticMetadata(schemaFailure));
+                return failedEntry(
+                        request, caseId, liveProvider.configuredModel(),
+                        "schema-validation:" + schemaFailure.reason(), reviewerNotes,
+                        Map.copyOf(metadata));
+            }
+            if (failure instanceof ProviderExecutionException providerFailure) {
+                return failedEntry(
+                        request, caseId, liveProvider.configuredModel(),
+                        "provider-execution:" + providerFailure.failureType(), reviewerNotes,
+                        executionMetadata);
+            }
             return failedEntry(
                     request, caseId, liveProvider.configuredModel(),
-                    "evaluation-runner:" + exception.getClass().getSimpleName(), reviewerNotes, Map.of());
+                    "evaluation-runner:" + failure.getClass().getSimpleName(), reviewerNotes,
+                    executionMetadata);
+        } finally {
+            execution.close();
         }
+    }
+
+    private static Throwable normalizedFailure(Throwable failure) {
+        Throwable normalized = failure;
+        while ((normalized instanceof CompletionException
+                        || normalized instanceof ProviderExecutionFailure)
+                && normalized.getCause() != null) {
+            normalized = normalized.getCause();
+        }
+        return normalized;
     }
 
     static Map<String, String> schemaValidationDiagnosticMetadata(
@@ -441,7 +474,7 @@ class GoldenAiLiveEvaluationRunner {
         }
     }
 
-    private record LiveProvider(
+    record LiveProvider(
             ProviderId providerId,
             String configuredModel,
             AiProviderAdapter adapter,
@@ -453,7 +486,7 @@ class GoldenAiLiveEvaluationRunner {
             String configuredModel,
             List<ReportEntry> cases) {}
 
-    private record ReportEntry(
+    record ReportEntry(
             String task,
             String caseId,
             String model,
@@ -462,4 +495,205 @@ class GoldenAiLiveEvaluationRunner {
             Object validatedStructuredOutput,
             String reviewerNotes,
             Map<String, String> diagnosticMetadata) {}
+
+    private static final class QualificationExecution implements AutoCloseable {
+        private final PromptContextBuilder promptBuilder = new PromptContextBuilder(
+                new PromptTemplateRegistry(), new Utf8ByteLengthPromptTokenCounter());
+        private final AiOutputValidator outputValidator =
+                new AiOutputValidator(new JacksonAiStructuredOutputDecoder());
+        private final TrackingProviderAdapter adapter;
+        private final AiRequestManager requestManager;
+        private final AiExecutionOrchestrator orchestrator;
+
+        private QualificationExecution(
+                LiveProvider liveProvider,
+                RequestPacer requestPacer,
+                AiTaskRequest<?> request) {
+            adapter = new TrackingProviderAdapter(
+                    liveProvider.adapter(), requestPacer, liveProvider.configuredModel());
+            AiRequestManagerPolicy policy = new AiRequestManagerPolicy(
+                    1,
+                    1,
+                    Duration.ofMinutes(3),
+                    1,
+                    Duration.ofMillis(1),
+                    Duration.ofMillis(1),
+                    2,
+                    Duration.ofSeconds(1));
+            Map<ProviderId, AiRequestManagerPolicy> policies = new EnumMap<>(ProviderId.class);
+            policies.put(liveProvider.providerId(), policy);
+            requestManager = new AiRequestManager(
+                    List.of(adapter), policies, 2, AiRequestTelemetry.NONE);
+            orchestrator = new AiExecutionOrchestrator(
+                    promptBuilder,
+                    () -> new AuthenticatedUser(QUALIFICATION_USER_ID),
+                    new ProviderRouter(),
+                    requestManager,
+                    outputValidator,
+                    new AiSourceReferenceValidator(new GoldenSourceReferenceRepository(request)),
+                    NoOpDiagnostics.INSTANCE,
+                    AiRequestTelemetry.NONE);
+        }
+
+        private ValidatedAiResult<?> execute(AiTaskRequest<?> request) {
+            Set<AiTaskType> approvedTasks = Set.of(
+                    request.taskType(), AiTaskType.STRUCTURED_OUTPUT_REPAIR);
+            ProviderRoutingCandidate candidate = new ProviderRoutingCandidate(
+                    adapter.providerId(),
+                    adapter.modelId,
+                    approvedTasks,
+                    approvedTasks,
+                    true,
+                    true,
+                    true,
+                    1,
+                    1,
+                    1);
+            return orchestrator.execute(
+                            request,
+                            AiRequestPriority.INTERACTIVE_EVALUATION,
+                            PROMPT_BUDGET,
+                            List.of(candidate),
+                            ProviderRoutingPreference.LATENCY_THEN_COST)
+                    .join();
+        }
+
+        private Map<String, String> diagnosticMetadata(AiTaskRequest<?> originalRequest) {
+            if (!adapter.structuredRepairUsed()) {
+                return Map.of();
+            }
+            Map<String, String> metadata = new LinkedHashMap<>();
+            metadata.put("structuredRepairUsed", "true");
+            adapter.initialResult().ifPresent(initial -> {
+                try {
+                    outputValidator.validate(
+                            initial,
+                            originalRequest.outputContract(),
+                            originalRequest.taskContext(),
+                            promptBuilder.build(originalRequest, PROMPT_BUDGET).taskPromptId());
+                } catch (AiSchemaValidationException exception) {
+                    metadata.put("initialSchemaFailure", exception.reason().name());
+                    metadata.putAll(schemaValidationDiagnosticMetadata(exception));
+                }
+            });
+            return Map.copyOf(metadata);
+        }
+
+        @Override
+        public void close() {
+            requestManager.close();
+        }
+    }
+
+    private static final class TrackingProviderAdapter implements AiProviderAdapter {
+        private final AiProviderAdapter delegate;
+        private final RequestPacer requestPacer;
+        private final String modelId;
+        private final List<ProviderExecutionRequest> requests = new CopyOnWriteArrayList<>();
+        private final List<ProviderExecutionResult> results = new CopyOnWriteArrayList<>();
+
+        private TrackingProviderAdapter(
+                AiProviderAdapter delegate, RequestPacer requestPacer, String modelId) {
+            this.delegate = delegate;
+            this.requestPacer = requestPacer;
+            this.modelId = modelId;
+        }
+
+        @Override
+        public ProviderId providerId() {
+            return delegate.providerId();
+        }
+
+        @Override
+        public boolean supports(AiTaskType taskType) {
+            return delegate.supports(taskType);
+        }
+
+        @Override
+        public ProviderExecutionResult execute(ProviderExecutionRequest request) {
+            requestPacer.beforeRequest();
+            requests.add(request);
+            ProviderExecutionResult result = delegate.execute(request);
+            results.add(result);
+            return result;
+        }
+
+        @Override
+        public ProviderEventStream stream(ProviderExecutionRequest request) {
+            return delegate.stream(request);
+        }
+
+        private boolean structuredRepairUsed() {
+            return requests.stream().anyMatch(
+                    request -> request.taskType() == AiTaskType.STRUCTURED_OUTPUT_REPAIR);
+        }
+
+        private Optional<ProviderExecutionResult> initialResult() {
+            return results.stream().findFirst();
+        }
+    }
+
+    private static final class GoldenSourceReferenceRepository implements SourceReferenceRepository {
+        private final Map<UUID, EvidenceChunk> chunks;
+
+        private GoldenSourceReferenceRepository(AiTaskRequest<?> request) {
+            chunks = request.evidencePackage().chunks().stream()
+                    .collect(java.util.stream.Collectors.toMap(EvidenceChunk::chunkId, value -> value));
+        }
+
+        @Override
+        public Optional<SourceReferenceSeed> findAuthorizedTarget(
+                UUID userId, SourceReferenceTarget target) {
+            if (!QUALIFICATION_USER_ID.equals(userId)
+                    || !(target instanceof ChunkSourceTarget chunkTarget)) {
+                return Optional.empty();
+            }
+            EvidenceChunk chunk = chunks.get(chunkTarget.chunkId());
+            if (chunk == null
+                    || !chunk.materialId().equals(chunkTarget.materialId())
+                    || !chunk.materialVersionId().equals(chunkTarget.materialVersionId())) {
+                return Optional.empty();
+            }
+            return Optional.of(new SourceReferenceSeed(
+                    chunk.materialId(),
+                    chunk.materialVersionId(),
+                    chunk.documentNodeId(),
+                    chunk.chunkId(),
+                    null,
+                    chunk.pageStart(),
+                    "Synthetic Golden Evidence",
+                    "Synthetic Golden Evidence"));
+        }
+
+        @Override
+        public SourceReference upsert(SourceReferenceSeed seed, String displayLabel) {
+            return new SourceReference(
+                    UUID.randomUUID(),
+                    seed.materialId(),
+                    seed.materialVersionId(),
+                    seed.documentNodeId(),
+                    seed.chunkId(),
+                    seed.visualAssetId(),
+                    seed.pageNumber(),
+                    null,
+                    null,
+                    displayLabel,
+                    Instant.EPOCH);
+        }
+
+        @Override
+        public Optional<SourceReference> resolveAuthorized(UUID userId, UUID sourceReferenceId) {
+            return Optional.empty();
+        }
+    }
+
+    private enum NoOpDiagnostics implements AiDiagnosticsPersistence {
+        INSTANCE;
+
+        @Override
+        public void record(AiRequestDiagnostic request) {}
+
+        @Override
+        public void record(AiRequestDiagnostic request, ProviderUsageDiagnostic usage) {}
+    }
 }

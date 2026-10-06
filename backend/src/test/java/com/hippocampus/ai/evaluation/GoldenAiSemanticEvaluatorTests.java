@@ -249,6 +249,52 @@ class GoldenAiSemanticEvaluatorTests {
     }
 
     @Test
+    void acceptsConfirmedPartialDenervationWordingWithoutAcceptingSupplyAlone() {
+        GoldenAiDataset.ResponseEvaluationCase partial = response("P7-09-PARTIAL-001");
+        ResponseEvaluationResult acceptable = new ResponseEvaluationResult(
+                Evaluation.PARTIAL,
+                List.of("The radial nerve innervates the wrist extensors (injury causes denervation)"),
+                List.of("wrist drop"),
+                List.of(),
+                "The missing consequence is loss of wrist extension and wrist drop.",
+                EvaluationCertainty.SUFFICIENT,
+                RecommendedAction.RETRY,
+                List.of(partial.sourceEvidence().getFirst().sourceId()),
+                List.of());
+        ResponseEvaluationResult supplyAlone = new ResponseEvaluationResult(
+                Evaluation.PARTIAL,
+                List.of("the radial nerve supplies the wrist extensors"),
+                List.of("wrist drop"),
+                List.of(),
+                "The missing consequence is loss of wrist extension and wrist drop.",
+                EvaluationCertainty.SUFFICIENT,
+                RecommendedAction.RETRY,
+                List.of(partial.sourceEvidence().getFirst().sourceId()),
+                List.of());
+
+        assertThat(evaluator.evaluate(partial, acceptable).passed()).isTrue();
+        assertThat(evaluator.evaluate(partial, supplyAlone).failedRules())
+                .anyMatch(rule -> rule.startsWith("required-correct-concept"));
+    }
+
+    @Test
+    void acceptsConfirmedUncertainWristExtensorWordingButRejectsNegatedAndReversedClaims() {
+        GoldenAiDataset.ResponseEvaluationCase uncertain = response("P7-09-UNCERTAIN-001");
+        ResponseEvaluationResult acceptable = uncertainResult(
+                uncertain, "A nerve supplies the muscles that extend or lift the wrist");
+        ResponseEvaluationResult negated = uncertainResult(
+                uncertain, "A nerve does not supply the muscles that extend or lift the wrist");
+        ResponseEvaluationResult reversed = uncertainResult(
+                uncertain, "The wrist supplies the nerve that lifts the muscles");
+
+        assertThat(evaluator.evaluate(uncertain, acceptable).passed()).isTrue();
+        assertThat(evaluator.evaluate(uncertain, negated).failedRules())
+                .anyMatch(rule -> rule.startsWith("required-correct-concept"));
+        assertThat(evaluator.evaluate(uncertain, reversed).failedRules())
+                .anyMatch(rule -> rule.startsWith("required-correct-concept"));
+    }
+
+    @Test
     void forbiddenTermMatchingRemainsUnchanged() {
         GoldenAiDataset.ResponseEvaluationCase golden = response("P7-09-WRONG-REASONING-001");
         ResponseEvaluationResult result = new ResponseEvaluationResult(
@@ -457,6 +503,20 @@ class GoldenAiSemanticEvaluatorTests {
                 "You correctly identified radial nerve injury and wrist drop. The injury denervates wrist extensors, causing loss of wrist extension.",
                 EvaluationCertainty.SUFFICIENT,
                 RecommendedAction.TARGETED_EXPLANATION,
+                List.of(golden.sourceEvidence().getFirst().sourceId()),
+                List.of());
+    }
+
+    private static ResponseEvaluationResult uncertainResult(
+            GoldenAiDataset.ResponseEvaluationCase golden, String correctConcept) {
+        return new ResponseEvaluationResult(
+                Evaluation.UNCERTAIN,
+                List.of(correctConcept),
+                List.of("radial nerve"),
+                List.of(),
+                "The radial nerve still needs to be identified.",
+                EvaluationCertainty.LIMITED,
+                RecommendedAction.RETRY,
                 List.of(golden.sourceEvidence().getFirst().sourceId()),
                 List.of());
     }

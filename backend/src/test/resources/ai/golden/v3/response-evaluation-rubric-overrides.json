@@ -1,0 +1,18 @@
+{
+  "version": "v3",
+  "basedOn": "v2",
+  "overrides": [
+    {
+      "caseId": "P7-09-PARTIAL-001",
+      "requiredCorrectConceptAlternatives": [
+        "radial nerve innervates the wrist extensors injury causes denervation"
+      ]
+    },
+    {
+      "caseId": "P7-09-UNCERTAIN-001",
+      "requiredCorrectConceptAlternatives": [
+        "a nerve supplies the muscles that extend or lift the wrist"
+      ]
+    }
+  ]
+}
