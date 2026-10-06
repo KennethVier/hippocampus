@@ -249,9 +249,9 @@ class GoldenAiSemanticEvaluatorTests {
     }
 
     @Test
-    void acceptsConfirmedPartialDenervationWordingWithoutAcceptingSupplyAlone() {
+    void acceptsObservedPartialCanonicalizationsWithoutAcceptingBareStemReference() {
         GoldenAiDataset.ResponseEvaluationCase partial = response("P7-09-PARTIAL-001");
-        ResponseEvaluationResult acceptable = new ResponseEvaluationResult(
+        ResponseEvaluationResult firstRun = new ResponseEvaluationResult(
                 Evaluation.PARTIAL,
                 List.of("The radial nerve innervates the wrist extensors"),
                 List.of("Loss of wrist extension produces wrist drop"),
@@ -263,9 +263,21 @@ class GoldenAiSemanticEvaluatorTests {
                 RecommendedAction.GUIDED_REASONING,
                 List.of(partial.sourceEvidence().getFirst().sourceId()),
                 List.of());
-        ResponseEvaluationResult supplyAlone = new ResponseEvaluationResult(
+        ResponseEvaluationResult repeatRun = new ResponseEvaluationResult(
                 Evaluation.PARTIAL,
-                List.of("the radial nerve supplies the wrist extensors"),
+                List.of("The radial nerve supplies the wrist extensors"),
+                List.of("Loss of wrist extension produces wrist drop"),
+                List.of(),
+                "You correctly identified that the radial nerve innervates the wrist extensors. "
+                        + "To complete the explanation, explicitly mention the mechanical consequence "
+                        + "of this denervation (loss of wrist extension) that results in wrist drop.",
+                EvaluationCertainty.SUFFICIENT,
+                RecommendedAction.CONNECTION_SUPPORT,
+                List.of(partial.sourceEvidence().getFirst().sourceId()),
+                List.of());
+        ResponseEvaluationResult bareStemReference = new ResponseEvaluationResult(
+                Evaluation.PARTIAL,
+                List.of("radial nerve"),
                 List.of("wrist drop"),
                 List.of(),
                 "The missing consequence is loss of wrist extension and wrist drop.",
@@ -274,8 +286,9 @@ class GoldenAiSemanticEvaluatorTests {
                 List.of(partial.sourceEvidence().getFirst().sourceId()),
                 List.of());
 
-        assertThat(evaluator.evaluate(partial, acceptable).passed()).isTrue();
-        assertThat(evaluator.evaluate(partial, supplyAlone).failedRules())
+        assertThat(evaluator.evaluate(partial, firstRun).passed()).isTrue();
+        assertThat(evaluator.evaluate(partial, repeatRun).passed()).isTrue();
+        assertThat(evaluator.evaluate(partial, bareStemReference).failedRules())
                 .anyMatch(rule -> rule.startsWith("required-correct-concept"));
     }
 
@@ -284,12 +297,15 @@ class GoldenAiSemanticEvaluatorTests {
         GoldenAiDataset.ResponseEvaluationCase uncertain = response("P7-09-UNCERTAIN-001");
         ResponseEvaluationResult acceptable = uncertainResult(
                 uncertain, "A nerve supplies the muscles that extend or lift the wrist");
+        ResponseEvaluationResult parenthetical = uncertainResult(
+                uncertain, "A nerve supplies the muscles that lift (extend) the wrist");
         ResponseEvaluationResult negated = uncertainResult(
                 uncertain, "A nerve does not supply the muscles that extend or lift the wrist");
         ResponseEvaluationResult reversed = uncertainResult(
                 uncertain, "The wrist supplies the nerve that lifts the muscles");
 
         assertThat(evaluator.evaluate(uncertain, acceptable).passed()).isTrue();
+        assertThat(evaluator.evaluate(uncertain, parenthetical).passed()).isTrue();
         assertThat(evaluator.evaluate(uncertain, negated).failedRules())
                 .anyMatch(rule -> rule.startsWith("required-correct-concept"));
         assertThat(evaluator.evaluate(uncertain, reversed).failedRules())
