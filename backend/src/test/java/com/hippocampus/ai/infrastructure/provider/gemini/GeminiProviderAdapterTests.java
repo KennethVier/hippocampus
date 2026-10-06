@@ -35,14 +35,19 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
 
+import com.hippocampus.ai.application.prompt.PromptContext;
+import com.hippocampus.ai.application.prompt.PromptId;
 import com.hippocampus.ai.application.provider.ProviderExecutionException;
+import com.hippocampus.ai.application.provider.ProviderExecutionRequest;
 import com.hippocampus.ai.application.provider.ProviderExecutionResult;
 import com.hippocampus.ai.application.provider.ProviderFailureType;
 import com.hippocampus.ai.application.provider.ProviderStreamCompleted;
 import com.hippocampus.ai.application.provider.ProviderStreamEvent;
 import com.hippocampus.ai.application.provider.ProviderTextDelta;
 import com.hippocampus.ai.application.routing.ProviderId;
+import com.hippocampus.ai.application.routing.ProviderRoute;
 import com.hippocampus.ai.domain.AiOutputContract;
+import com.hippocampus.ai.domain.AiTaskType;
 import com.hippocampus.ai.domain.ExplanationResult;
 import com.hippocampus.ai.domain.ValidatedAiResult;
 import com.hippocampus.ai.infrastructure.provider.ProviderStructuredOutputSchema;
@@ -88,6 +93,43 @@ class GeminiProviderAdapterTests {
                 .isEqualTo(ProviderStructuredOutputSchema.geminiSchema(AiOutputContract.EXPLANATION))
                 .contains("\"concept\"", "\"supplementalKnowledgeUsed\"", "\"required\"")
                 .doesNotContain("additionalProperties");
+    }
+
+    @Test
+    void usesAtomicResponseEvaluationSchemaForV6ButLeavesLegacyV3Unconstrained() {
+        ChatModel currentModel = mock(ChatModel.class);
+        when(currentModel.call(any(Prompt.class)))
+                .thenReturn(new ChatResponse(List.of(new Generation(new AssistantMessage("{}")))));
+        new GeminiProviderAdapter(currentModel)
+                .execute(responseEvaluationRequest(PromptId.RESPONSE_EVALUATION_V6));
+
+        ArgumentCaptor<Prompt> currentPrompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(currentModel).call(currentPrompt.capture());
+        GoogleGenAiChatOptions currentOptions =
+                (GoogleGenAiChatOptions) currentPrompt.getValue().getOptions();
+        assertThat(currentOptions.getResponseSchema())
+                .isEqualTo(ProviderStructuredOutputSchema.geminiSchema(
+                        AiOutputContract.RESPONSE_EVALUATION,
+                        PromptId.RESPONSE_EVALUATION_V6))
+                .contains(
+                        "\"judgments\"",
+                        "\"expectedConceptIndex\"",
+                        "\"expectedConcept\"",
+                        "\"status\"",
+                        "\"assessability\"",
+                        "\"recommendedAction\"");
+
+        ChatModel legacyModel = mock(ChatModel.class);
+        when(legacyModel.call(any(Prompt.class)))
+                .thenReturn(new ChatResponse(List.of(new Generation(new AssistantMessage("{}")))));
+        new GeminiProviderAdapter(legacyModel)
+                .execute(responseEvaluationRequest(PromptId.RESPONSE_EVALUATION_V3));
+
+        ArgumentCaptor<Prompt> legacyPrompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(legacyModel).call(legacyPrompt.capture());
+        GoogleGenAiChatOptions legacyOptions =
+                (GoogleGenAiChatOptions) legacyPrompt.getValue().getOptions();
+        assertThat(legacyOptions.getResponseSchema()).isNull();
     }
 
     @Test
@@ -301,6 +343,21 @@ class GeminiProviderAdapterTests {
                     assertThat(failure).hasNoCause();
                     assertThat(failure.getMessage()).doesNotContain("api-key-secret", "student-task-secret-marker");
                 });
+    }
+
+    private static ProviderExecutionRequest responseEvaluationRequest(PromptId promptId) {
+        return new ProviderExecutionRequest(
+                AiTaskType.RESPONSE_EVALUATION,
+                AiOutputContract.RESPONSE_EVALUATION,
+                new PromptContext(
+                        PromptId.HIPPOCAMPUS_SYSTEM_V1,
+                        promptId,
+                        "system-policy-secret-marker",
+                        "student-task-secret-marker",
+                        10,
+                        256,
+                        List.of()),
+                new ProviderRoute.Target(ProviderId.GEMINI, "gemini-selected"));
     }
 
     private static void assertSdkFailure(RuntimeException sdkFailure, ProviderFailureType expected) {
