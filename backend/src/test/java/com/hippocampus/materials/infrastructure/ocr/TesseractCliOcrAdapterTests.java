@@ -51,7 +51,7 @@ class TesseractCliOcrAdapterTests {
         Path nonZero = executable("exit 7\n");
         assertKind(OcrException.Kind.NON_ZERO_EXIT,
                 () -> adapter(nonZero, 100, 100, 100, Duration.ofSeconds(1)).recognize(input()));
-        Path malformed = executable("printf 'not-tsv\\n'\n");
+        Path malformed = executable("cat >/dev/null\nprintf 'not-tsv\\n'\n");
         assertKind(OcrException.Kind.MALFORMED_OUTPUT,
                 () -> adapter(malformed, 100, 100, 100, Duration.ofSeconds(1)).recognize(input()));
     }
