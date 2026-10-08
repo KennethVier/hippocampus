@@ -1,4 +1,6 @@
 target/
+# Retained local AI qualification outputs, reviews, and validation evidence.
+ai-golden-evaluation/
 .idea/
 *.iml
 .classpath

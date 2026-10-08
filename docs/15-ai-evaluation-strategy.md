@@ -4,7 +4,7 @@ Audience: Architecture, AI, backend, QA, product, medical-education
 Authors: Project Hippocampus Team
 Created: 2026-08-23
 Document ID: 15
-Last Updated: 2026-08-24
+Last Updated: 2026-10-08
 Owner: Project Hippocampus Team
 Prerequisites:
 - 00 - Project Vision
@@ -32,7 +32,7 @@ Scope: Evaluation principles, datasets, rubrics, RAG evaluation,
   analysis, and MVP acceptance criteria.
 Status: Final
 Title: AI Evaluation Strategy
-Version: 1.0.2
+Version: 1.0.4
 ---
 
 # 15 - AI Evaluation Strategy
@@ -1982,7 +1982,41 @@ configuration may mark the task approved.
 
 ------------------------------------------------------------------------
 
+## ADR-0011 Alignment (2026-10-08)
+
+[ADR-0011](adr/ADR-0011-layered-p7-09-response-evaluation-qualification.md)
+defines P7-09 qualification as four layers: deterministic production-contract
+validation, deterministic curated semantic regressions, small quota-aware live
+provider qualification, and explicitly recorded human semantic review of actual
+outputs against the versioned Golden rubric. Contract success alone does not
+grant semantic approval; the closed grammar is not the sole live semantic
+authority. For current v5, review the complete nine-case response-evaluation
+set, retain the qualification/configuration identity and case artifacts, and
+record semantic PASS, FAIL, or PENDING with reviewer/adjudication evidence.
+Unresolved failures or pending reviews block qualification. Material changes
+invalidate prior approval as specified in the ADR. Repeated-sampling and new
+numeric acceptance thresholds remain unresolved pending benchmark-driven
+decisions. Existing release gates and ADR-0008 remain in force; no LLM judge or
+new provider dependency is introduced.
+
+The automated Maven live evidence-collection run may succeed while required
+human semantic review and overall qualification remain PENDING, provided all
+machine-verifiable execution, contract, configuration, and report requirements
+pass. Matcher misses remain diagnostics. Evidence-collection success is not
+Golden approval and cannot authorize ADR-0008 evaluation-approved routing.
+Objective automated failures still fail the Maven run; human semantic FAIL
+remains overall qualification FAIL even if evidence collection succeeded.
+
+------------------------------------------------------------------------
+
 # 91. Revision History
+
+- **1.0.4 — 2026-10-08 — Project Hippocampus Team:** Clarified ADR-0011 evidence
+  collection success versus semantic review and Golden qualification approval.
+
+- **1.0.3 — 2026-10-08 — Project Hippocampus Team:** Aligned P7-09 layered
+  qualification, human review, evidence retention, and approval invalidation
+  with accepted ADR-0011; preserved existing quality and routing gates.
 
   ------------------------------------------------------------------------
   Version           Date              Author            Changes

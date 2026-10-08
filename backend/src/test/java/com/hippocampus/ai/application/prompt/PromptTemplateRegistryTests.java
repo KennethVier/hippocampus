@@ -20,6 +20,23 @@ class PromptTemplateRegistryTests {
     private final PromptTemplateRegistry registry = new PromptTemplateRegistry();
 
     @Test
+    void repairBusinessRulesAreConfinedToAtomicResponseEvaluation() {
+        for (PromptId id : List.of(PromptId.RESPONSE_EVALUATION_V4, PromptId.RESPONSE_EVALUATION_V5,
+                PromptId.RESPONSE_EVALUATION_V6)) {
+            assertThat(registry.resolveRepairRules(AiOutputContract.RESPONSE_EVALUATION, id.name()))
+                    .contains("MISSING: supportedComponents and demonstratedMisconceptions must be empty",
+                            "supportedComponents must be empty; missingComponents may be empty or nonempty",
+                            "change status solely to pass validation", "import evidence from",
+                            "index coverage");
+        }
+        assertThat(registry.resolveRepairRules(AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V3.name()))
+                .isEmpty();
+        assertThat(registry.resolveRepairRules(AiOutputContract.EXPLANATION, PromptId.EXPLANATION_V2.name())).isEmpty();
+        assertThatThrownBy(() -> registry.resolveRepairRules(AiOutputContract.RESPONSE_EVALUATION, PromptId.EXPLANATION_V2.name()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void resolvesTheGlobalSystemPolicy() {
         PromptTemplate template = registry.resolveSystemPolicy();
 
@@ -353,7 +370,7 @@ class PromptTemplateRegistryTests {
                         "8f08fd84de9d0812164f0f7a4940349cbf5261ca405d6ca8a4c62a8d26c37603"),
                 Map.entry(
                 PromptId.STRUCTURED_OUTPUT_REPAIR_V1,
-                        "40319a40f5d543600ec0c64472c5a931ae47dfa26c842c8b50384d7b5b19bc90"));
+                        "852883234fe4ebcdf59d91d467ea611d28297bfc6b3481649d4105d2e504d978"));
         LinkedHashMap<PromptId, String> actual = new LinkedHashMap<>();
         for (PromptTemplate template : registry.registeredTemplates()) {
             actual.put(template.promptId(), sha256(template.content()));

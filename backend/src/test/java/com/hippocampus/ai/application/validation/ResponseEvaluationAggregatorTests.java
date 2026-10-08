@@ -53,6 +53,25 @@ class ResponseEvaluationAggregatorTests {
     }
 
     @Test
+    void missingMechanismSurvivesAggregationWithoutBorrowingFeedback() {
+        for (ResponseEvaluationJudgmentStatus status : List.of(ResponseEvaluationJudgmentStatus.PARTIAL,
+                ResponseEvaluationJudgmentStatus.MISSING, ResponseEvaluationJudgmentStatus.CONTRADICTED)) {
+            ResponseEvaluationResult result = aggregate(judgment(0, "Canonical expected concept", status,
+                    status == ResponseEvaluationJudgmentStatus.MISSING ? List.of() : List.of("Learner claim"),
+                    status == ResponseEvaluationJudgmentStatus.PARTIAL ? List.of("Correct conclusion") : List.of(),
+                    List.of("Radial nerve injury eliminates wrist extension"),
+                    status == ResponseEvaluationJudgmentStatus.CONTRADICTED ? List.of("Wrong mechanism") : List.of()));
+            assertThat(result.missingConcepts()).contains("Radial nerve injury eliminates wrist extension");
+        }
+        ResponseEvaluationV4Result feedbackOnly = new ResponseEvaluationV4Result(
+                List.of(judgment(0, "Canonical expected concept", ResponseEvaluationJudgmentStatus.PARTIAL,
+                        List.of("Learner claim"), List.of("Correct conclusion"), List.of(), List.of("Wrong mechanism"))),
+                ResponseEvaluationAssessability.EVALUABLE, "Radial nerve injury eliminates wrist extension",
+                RecommendedAction.TARGETED_EXPLANATION, List.of(), List.of());
+        assertThat(aggregator.aggregate(input(), feedbackOnly).missingConcepts()).isEmpty();
+    }
+
+    @Test
     void rejectsIncompleteCoverage() {
         assertFailure(
                 new ResponseEvaluationV4Result(

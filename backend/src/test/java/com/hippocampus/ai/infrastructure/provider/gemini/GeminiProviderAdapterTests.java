@@ -56,6 +56,94 @@ import reactor.core.publisher.Flux;
 class GeminiProviderAdapterTests {
 
     @Test
+    void retainsFinishReasonAcrossRequestManagerExecutionMetadata() {
+        ChatModel model = mock(ChatModel.class);
+        org.springframework.ai.chat.metadata.ChatGenerationMetadata metadata =
+                mock(org.springframework.ai.chat.metadata.ChatGenerationMetadata.class);
+        when(metadata.getFinishReason()).thenReturn("MAX_TOKENS");
+        when(model.call(any(Prompt.class))).thenReturn(new ChatResponse(List.of(
+                new Generation(new AssistantMessage("{\"incomplete\":"), metadata))));
+        ProviderExecutionResult result = new GeminiProviderAdapter(model)
+                .execute(request(ProviderId.GEMINI, "test-model"));
+        assertThat(result.finishReason()).contains("MAX_TOKENS");
+        assertThat(result.withExecutionMetadata(1, 2).finishReason()).contains("MAX_TOKENS");
+        assertThat(result.withExecutionMetadata(1, 2).retryCount()).isEqualTo(1);
+        assertThat(result.withExecutionMetadata(1, 2).providerInvocationCount()).isEqualTo(2);
+    }
+
+    @Test
+    void responseEvaluationRepairUsesLowThinkingWithoutChangingBudgetOrSchema() {
+        ProviderExecutionRequest base = responseEvaluationRequest(PromptId.RESPONSE_EVALUATION_V6);
+        for (AiOutputContract contract : AiOutputContract.values()) {
+            ChatModel model = mock(ChatModel.class);
+            when(model.call(any(Prompt.class))).thenReturn(new ChatResponse(List.of(
+                    new Generation(new AssistantMessage("{}")))));
+            ProviderExecutionRequest repair = new ProviderExecutionRequest(AiTaskType.STRUCTURED_OUTPUT_REPAIR,
+                    contract, new PromptContext(PromptId.HIPPOCAMPUS_SYSTEM_V1, PromptId.STRUCTURED_OUTPUT_REPAIR_V1,
+                            "system", "repair", 10, 2048, List.of()), base.target());
+            new GeminiProviderAdapter(model).execute(repair);
+            ArgumentCaptor<Prompt> captured = ArgumentCaptor.forClass(Prompt.class);
+            verify(model).call(captured.capture());
+            GoogleGenAiChatOptions options = (GoogleGenAiChatOptions) captured.getValue().getOptions();
+            if (contract == AiOutputContract.RESPONSE_EVALUATION) {
+                assertThat(options.getThinkingLevel())
+                        .isEqualTo(org.springframework.ai.google.genai.common.GoogleGenAiThinkingLevel.LOW);
+            } else {
+                assertThat(options.getThinkingLevel()).isNull();
+            }
+            assertThat(options.getMaxOutputTokens()).isEqualTo(2048);
+            assertThat(options.getResponseSchema()).isEqualTo(
+                    ProviderStructuredOutputSchema.geminiSchema(contract, PromptId.STRUCTURED_OUTPUT_REPAIR_V1));
+            if (contract == AiOutputContract.RESPONSE_EVALUATION) {
+                assertThat(options.getResponseSchema()).isNull();
+            }
+        }
+    }
+
+    @Test
+    void usesLowThinkingOnlyForCurrentAtomicResponseEvaluationPrompts() {
+        for (PromptId id : List.of(PromptId.RESPONSE_EVALUATION_V4,
+                PromptId.RESPONSE_EVALUATION_V5, PromptId.RESPONSE_EVALUATION_V6)) {
+            ChatModel model = mock(ChatModel.class);
+            when(model.call(any(Prompt.class))).thenReturn(new ChatResponse(List.of(
+                    new Generation(new AssistantMessage("{}")))));
+            var request = responseEvaluationRequest(id);
+            new GeminiProviderAdapter(model).execute(request);
+            ArgumentCaptor<Prompt> captured = ArgumentCaptor.forClass(Prompt.class);
+            verify(model).call(captured.capture());
+            GoogleGenAiChatOptions options = (GoogleGenAiChatOptions) captured.getValue().getOptions();
+            assertThat(options.getThinkingLevel())
+                    .isEqualTo(org.springframework.ai.google.genai.common.GoogleGenAiThinkingLevel.LOW);
+            assertThat(options.getMaxOutputTokens()).isEqualTo(request.promptContext().reservedOutputTokens());
+            assertThat(options.getResponseSchema()).isEqualTo(
+                    ProviderStructuredOutputSchema.geminiSchema(AiOutputContract.RESPONSE_EVALUATION, id));
+        }
+        for (PromptId id : List.of(PromptId.RESPONSE_EVALUATION_V1,
+                PromptId.RESPONSE_EVALUATION_V2, PromptId.RESPONSE_EVALUATION_V3)) {
+            ChatModel model = mock(ChatModel.class);
+            when(model.call(any(Prompt.class))).thenReturn(new ChatResponse(List.of(
+                    new Generation(new AssistantMessage("{}")))));
+            new GeminiProviderAdapter(model).execute(responseEvaluationRequest(id));
+            ArgumentCaptor<Prompt> captured = ArgumentCaptor.forClass(Prompt.class);
+            verify(model).call(captured.capture());
+            GoogleGenAiChatOptions options = (GoogleGenAiChatOptions) captured.getValue().getOptions();
+            assertThat(options.getThinkingLevel()).isNull();
+            assertThat(options.getResponseSchema()).isNull();
+        }
+        ChatModel questionModel = mock(ChatModel.class);
+        when(questionModel.call(any(Prompt.class))).thenReturn(new ChatResponse(List.of(
+                new Generation(new AssistantMessage("{}")))));
+        ProviderExecutionRequest base = responseEvaluationRequest(PromptId.RESPONSE_EVALUATION_V6);
+        new GeminiProviderAdapter(questionModel).execute(new ProviderExecutionRequest(
+                AiTaskType.QUESTION_GENERATION, AiOutputContract.QUESTION_GENERATION,
+                new PromptContext(PromptId.HIPPOCAMPUS_SYSTEM_V1, PromptId.QUESTION_GENERATION_V2,
+                        "system", "task", 10, 2048, List.of()), base.target()));
+        ArgumentCaptor<Prompt> questionPrompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(questionModel).call(questionPrompt.capture());
+        assertThat(((GoogleGenAiChatOptions) questionPrompt.getValue().getOptions()).getThinkingLevel()).isNull();
+    }
+
+    @Test
     void mapsCanonicalPromptRouteOptionsRawResultUsageAndLatency() {
         ChatModel chatModel = mock(ChatModel.class);
         ChatResponseMetadata metadata = ChatResponseMetadata.builder()
@@ -88,6 +176,7 @@ class GeminiProviderAdapterTests {
         GoogleGenAiChatOptions options = (GoogleGenAiChatOptions) prompt.getOptions();
         assertThat(options.getModel()).isEqualTo("gemini-selected");
         assertThat(options.getMaxOutputTokens()).isEqualTo(64);
+        assertThat(options.getThinkingLevel()).isNull();
         assertThat(options.getResponseMimeType()).isEqualTo("application/json");
         assertThat(options.getResponseSchema())
                 .isEqualTo(ProviderStructuredOutputSchema.geminiSchema(AiOutputContract.EXPLANATION))
@@ -182,6 +271,7 @@ class GeminiProviderAdapterTests {
         assertThat(result.usage().inputTokens()).isEmpty();
         assertThat(result.usage().outputTokens()).isEmpty();
         assertThat(result.usage().totalTokens()).isEmpty();
+        assertThat(result.finishReason()).isEmpty();
     }
 
     @Test

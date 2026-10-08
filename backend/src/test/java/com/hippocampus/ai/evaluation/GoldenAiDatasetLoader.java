@@ -15,23 +15,39 @@ import tools.jackson.databind.ObjectMapper;
 
 final class GoldenAiDatasetLoader {
 
-    static final String VERSION = "v4";
+    static final String VERSION = "v5";
     private static final String SOURCE_VERSION = "v2";
-    private static final String BASE_PATH = "ai/golden/v2/";
-    private static final String OVERRIDE_PATH = "ai/golden/v4/response-evaluation-rubric-overrides.json";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     GoldenAiDataset.All loadAll() {
+        return loadAll(VERSION);
+    }
+
+    GoldenAiDataset.All loadAll(String version) {
+        if (!Set.of("v1", "v2", "v3", "v4", "v5").contains(version)) {
+            throw new IllegalArgumentException("unsupported Golden AI dataset version: " + version);
+        }
+        String base = "ai/golden/" + (version.equals("v1") ? "v1" : SOURCE_VERSION) + "/";
         GoldenAiDataset.ExplanationFile explanations = readResource(
-                "explanation-cases.json", GoldenAiDataset.ExplanationFile.class);
+                base + "explanation-cases.json", GoldenAiDataset.ExplanationFile.class, false);
         GoldenAiDataset.QuestionFile questions = readResource(
-                "question-generation-cases.json", GoldenAiDataset.QuestionFile.class);
+                base + "question-generation-cases.json", GoldenAiDataset.QuestionFile.class, false);
         GoldenAiDataset.ResponseEvaluationFile evaluations = readResource(
-                "response-evaluation-cases.json", GoldenAiDataset.ResponseEvaluationFile.class);
-        ResponseEvaluationOverrides overrides = readResource(
-                OVERRIDE_PATH, ResponseEvaluationOverrides.class, false);
-        return validate(explanations, questions, applyOverrides(evaluations, overrides));
+                base + "response-evaluation-cases.json", GoldenAiDataset.ResponseEvaluationFile.class, false);
+        if (Set.of("v3", "v4", "v5").contains(version)) {
+            String overlayVersion = version.equals("v5") ? "v4" : version;
+            ResponseEvaluationOverrides overrides = readResource(
+                    "ai/golden/" + overlayVersion + "/response-evaluation-rubric-overrides.json",
+                    ResponseEvaluationOverrides.class, false);
+            evaluations = applyOverrides(evaluations, overrides, overlayVersion);
+        }
+        if (version.equals("v5")) {
+            evaluations = applyInputContract(evaluations, readResource(
+                    "ai/golden/v5/response-evaluation-input-contract.json", ResponseEvaluationInputContract.class, false));
+        }
+        GoldenAiDataset.All validated = validate(explanations, questions, evaluations);
+        return new GoldenAiDataset.All(version, validated.explanations(), validated.questions(), validated.responseEvaluations());
     }
 
     GoldenAiDataset.All parse(String explanations, String questions, String evaluations) {
@@ -47,13 +63,9 @@ final class GoldenAiDatasetLoader {
         }
     }
 
-    private <T> T readResource(String name, Class<T> type) {
-        return readResource(name, type, true);
-    }
-
     private <T> T readResource(String name, Class<T> type, boolean relativeToBase) {
         try (InputStream input = Thread.currentThread().getContextClassLoader()
-                .getResourceAsStream(relativeToBase ? BASE_PATH + name : name)) {
+                .getResourceAsStream(relativeToBase ? "ai/golden/v2/" + name : name)) {
             if (input == null) {
                 throw new IllegalArgumentException("missing Golden AI dataset resource: " + name);
             }
@@ -70,6 +82,9 @@ final class GoldenAiDatasetLoader {
         validateHeader(explanations.version(), explanations.task(), AiTaskType.EXPLANATION);
         validateHeader(questions.version(), questions.task(), AiTaskType.QUESTION_GENERATION);
         validateHeader(evaluations.version(), evaluations.task(), AiTaskType.RESPONSE_EVALUATION);
+        if (!explanations.version().equals(questions.version()) || !explanations.version().equals(evaluations.version())) {
+            throw new IllegalArgumentException("inconsistent Golden AI dataset versions");
+        }
         requireNonEmpty(explanations.cases(), "explanation cases");
         requireNonEmpty(questions.cases(), "question generation cases");
         requireNonEmpty(evaluations.cases(), "response evaluation cases");
@@ -137,7 +152,7 @@ final class GoldenAiDatasetLoader {
     }
 
     private static void validateHeader(String version, String task, AiTaskType expectedTask) {
-        if (!SOURCE_VERSION.equals(version)) {
+        if (!Set.of("v1", SOURCE_VERSION).contains(version)) {
             throw new IllegalArgumentException("unsupported Golden AI dataset version: " + version);
         }
         if (!expectedTask.name().equals(task)) {
@@ -239,12 +254,17 @@ final class GoldenAiDatasetLoader {
 
     private static GoldenAiDataset.ResponseEvaluationFile applyOverrides(
             GoldenAiDataset.ResponseEvaluationFile evaluations,
-            ResponseEvaluationOverrides overrides) {
-        if (!VERSION.equals(overrides.version()) || !SOURCE_VERSION.equals(overrides.basedOn())) {
+            ResponseEvaluationOverrides overrides, String version) {
+        if (!version.equals(overrides.version()) || !SOURCE_VERSION.equals(overrides.basedOn())) {
             throw new IllegalArgumentException("unsupported Golden AI rubric override version");
         }
         Map<String, ResponseEvaluationOverride> byCase = new java.util.HashMap<>();
         for (ResponseEvaluationOverride override : overrides.overrides()) {
+            // v3 predates feedback alternatives; absence means no change to that rubric.
+            if (version.equals("v3") && override.requiredFeedbackConceptAlternatives() == null) {
+                override = new ResponseEvaluationOverride(override.caseId(),
+                        override.requiredCorrectConceptAlternatives(), List.of());
+            }
             requiredText(override.caseId(), "override caseId");
             requireNonNull(override.requiredCorrectConceptAlternatives(),
                     "requiredCorrectConceptAlternatives");
@@ -309,6 +329,41 @@ final class GoldenAiDatasetLoader {
                 List.copyOf(feedbackGroups), value.requireNoMissingConcepts(),
                 value.requireNoMisconceptions(), value.forbiddenOutputTerms(), value.reviewerNotes());
     }
+
+    private static GoldenAiDataset.ResponseEvaluationFile applyInputContract(
+            GoldenAiDataset.ResponseEvaluationFile evaluations, ResponseEvaluationInputContract contract) {
+        if (!VERSION.equals(contract.version()) || !"v4".equals(contract.basedOn())
+                || !"P7-09-WRONG-REASONING-001".equals(contract.caseId())) {
+            throw new IllegalArgumentException("unsupported Golden AI input contract");
+        }
+        requireNonEmpty(contract.expectedConcepts(), "expectedConcepts");
+        contract.expectedConcepts().forEach(value -> requiredText(value, "expectedConcept"));
+        requiredText(contract.expectedAnswer(), "expectedAnswer");
+        validateConceptGroups(contract.requiredMissingConceptGroups(), contract.caseId(), "requiredMissingConceptGroups");
+        validateConceptGroups(contract.requiredFeedbackConceptGroups(), contract.caseId(), "requiredFeedbackConceptGroups");
+        if (evaluations.cases().stream().noneMatch(value -> value.caseId().equals(contract.caseId()))) {
+            throw new IllegalArgumentException("input contract references unknown case");
+        }
+        List<GoldenAiDataset.ResponseEvaluationCase> cases = evaluations.cases().stream().map(value -> {
+            if (!value.caseId().equals(contract.caseId())) {
+                return value;
+            }
+            return new GoldenAiDataset.ResponseEvaluationCase(
+                    value.caseId(), value.subject(), value.topic(), value.question(),
+                    contract.expectedConcepts(), contract.expectedAnswer(), value.studentResponse(),
+                    value.groundingMode(), value.learner(), value.sourceEvidence(),
+                    value.allowedEvaluations(), value.forbiddenEvaluations(), value.requiredCorrectConceptGroups(),
+                    contract.requiredMissingConceptGroups(), value.allowedMisconceptionGroups(),
+                    contract.requiredFeedbackConceptGroups(), value.requireNoMissingConcepts(), value.requireNoMisconceptions(),
+                    value.forbiddenOutputTerms(), value.reviewerNotes());
+        }).toList();
+        return new GoldenAiDataset.ResponseEvaluationFile(evaluations.version(), evaluations.task(), cases);
+    }
+
+    private record ResponseEvaluationInputContract(
+            String version, String basedOn, String caseId, List<String> expectedConcepts,
+            String expectedAnswer, List<List<String>> requiredMissingConceptGroups,
+            List<List<String>> requiredFeedbackConceptGroups) {}
 
     private record ResponseEvaluationOverrides(
             String version, String basedOn, List<ResponseEvaluationOverride> overrides) {}

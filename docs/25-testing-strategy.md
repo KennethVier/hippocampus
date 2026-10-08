@@ -4,7 +4,7 @@ Audience: Backend, frontend, architecture, QA, security, AI/RAG, DevOps,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 25
-Last Updated: 2026-08-24
+Last Updated: 2026-10-08
 Owner: Project Hippocampus Team
 Prerequisites:
 - 03 - Educational Foundation
@@ -35,7 +35,7 @@ Scope: Unit, integration, architecture, database, frontend, E2E,
   data, CI/CD quality checks, regression suites, and pilot validation.
 Status: Final
 Title: Testing Strategy
-Version: 1.0.0
+Version: 1.0.2
 ---
 
 # 25 - Testing Strategy
@@ -792,6 +792,33 @@ Include:
 -   empty.
 
 Track false positive correctness carefully.
+
+------------------------------------------------------------------------
+
+## P7-09 layered qualification (ADR-0011)
+
+For RESPONSE_EVALUATION, follow
+[ADR-0011](adr/ADR-0011-layered-p7-09-response-evaluation-qualification.md):
+keep deterministic contract and curated semantic regressions separate from
+small live provider runs and human semantic review of actual captured output.
+Live contract success does not imply semantic PASS. The closed grammar remains
+bounded fixture tooling; an unsupported valid live paraphrase is not by itself
+a semantic failure, and deterministic false-positive regressions remain defects.
+Review the complete current v5 nine-case set against its resolved versioned
+rubric, with independent human review/adjudication, retained configuration/output
+identity, and explicit PASS/FAIL/PENDING outcomes. Material behavior-affecting
+changes require new evidence. Do not invent repeated-sampling thresholds or
+replace semantic review with structural-only approval. This policy does not
+implement a new runner/report workflow or certify a provider configuration.
+
+Successful automated live Maven execution means evidence collection succeeded,
+not Golden qualification approval. It may succeed with semantic review PENDING
+and qualification PENDING when machine-verifiable execution, contract,
+configuration, filter, and reporting requirements pass. Retain matcher misses
+as diagnostic observations; never derive human review PASS from them or from
+contract/repair success. Objective automated failures still fail Maven.
+Recorded human FAIL prevents qualification approval even if evidence collection
+succeeds; qualification PASS requires the complete accepted layered evidence.
 
 ------------------------------------------------------------------------
 
@@ -2180,6 +2207,12 @@ any student flow works.
 ------------------------------------------------------------------------
 
 # 125. Revision History
+
+- **1.0.2 — 2026-10-08 — Project Hippocampus Team:** Clarified successful live
+  evidence collection with pending/failed semantic review versus qualification.
+
+- **1.0.1 — 2026-10-08 — Project Hippocampus Team:** Aligned P7-09 deterministic,
+  live-provider, and human semantic qualification layers with accepted ADR-0011.
 
   ------------------------------------------------------------------------------
   Version           Date              Author            Changes

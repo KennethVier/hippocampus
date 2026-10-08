@@ -1230,6 +1230,8 @@ public final class PromptTemplateRegistry {
                       allowed limitation/uncertainty representation.
                     - Return only the corrected structured output.
 
+                    {repairRules}
+
                     REQUIRED_SCHEMA:
                     {schema}
 
@@ -1291,6 +1293,42 @@ public final class PromptTemplateRegistry {
                     originalPromptId + " does not match output contract " + outputContract);
         }
         return schema;
+    }
+
+    public String resolveRepairRules(AiOutputContract outputContract, String originalTaskPromptVersion) {
+        // Validate the trusted original identity before selecting its business-shape rules.
+        resolveRepairSchema(outputContract, originalTaskPromptVersion);
+        PromptId originalId = resolveKnownVersion(originalTaskPromptVersion).promptId();
+        if (outputContract != AiOutputContract.RESPONSE_EVALUATION
+                || !(originalId == PromptId.RESPONSE_EVALUATION_V4
+                        || originalId == PromptId.RESPONSE_EVALUATION_V5
+                        || originalId == PromptId.RESPONSE_EVALUATION_V6)) {
+            return "";
+        }
+        return """
+                RESPONSE_EVALUATION REPRESENTATION RULES:
+                - Preserve the original request semantics, expected-concept identities and complete
+                  index coverage. Do not omit, duplicate or invent expectedConceptIndex values.
+                - Never fabricate learner claims or supported components, import evidence from
+                  feedback, add unsupported source claims, or change status solely to pass validation.
+                  Correct a status only when the existing semantic evidence reliably supports it.
+                - All entries in studentClaims, supportedComponents, missingComponents and
+                  demonstratedMisconceptions must be nonblank.
+                - SUPPORTED: studentClaims and supportedComponents must be nonempty;
+                  missingComponents and demonstratedMisconceptions must be empty.
+                - PARTIAL: studentClaims and supportedComponents must be nonempty; at least one
+                  of missingComponents or demonstratedMisconceptions must be nonempty.
+                - MISSING: supportedComponents and demonstratedMisconceptions must be empty;
+                  studentClaims and missingComponents may be empty or contain nonblank entries.
+                  A demonstrated misconception cannot be represented as MISSING. Do not simply
+                  discard a demonstrated error to make the representation pass validation.
+                - CONTRADICTED: studentClaims and demonstratedMisconceptions must be nonempty;
+                  supportedComponents must be empty; missingComponents may be empty or nonempty.
+                - For non-EVALUABLE assessability, limitations must be nonempty and nonblank,
+                  and every judgment must be MISSING. Never invent uncertainty to bypass validation.
+                - Preserve field isolation and all supported content. If a valid representation
+                  cannot be determined from the available evidence, do not invent one.
+                """;
     }
 
     public String resolveRepairSchema(AiOutputContract outputContract, String originalTaskPromptVersion) {

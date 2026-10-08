@@ -2,6 +2,7 @@ package com.hippocampus.ai.application.provider;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Optional;
 
 import com.hippocampus.ai.application.routing.ProviderId;
 
@@ -12,7 +13,15 @@ public record ProviderExecutionResult(
         ProviderUsage usage,
         Duration latency,
         int retryCount,
-        int providerInvocationCount) {
+        int providerInvocationCount,
+        Optional<String> finishReason) {
+
+    public ProviderExecutionResult(
+            ProviderId providerId, String modelId, String rawContent, ProviderUsage usage,
+            Duration latency, int retryCount, int providerInvocationCount) {
+        this(providerId, modelId, rawContent, usage, latency, retryCount, providerInvocationCount,
+                Optional.empty());
+    }
 
     public ProviderExecutionResult(
             ProviderId providerId,
@@ -32,6 +41,7 @@ public record ProviderExecutionResult(
             throw new IllegalArgumentException("rawContent must not be blank");
         }
         Objects.requireNonNull(usage, "usage must not be null");
+        Objects.requireNonNull(finishReason, "finishReason must not be null");
         Objects.requireNonNull(latency, "latency must not be null");
         if (latency.isNegative()) {
             throw new IllegalArgumentException("latency must not be negative");
@@ -46,6 +56,6 @@ public record ProviderExecutionResult(
 
     public ProviderExecutionResult withExecutionMetadata(int retries, int invocationCount) {
         return new ProviderExecutionResult(
-                providerId, modelId, rawContent, usage, latency, retries, invocationCount);
+                providerId, modelId, rawContent, usage, latency, retries, invocationCount, finishReason);
     }
 }
