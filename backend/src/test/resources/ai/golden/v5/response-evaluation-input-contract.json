@@ -1,0 +1,20 @@
+{
+  "version": "v5",
+  "basedOn": "v4",
+  "caseId": "P7-09-WRONG-REASONING-001",
+  "expectedConcepts": [
+    "The radial nerve supplies wrist extensors",
+    "Radial nerve injury eliminates wrist extension",
+    "Loss of wrist extension produces wrist drop"
+  ],
+  "expectedAnswer": "The radial nerve supplies wrist extensors. Radial nerve injury eliminates wrist extension, and loss of wrist extension produces wrist drop.",
+  "requiredMissingConceptGroups": [
+    ["radial nerve injury eliminates wrist extension", "radial nerve injury causes loss of wrist extension", "radial nerve injury causes loss of wrist extensor function"],
+    ["loss of wrist extension", "cannot extend the wrist"]
+  ],
+  "requiredFeedbackConceptGroups": [
+    ["radial nerve"],
+    ["wrist drop"],
+    ["loss of wrist extension", "cannot extend the wrist"]
+  ]
+}

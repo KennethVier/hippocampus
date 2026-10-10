@@ -1,0 +1,18 @@
+{
+  "version": "v6",
+  "basedOn": "v5",
+  "caseId": "P7-09-INCORRECT-001",
+  "allowedEvaluations": ["PARTIAL"],
+  "forbiddenEvaluations": ["CORRECT", "INCORRECT"],
+  "requiredCorrectConceptGroups": [[
+    "wrist-extensor paralysis",
+    "paralysis of wrist extensors",
+    "wrist extensors are paralyzed",
+    "paralyzes the wrist extensors"
+  ]],
+  "requireIndependentlyDemonstratedCorrectConcept": true,
+  "requiredMissingConceptGroups": [["radial nerve"]],
+  "requireWrongNerveMisconception": true,
+  "requiredFeedbackConceptGroups": [["median nerve"], ["radial nerve supplies wrist extensors", "radial nerve innervates wrist extensors"]],
+  "reviewerNotes": "PARTIAL credits only the independently stated wrist-extensor paralysis. The median-nerve attribution is an explicit medical error and must be recorded as a misconception and corrected in feedback. Never infer correct nerve identity from the question or source. Human review must confirm the feedback explains the actual gap."
+}

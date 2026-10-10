@@ -35,3 +35,4 @@ documentation patches.
 | [ADR-0008](ADR-0008-evaluation-gated-configured-ai-task-routing.md) | Evaluation-Gated Configured AI Task Routing | ACCEPTED | 2026-09-30 |
 | [ADR-0009](ADR-0009-explicit-application-level-selection.md) | Explicit Application Level Selection | ACCEPTED | 2026-10-01 |
 | [ADR-0010](ADR-0010-presentation-only-understand-progression.md) | Presentation-Only UNDERSTAND Progression and Evidence | ACCEPTED | 2026-10-02 |
+| [ADR-0011](ADR-0011-layered-p7-09-response-evaluation-qualification.md) | Layered P7-09 Response-Evaluation Qualification | ACCEPTED | 2026-10-08 |

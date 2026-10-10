@@ -4,7 +4,7 @@ Audience: Product, architecture, backend, frontend, AI/RAG, DevOps,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 27
-Last Updated: 2026-10-02
+Last Updated: 2026-10-08
 Owner: Project Hippocampus Team
 Prerequisites:
 - README
@@ -24,7 +24,7 @@ Scope: Decision authority, decision categories, ADR lifecycle, ADR
   Source-of-Truth freeze procedure.
 Status: Final
 Title: Decision Log / ADR Index
-Version: 1.0.9
+Version: 1.0.11
 ---
 
 # 27 - Decision Log / ADR Index
@@ -1391,6 +1391,7 @@ When ADRs exist, add an index:
 | [ADR-0008](adr/ADR-0008-evaluation-gated-configured-ai-task-routing.md) | Evaluation-Gated Configured AI Task Routing | ACCEPTED | 2026-09-30 | ARCHITECTURE, BACKEND, AI, OPERATIONS |
 | [ADR-0009](adr/ADR-0009-explicit-application-level-selection.md) | Explicit Application Level Selection | ACCEPTED | 2026-10-01 | DOMAIN, BACKEND, AI, EDUCATION |
 | [ADR-0010](adr/ADR-0010-presentation-only-understand-progression.md) | Presentation-Only UNDERSTAND Progression and Evidence | ACCEPTED | 2026-10-02 | DOMAIN, BACKEND, EDUCATION, FRONTEND |
+| [ADR-0011](adr/ADR-0011-layered-p7-09-response-evaluation-qualification.md) | Layered P7-09 Response-Evaluation Qualification | ACCEPTED | 2026-10-08 | TESTING, AI, ARCHITECTURE |
 
 This table begins empty at initial v1 freeze unless a real pending
 decision already exists.
@@ -1491,6 +1492,31 @@ retrieval progression. Existing response-bearing `UNDERSTAND`, `HINT`, and
 `PREREQUISITE_SUPPORT` evidence semantics remain unchanged, `RECALL` remains
 separate and is established through retrieval, and the frontend and AI/provider
 do not own evidence or progression decisions.
+
+------------------------------------------------------------------------
+
+## ADR-0011 Decision Summary
+
+P7-09 qualification requires deterministic production-contract validation,
+deterministic curated semantic regressions, and separately recorded human
+semantic review of actual provider outputs against the versioned Golden rubric.
+Contract success alone does not constitute semantic approval; the closed
+grammar is not the sole live semantic authority. Small live runs retain
+provider/configuration, contract/repair, diagnostic, and output evidence.
+Review the complete current v5 case set, preserve PASS/FAIL/PENDING and
+adjudication records, and re-review after material behavior-affecting changes.
+Sampling/statistical thresholds remain unresolved until benchmark-driven
+decisions. ADR-0008 remains the routing authority; evaluation-approved
+RESPONSE_EVALUATION candidates require layered qualification evidence.
+This accepted policy does not implement the workflow, approve a model, or
+complete P7-09.
+
+The accepted clarification explicitly permits automated Maven evidence
+collection to succeed while semantic review and overall qualification remain
+PENDING. Objective execution/contract/configuration/report failures still fail
+the automated run. Successful evidence collection never grants Golden approval
+or independently authorizes evaluation-approved routing; required semantic
+FAIL prevents qualification PASS even when evidence collection succeeds.
 
 ------------------------------------------------------------------------
 
@@ -1748,6 +1774,14 @@ Phase 0 — Engineering Foundation
 ------------------------------------------------------------------------
 
 # 68. Revision History
+
+- **1.0.11 — 2026-10-08 — Project Hippocampus Team:** Synchronized the accepted
+  ADR-0011 execution-versus-qualification clarification; preserved ADR status,
+  routing approval requirements, and P7-09 completion state.
+
+- **1.0.10 — 2026-10-08 — Project Hippocampus Team:** Accepted and indexed
+  ADR-0011 layered P7-09 response-evaluation qualification; aligned Documents
+  15 and 25 without changing routing architecture or tracker completion state.
 
   ----------------------------------------------------------------------------
   Version           Date              Author            Changes

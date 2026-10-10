@@ -21,6 +21,7 @@ import org.springframework.ai.chat.metadata.EmptyUsage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.google.genai.GoogleGenAiChatOptions;
+import org.springframework.ai.google.genai.common.GoogleGenAiThinkingLevel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.http.HttpHeaders;
@@ -37,6 +38,8 @@ import com.hippocampus.ai.application.provider.ProviderTextDelta;
 import com.hippocampus.ai.application.provider.ProviderUsage;
 import com.hippocampus.ai.application.routing.ProviderId;
 import com.hippocampus.ai.domain.AiTaskType;
+import com.hippocampus.ai.application.prompt.PromptId;
+import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.infrastructure.provider.ProviderStructuredOutputSchema;
 
 public final class GeminiProviderAdapter implements AiProviderAdapter {
@@ -81,7 +84,11 @@ public final class GeminiProviderAdapter implements AiProviderAdapter {
                     responseModelId(response, request.target().modelId()),
                     rawContent,
                     mapUsage(response),
-                    latency);
+                    latency,
+                    0,
+                    0,
+                    response.getResult().getMetadata() == null ? Optional.empty()
+                            : Optional.ofNullable(response.getResult().getMetadata().getFinishReason()));
         } catch (ProviderExecutionException exception) {
             throw exception;
         } catch (RuntimeException exception) {
@@ -152,12 +159,28 @@ public final class GeminiProviderAdapter implements AiProviderAdapter {
     }
 
     private static Prompt prompt(ProviderExecutionRequest request) {
-        GoogleGenAiChatOptions options = GoogleGenAiChatOptions.builder()
+        var optionsBuilder = GoogleGenAiChatOptions.builder()
                 .model(request.target().modelId())
                 .maxOutputTokens(request.promptContext().reservedOutputTokens())
                 .responseMimeType(JSON_MIME_TYPE)
-                .responseSchema(ProviderStructuredOutputSchema.geminiSchema(request.outputContract()))
-                .build();
+                .responseSchema(ProviderStructuredOutputSchema.geminiSchema(
+                        request.outputContract(), request.promptContext().taskPromptId()));
+        PromptId promptId = request.promptContext().taskPromptId();
+        boolean atomicResponseEvaluation = request.taskType() == AiTaskType.RESPONSE_EVALUATION
+                && (promptId == PromptId.RESPONSE_EVALUATION_V4
+                        || promptId == PromptId.RESPONSE_EVALUATION_V5
+                        || promptId == PromptId.RESPONSE_EVALUATION_V6
+                        || promptId == PromptId.RESPONSE_EVALUATION_V7
+                        || promptId == PromptId.RESPONSE_EVALUATION_V8);
+        // Repair retains the original output contract, but has its own task/prompt identity.
+        // Keep this bounded transformation policy confined to response-evaluation repair.
+        boolean responseEvaluationRepair = request.taskType() == AiTaskType.STRUCTURED_OUTPUT_REPAIR
+                && promptId == PromptId.STRUCTURED_OUTPUT_REPAIR_V1;
+        if (request.outputContract() == AiOutputContract.RESPONSE_EVALUATION
+                && (atomicResponseEvaluation || responseEvaluationRepair)) {
+            optionsBuilder.thinkingLevel(GoogleGenAiThinkingLevel.LOW);
+        }
+        GoogleGenAiChatOptions options = optionsBuilder.build();
         return new Prompt(List.of(
                 new SystemMessage(request.promptContext().systemPrompt()),
                 new UserMessage(request.promptContext().taskPrompt())), options);

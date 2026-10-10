@@ -301,7 +301,7 @@ class AiOutputValidatorTests {
     @ParameterizedTest
     @org.junit.jupiter.params.provider.EnumSource(
             value = PromptId.class,
-            names = {"RESPONSE_EVALUATION_V4", "RESPONSE_EVALUATION_V5", "RESPONSE_EVALUATION_V6"})
+            names = {"RESPONSE_EVALUATION_V4", "RESPONSE_EVALUATION_V5", "RESPONSE_EVALUATION_V6", "RESPONSE_EVALUATION_V7", "RESPONSE_EVALUATION_V8"})
     void responseEvaluationAtomicPromptsReturnDeterministicLegacyResult(PromptId promptId) {
         ResponseEvaluationInput input = responseEvaluationInput();
 
@@ -339,6 +339,19 @@ class AiOutputValidatorTests {
                 .isInstanceOfSatisfying(AiSchemaValidationException.class, failure ->
                         assertThat(failure.aggregationFailureReason())
                                 .contains(ResponseEvaluationAggregationFailureReason.DUPLICATE_CONCEPT_INDEX));
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = PromptId.class,
+            names = {"RESPONSE_EVALUATION_V7", "RESPONSE_EVALUATION_V8"})
+    void responseEvaluationV7RejectsInvalidCoverageAndNewFollowUpFields(PromptId promptId) {
+        for (String invalid : java.util.List.of(
+                validResponseEvaluationV4().replace("\"expectedConceptIndex\": 1", "\"expectedConceptIndex\": 0"),
+                validResponseEvaluationV4().replace("\"judgments\": [", "\"followUpQuestion\": \"Next topic?\", \"judgments\": ["))) {
+            assertThatThrownBy(() -> validator.validate(providerResult(invalid), AiOutputContract.RESPONSE_EVALUATION,
+                    responseEvaluationInput(), promptId))
+                    .isInstanceOf(AiSchemaValidationException.class);
+        }
     }
 
     @Test

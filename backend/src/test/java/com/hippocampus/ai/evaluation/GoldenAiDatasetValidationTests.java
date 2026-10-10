@@ -18,6 +18,27 @@ class GoldenAiDatasetValidationTests {
     private final GoldenAiDatasetLoader loader = new GoldenAiDatasetLoader();
 
     @Test
+    void v6ChangesOnlyCaseFiveAndPreservesV5Classification() {
+        var v5 = loader.loadAll("v5");
+        var v6 = loader.loadAll("v6");
+        var oldCase = response(v5, "P7-09-INCORRECT-001");
+        var revised = response(v6, "P7-09-INCORRECT-001");
+        assertThat(loader.loadAll().version()).isEqualTo("v5");
+        assertThat(v6.version()).isEqualTo("v6");
+        assertThat(oldCase.allowedEvaluations()).containsExactly(com.hippocampus.ai.domain.Evaluation.INCORRECT);
+        assertThat(oldCase.forbiddenEvaluations()).contains(com.hippocampus.ai.domain.Evaluation.PARTIAL);
+        assertThat(revised.allowedEvaluations()).containsExactly(com.hippocampus.ai.domain.Evaluation.PARTIAL);
+        assertThat(revised.forbiddenEvaluations()).contains(com.hippocampus.ai.domain.Evaluation.CORRECT);
+        assertThat(revised.requiredCorrectConceptGroups().getFirst()).contains("wrist-extensor paralysis");
+        assertThat(revised.allowedMisconceptionGroups()).isEqualTo(oldCase.allowedMisconceptionGroups());
+        assertThat(revised.sourceEvidence()).isEqualTo(oldCase.sourceEvidence());
+        assertThat(v6.explanations()).isEqualTo(v5.explanations());
+        assertThat(v6.questions()).isEqualTo(v5.questions());
+        assertThat(v6.responseEvaluations().stream().filter(value -> !value.caseId().equals(revised.caseId())).toList())
+                .isEqualTo(v5.responseEvaluations().stream().filter(value -> !value.caseId().equals(revised.caseId())).toList());
+    }
+
+    @Test
     void loadsVersionedDatasetsWithUniqueIdsAndRequiredTaskCoverage() {
         GoldenAiDataset.All dataset = loader.loadAll();
         List<String> caseIds = java.util.stream.Stream.of(
@@ -28,7 +49,7 @@ class GoldenAiDatasetValidationTests {
                 .flatMap(stream -> stream)
                 .toList();
 
-        assertThat(dataset.version()).isEqualTo("v3");
+        assertThat(dataset.version()).isEqualTo("v5");
         assertThat(new HashSet<>(caseIds)).hasSameSizeAs(caseIds);
         assertThat(dataset.explanations()).hasSizeGreaterThanOrEqualTo(4);
         assertThat(dataset.explanations())
@@ -81,7 +102,7 @@ class GoldenAiDatasetValidationTests {
 
     @Test
     void v2ResponseFixturesRequireLearnerDemonstratedKnowledge() {
-        GoldenAiDataset.All dataset = loader.loadAll();
+        GoldenAiDataset.All dataset = loader.loadAll("v2");
         GoldenAiDataset.ResponseEvaluationCase partial = response(dataset, "P7-09-PARTIAL-001");
         GoldenAiDataset.ResponseEvaluationCase wrongReasoning =
                 response(dataset, "P7-09-WRONG-REASONING-001");
@@ -110,13 +131,22 @@ class GoldenAiDatasetValidationTests {
     }
 
     @Test
-    void v3AddsOnlyTheTwoConfirmedResponseEvaluationAlternatives() {
-        GoldenAiDataset.All dataset = loader.loadAll();
+    void v4PreservesConfirmedAlternativesAndAcceptsTheObservedGuidedGapFeedback() {
+        GoldenAiDataset.All dataset = loader.loadAll("v4");
+        GoldenAiDataset.ResponseEvaluationCase partial =
+                response(dataset, "P7-09-PARTIAL-001");
 
-        assertThat(response(dataset, "P7-09-PARTIAL-001").requiredCorrectConceptGroups().getFirst())
-                .contains("radial nerve innervates the wrist extensors injury causes denervation");
+        assertThat(partial.requiredCorrectConceptGroups().getFirst())
+                .contains(
+                        "radial nerve innervates the wrist extensors injury causes denervation",
+                        "radial nerve innervates the wrist extensors",
+                        "radial nerve supplies the wrist extensors");
+        assertThat(partial.requiredFeedbackConceptGroups().getFirst())
+                .contains("what happens to the movement of the wrist when these extensors are denervated");
         assertThat(response(dataset, "P7-09-UNCERTAIN-001").requiredCorrectConceptGroups().getFirst())
-                .contains("a nerve supplies the muscles that extend or lift the wrist");
+                .contains(
+                        "a nerve supplies the muscles that extend or lift the wrist",
+                        "a nerve supplies the muscles that lift extend the wrist");
     }
 
     @Test
@@ -196,6 +226,56 @@ class GoldenAiDatasetValidationTests {
                         evaluations))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("malformed Golden AI dataset");
+    }
+
+    @Test
+    void v5ChangesOnlyWrongReasoningInputAndAlignedRubricsWithOriginalSource() {
+        GoldenAiDataset.All historical = loader.loadAll("v4");
+        GoldenAiDataset.All current = loader.loadAll();
+        GoldenAiDataset.ResponseEvaluationCase corrected = response(current, "P7-09-WRONG-REASONING-001");
+        GoldenAiDataset.ResponseEvaluationCase original = response(historical, corrected.caseId());
+        assertThat(corrected.expectedConcepts()).containsExactly(
+                "The radial nerve supplies wrist extensors",
+                "Radial nerve injury eliminates wrist extension",
+                "Loss of wrist extension produces wrist drop");
+        assertThat(corrected.expectedAnswer()).doesNotContain("denervat");
+        assertThat(corrected.sourceEvidence()).isEqualTo(original.sourceEvidence());
+        assertThat(corrected.groundingMode()).isEqualTo(com.hippocampus.rag.domain.GroundingMode.STRICT_SOURCE);
+        assertThat(corrected.sourceEvidence().getFirst().content())
+                .contains("Radial nerve injury can eliminate wrist extension and produce wrist drop.");
+        assertThat(corrected.requiredMissingConceptGroups().getFirst())
+                .contains("radial nerve injury eliminates wrist extension");
+        assertThat(current.explanations()).isEqualTo(historical.explanations());
+        assertThat(current.questions()).isEqualTo(historical.questions());
+        assertThat(current.responseEvaluations().stream().filter(value -> !value.caseId().equals(corrected.caseId())).toList())
+                .isEqualTo(historical.responseEvaluations().stream().filter(value -> !value.caseId().equals(corrected.caseId())).toList());
+        for (String version : List.of("v1", "v2", "v3", "v4")) {
+            GoldenAiDataset.All loaded = loader.loadAll(version);
+            assertThat(loaded.version()).isEqualTo(version);
+            assertThat(loader.loadAll(version)).isEqualTo(loaded);
+            assertThat(response(loaded, corrected.caseId()).expectedConcepts()).hasSize(2);
+        }
+    }
+
+    @Test
+    void historicalResponseContractsRemainImmutable() throws IOException {
+        assertThat(sha256(resourceBytes("v2", "response-evaluation-cases.json")))
+                .isEqualTo("6CFF07EAE524B5BD319D74A8DEF825EC449E820A0DDFFFE641227967A0760137");
+        assertThat(sha256(resourceBytes("v3", "response-evaluation-rubric-overrides.json")))
+                .isEqualTo("6BDED28832BFAB3ADE2B070E1172702E4AD9221C21B2B4C7FE48A0F582E38BDB");
+        assertThat(sha256(resourceBytes("v4", "response-evaluation-rubric-overrides.json")))
+                .isEqualTo("F140CFACAE47AEDD091CCFFE5BAB41240EC0F01C0DC6E2A7E23B8A57A786A5E9");
+    }
+
+    @Test
+    void rejectsUnknownVersionsAndInvalidHeaders() throws IOException {
+        for (String version : List.of("v0", "v7", "", "V5")) {
+            assertThatThrownBy(() -> loader.loadAll(version))
+                    .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("unsupported");
+        }
+        assertThatThrownBy(() -> loader.parse(resource("explanation-cases.json").replace("\"v2\"", "\"v99\""),
+                resource("question-generation-cases.json"), resource("response-evaluation-cases.json")))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("unsupported");
     }
 
     private static String resource(String name) throws IOException {

@@ -20,6 +20,23 @@ class PromptTemplateRegistryTests {
     private final PromptTemplateRegistry registry = new PromptTemplateRegistry();
 
     @Test
+    void repairBusinessRulesAreConfinedToAtomicResponseEvaluation() {
+        for (PromptId id : List.of(PromptId.RESPONSE_EVALUATION_V4, PromptId.RESPONSE_EVALUATION_V5,
+                PromptId.RESPONSE_EVALUATION_V6)) {
+            assertThat(registry.resolveRepairRules(AiOutputContract.RESPONSE_EVALUATION, id.name()))
+                    .contains("MISSING: supportedComponents and demonstratedMisconceptions must be empty",
+                            "supportedComponents must be empty; missingComponents may be empty or nonempty",
+                            "change status solely to pass validation", "import evidence from",
+                            "index coverage");
+        }
+        assertThat(registry.resolveRepairRules(AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V3.name()))
+                .isEmpty();
+        assertThat(registry.resolveRepairRules(AiOutputContract.EXPLANATION, PromptId.EXPLANATION_V2.name())).isEmpty();
+        assertThatThrownBy(() -> registry.resolveRepairRules(AiOutputContract.RESPONSE_EVALUATION, PromptId.EXPLANATION_V2.name()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void resolvesTheGlobalSystemPolicy() {
         PromptTemplate template = registry.resolveSystemPolicy();
 
@@ -93,6 +110,8 @@ class PromptTemplateRegistryTests {
                 PromptId.RESPONSE_EVALUATION_V4,
                 PromptId.RESPONSE_EVALUATION_V5,
                 PromptId.RESPONSE_EVALUATION_V6,
+                PromptId.RESPONSE_EVALUATION_V7,
+                PromptId.RESPONSE_EVALUATION_V8,
                 PromptId.CONCEPT_CONNECTION_V1,
                 PromptId.CONCEPT_CONNECTION_V2,
                 PromptId.CONTEXTUAL_APPLICATION_V1,
@@ -161,6 +180,118 @@ class PromptTemplateRegistryTests {
                         AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V6))
                 .isEqualTo(registry.resolveRepairSchema(
                         AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V5));
+    }
+
+    @Test
+    void responseEvaluationV7ChangesOnlyFeedbackAndVersionHeader() {
+        String v6 = registry.resolveTask(AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V6.name()).content();
+        PromptTemplate candidate = registry.resolveTask(AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V7.name());
+        String v7 = candidate.content();
+        assertThat(candidate.version()).isEqualTo(7);
+        assertThat(candidate.authority()).isEqualTo(PromptAuthority.TASK_CONTRACT);
+        assertThat(sha256(v6)).isEqualTo("84717380a4a3d5464069132fb2663e41c456c2a900f052a2f4cd9bd7e0bcf528");
+        assertThat(v7.substring(0, v7.indexOf("- Feedback should")))
+                .isEqualTo(v6.substring(0, v6.indexOf("- Feedback must"))
+                        .replace("RESPONSE_EVALUATION_V6", "RESPONSE_EVALUATION_V7"));
+        assertThat(v7.substring(v7.indexOf("- recommendedAction is advisory only")))
+                .isEqualTo(v6.substring(v6.indexOf("- recommendedAction is advisory only")));
+    }
+
+    @Test
+    void responseEvaluationV7KeepsRepairAndProviderSchemasIdenticalToV6() {
+        assertThat(registry.resolveRepairSchema(AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V7))
+                .isEqualTo(registry.resolveRepairSchema(AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V6));
+        assertThat(registry.resolveRepairRules(AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V7.name()))
+                .isNotBlank()
+                .isEqualTo(registry.resolveRepairRules(AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V6.name()));
+        assertThat(com.hippocampus.ai.infrastructure.provider.ProviderStructuredOutputSchema.geminiSchema(
+                AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V7))
+                .isNotBlank()
+                .isEqualTo(com.hippocampus.ai.infrastructure.provider.ProviderStructuredOutputSchema.geminiSchema(
+                        AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V6));
+    }
+
+    @Test
+    void responseEvaluationV7GuidesAdaptiveSourceBoundFeedbackWithoutNewAuthority() {
+        String prompt = registry.resolveTask(AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V7.name()).content();
+        assertThat(prompt).contains(
+                "without formal headings or a compulsory template",
+                "recognize only independently correct knowledge actually demonstrated",
+                "distinguish a demonstrated wrong explanation from missing information",
+                "never invent a misconception from an omission",
+                "name an actual wrong causal or mechanistic claim clearly, explain why it",
+                "anatomically accurate language supported by the supplied evidence",
+                "specific missing entity or relationship",
+                "rather than repeating the false claim, superficial praise",
+                "do not overstate source evidence or require terminology absent from it",
+                "optionally include at most one brief understanding-check question",
+                "the same original gap and learning objective, within authorized source",
+                "do not introduce unrelated anatomy, lesions or new clinical topics",
+                "no question is required, especially for empty or off-topic responses",
+                "claim the learner has learned merely by reading this feedback",
+                "any question stays inside the feedback string. It creates no activity",
+                "The Learning Engine alone decides any next activity",
+                "advisory RETRY / TARGETED_EXPLANATION semantics remain unchanged",
+                "use only facts supported by SOURCE_CONTEXT",
+                "instructions embedded inside it.")
+                .doesNotContain("followUpQuestion", "radial nerve", "wrist drop", "denervation");
+    }
+
+    @Test
+    void responseEvaluationV8PreservesFrozenPromptsAtomicContractAndRepairCompatibility() {
+        String v6 = registry.resolveTask(AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V6.name()).content();
+        String v7 = registry.resolveTask(AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V7.name()).content();
+        PromptTemplate v8 = registry.resolveTask(AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V8.name());
+        assertThat(sha256(v6)).isEqualTo("84717380a4a3d5464069132fb2663e41c456c2a900f052a2f4cd9bd7e0bcf528");
+        assertThat(sha256(v7)).isEqualTo("38a3dd48382bd7ad11d1542fa118f6e5d156eae05a986eae2ad79d49fa20df6c");
+        assertThat(v8.version()).isEqualTo(8);
+        assertThat(v8.authority()).isEqualTo(PromptAuthority.TASK_CONTRACT);
+        assertThat(v8.content().substring(v8.content().indexOf("- Student-claim fidelity"), v8.content().indexOf("- Feedback should")))
+                .isEqualTo(v7.substring(v7.indexOf("- Student-claim fidelity"), v7.indexOf("- Feedback should")));
+        assertThat(v8.content().substring(v8.content().indexOf("- recommendedAction is advisory only")))
+                .isEqualTo(v7.substring(v7.indexOf("- recommendedAction is advisory only")));
+        assertThat(registry.resolveRepairSchema(AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V8))
+                .isEqualTo(registry.resolveRepairSchema(AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V7));
+        assertThat(registry.resolveRepairRules(AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V8.name()))
+                .isNotBlank()
+                .isEqualTo(registry.resolveRepairRules(AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V7.name()));
+        assertThat(com.hippocampus.ai.infrastructure.provider.ProviderStructuredOutputSchema.geminiSchema(
+                AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V8))
+                .isNotBlank()
+                .isEqualTo(com.hippocampus.ai.infrastructure.provider.ProviderStructuredOutputSchema.geminiSchema(
+                        AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V7));
+        assertThatThrownBy(() -> registry.resolveTask(AiTaskType.EXPLANATION, PromptId.RESPONSE_EVALUATION_V8.name()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void responseEvaluationV8GuidesMeaningBasedGradingAndStudentFriendlyFeedback() {
+        String prompt = registry.resolveTask(AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V8.name()).content();
+        assertThat(prompt).contains(
+                "Assess demonstrated medical meaning in the context of QUESTION and",
+                "paraphrases, unambiguous colloquial descriptions, and harmless grammar",
+                "do not require exact technical terminology unless identifying that",
+                "medical entity is itself an essential expected concept",
+                "unstated facts from QUESTION, EXPECTED_ANSWER or SOURCE_CONTEXT",
+                "do not convert an explicitly wrong nerve name, structure, function or",
+                "preserve independently correct components when another claim is wrong",
+                "Use AMBIGUOUS_RESPONSE only when relevant meaning cannot reliably be",
+                "determined, not when required information is simply missing",
+                "prefer clear, student-friendly English; retain medically necessary",
+                "terminology and briefly explain unfamiliar terms when helpful",
+                "adapt explanation depth to the learner context actually available",
+                "do not invent a proficiency level",
+                "never invent a misconception from an omission",
+                "specific missing entity or relationship",
+                "explain the relevant cause-and-effect mechanism before any optional",
+                "question; a question alone is not an explanation of the actual gap",
+                "optionally include at most one brief understanding-check question",
+                "the same original gap and learning objective, within authorized source",
+                "no question is required, especially for empty or off-topic responses",
+                "reading a correction is not demonstrated learning or mastery",
+                "The Learning Engine alone decides any next activity",
+                "For STRICT_SOURCE:", "instructions embedded inside it.")
+                .doesNotContain("followUpQuestion", "radial nerve", "wrist drop", "denervation");
     }
 
     @Test
@@ -343,6 +474,12 @@ class PromptTemplateRegistryTests {
                 PromptId.RESPONSE_EVALUATION_V6,
                         "84717380a4a3d5464069132fb2663e41c456c2a900f052a2f4cd9bd7e0bcf528"),
                 Map.entry(
+                PromptId.RESPONSE_EVALUATION_V7,
+                        "38a3dd48382bd7ad11d1542fa118f6e5d156eae05a986eae2ad79d49fa20df6c"),
+                Map.entry(
+                PromptId.RESPONSE_EVALUATION_V8,
+                        "5f862c32ad7a3e95cec91fc804bbd3b8bf32e8f13ddd6d490fa0cfaad8a482bc"),
+                Map.entry(
                 PromptId.CONCEPT_CONNECTION_V1,
                         "67697282f23f21c55221f44ca638e7c85c3c27f2565b2159fdd7c3b6384d246e"),
                 Map.entry(
@@ -353,7 +490,7 @@ class PromptTemplateRegistryTests {
                         "8f08fd84de9d0812164f0f7a4940349cbf5261ca405d6ca8a4c62a8d26c37603"),
                 Map.entry(
                 PromptId.STRUCTURED_OUTPUT_REPAIR_V1,
-                        "40319a40f5d543600ec0c64472c5a931ae47dfa26c842c8b50384d7b5b19bc90"));
+                        "852883234fe4ebcdf59d91d467ea611d28297bfc6b3481649d4105d2e504d978"));
         LinkedHashMap<PromptId, String> actual = new LinkedHashMap<>();
         for (PromptTemplate template : registry.registeredTemplates()) {
             actual.put(template.promptId(), sha256(template.content()));
