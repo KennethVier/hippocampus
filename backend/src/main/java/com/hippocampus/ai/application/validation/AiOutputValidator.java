@@ -84,6 +84,7 @@ public final class AiOutputValidator {
             case RESPONSE_EVALUATION -> promptId == PromptId.RESPONSE_EVALUATION_V4
                             || promptId == PromptId.RESPONSE_EVALUATION_V5
                             || promptId == PromptId.RESPONSE_EVALUATION_V6
+                            || promptId == PromptId.RESPONSE_EVALUATION_V7
                     ? ResponseEvaluationV4Result.class
                     : ResponseEvaluationResult.class;
             case CONCEPT_CONNECTION -> promptId == PromptId.CONCEPT_CONNECTION_V1

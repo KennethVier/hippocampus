@@ -1,5 +1,6 @@
 package com.hippocampus.ai.evaluation;
 
+import com.hippocampus.ai.application.prompt.PromptId;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -40,12 +41,17 @@ final class GoldenAiQualification {
     }
 
     static Identity currentIdentity(String provider, String model) throws IOException {
+        return currentIdentity(provider, model, PromptId.RESPONSE_EVALUATION_V6);
+    }
+
+    static Identity currentIdentity(String provider, String model, PromptId responsePrompt) throws IOException {
+        GoldenAiLiveEvaluationRunner.responseEvaluationPrompt(responsePrompt.name());
         Path backend = Files.isDirectory(Path.of("src/main/java")) ? Path.of(".") : Path.of("backend");
         Map<String, String> inputs = new TreeMap<>();
         inputs.put("datasetRubric", "v5 (v2 base + v4 rubric + v5 input contract)");
         inputs.put("provider", provider);
         inputs.put("model", model);
-        inputs.put("prompt", "RESPONSE_EVALUATION_V6");
+        inputs.put("prompt", responsePrompt.name());
         inputs.put("repairPrompt", "STRUCTURED_OUTPUT_REPAIR_V1");
         inputs.put("contract", "RESPONSE_EVALUATION");
         inputs.put("route", "single configured candidate; no fallback; LATENCY_THEN_COST");

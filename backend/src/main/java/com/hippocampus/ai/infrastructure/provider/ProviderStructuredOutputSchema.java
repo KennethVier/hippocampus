@@ -98,7 +98,8 @@ public final class ProviderStructuredOutputSchema {
         if (outputContract == AiOutputContract.RESPONSE_EVALUATION
                 && (promptId == PromptId.RESPONSE_EVALUATION_V4
                         || promptId == PromptId.RESPONSE_EVALUATION_V5
-                        || promptId == PromptId.RESPONSE_EVALUATION_V6)) {
+                        || promptId == PromptId.RESPONSE_EVALUATION_V6
+                        || promptId == PromptId.RESPONSE_EVALUATION_V7)) {
             return GEMINI_RESPONSE_EVALUATION_ATOMIC_SCHEMA;
         }
         return null;

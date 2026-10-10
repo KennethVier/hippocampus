@@ -93,6 +93,7 @@ class GoldenAiLiveEvaluationRunner {
     private static final String TASK_ENVIRONMENT = "HIPPOCAMPUS_LIVE_AI_GOLDEN_TASK";
     private static final String CASE_ENVIRONMENT = "HIPPOCAMPUS_LIVE_AI_GOLDEN_CASE";
     private static final String DELAY_ENVIRONMENT = "HIPPOCAMPUS_LIVE_AI_GOLDEN_DELAY_MS";
+    private static final String RESPONSE_PROMPT_ENVIRONMENT = "HIPPOCAMPUS_LIVE_AI_GOLDEN_RESPONSE_PROMPT";
     private static final UUID QUALIFICATION_USER_ID =
             UUID.fromString("00000000-0000-0000-0000-000000000709");
 
@@ -107,9 +108,10 @@ class GoldenAiLiveEvaluationRunner {
         long delayMillis = parseDelayMillis(System.getenv(DELAY_ENVIRONMENT));
         GoldenAiDataset.All dataset = selectedDataset(new GoldenAiDatasetLoader().loadAll(),
                 task.environmentValue, System.getenv(CASE_ENVIRONMENT));
+        PromptId responsePrompt = responseEvaluationPrompt(System.getenv(RESPONSE_PROMPT_ENVIRONMENT));
         LiveProvider liveProvider = liveProvider();
         GoldenAiQualification.Identity identity = GoldenAiQualification.currentIdentity(
-                liveProvider.providerId().name(), liveProvider.configuredModel());
+                liveProvider.providerId().name(), liveProvider.configuredModel(), responsePrompt);
         Set<String> requiredCases = new GoldenAiDatasetLoader().loadAll().responseEvaluations().stream()
                 .map(GoldenAiDataset.ResponseEvaluationCase::caseId).collect(java.util.stream.Collectors.toSet());
         String reviewPath = System.getenv("HIPPOCAMPUS_LIVE_AI_GOLDEN_REVIEW_FILE");
@@ -168,7 +170,8 @@ class GoldenAiLiveEvaluationRunner {
                     golden.learner(),
                     golden.sourceEvidence(),
                     golden.groundingMode(),
-                    AiOutputContract.RESPONSE_EVALUATION);
+                    AiOutputContract.RESPONSE_EVALUATION,
+                    responsePrompt);
             entries.add(execute(
                     liveProvider,
                     golden.caseId(),
@@ -206,7 +209,8 @@ class GoldenAiLiveEvaluationRunner {
         Assumptions.assumeTrue(retainedPath != null && !retainedPath.isBlank());
         Path input = Path.of(retainedPath);
         EvaluationReport report = new ObjectMapper().readValue(input.toFile(), EvaluationReport.class);
-        var currentIdentity = GoldenAiQualification.currentIdentity(report.provider(), report.configuredModel());
+        var responsePrompt = responseEvaluationPrompt(report.qualificationIdentity().inputs().get("prompt"));
+        var currentIdentity = GoldenAiQualification.currentIdentity(report.provider(), report.configuredModel(), responsePrompt);
         Set<String> required = new GoldenAiDatasetLoader().loadAll().responseEvaluations().stream()
                 .map(GoldenAiDataset.ResponseEvaluationCase::caseId).collect(java.util.stream.Collectors.toSet());
         var reviews = GoldenAiQualification.read(Path.of(requiredEnvironment("HIPPOCAMPUS_LIVE_AI_GOLDEN_REVIEW_FILE")), required);
@@ -530,10 +534,30 @@ class GoldenAiLiveEvaluationRunner {
             List<GoldenAiDataset.Source> sources,
             GroundingMode groundingMode,
             AiOutputContract outputContract) {
+        return request(taskType, taskContext, learner, sources, groundingMode, outputContract,
+                PromptId.RESPONSE_EVALUATION_V6);
+    }
+
+    static PromptId responseEvaluationPrompt(String value) {
+        if (value == null || value.isBlank()) return PromptId.RESPONSE_EVALUATION_V6;
+        if (value.equals(PromptId.RESPONSE_EVALUATION_V6.name())) return PromptId.RESPONSE_EVALUATION_V6;
+        if (value.equals(PromptId.RESPONSE_EVALUATION_V7.name())) return PromptId.RESPONSE_EVALUATION_V7;
+        throw new IllegalArgumentException(RESPONSE_PROMPT_ENVIRONMENT + " must be RESPONSE_EVALUATION_V6 or RESPONSE_EVALUATION_V7");
+    }
+
+    static <C extends AiTaskContext> AiTaskRequest<C> request(
+            AiTaskType taskType,
+            C taskContext,
+            GoldenAiDataset.Learner learner,
+            List<GoldenAiDataset.Source> sources,
+            GroundingMode groundingMode,
+            AiOutputContract outputContract,
+            PromptId responsePrompt) {
+        responseEvaluationPrompt(responsePrompt.name());
         String promptVersion = switch (taskType) {
             case EXPLANATION -> PromptId.EXPLANATION_V2.name();
             case QUESTION_GENERATION -> PromptId.QUESTION_GENERATION_V2.name();
-            case RESPONSE_EVALUATION -> PromptId.RESPONSE_EVALUATION_V6.name();
+            case RESPONSE_EVALUATION -> responsePrompt.name();
             default -> taskType.name() + "_V1";
         };
         return new AiTaskRequest<>(

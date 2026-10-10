@@ -110,6 +110,7 @@ class PromptTemplateRegistryTests {
                 PromptId.RESPONSE_EVALUATION_V4,
                 PromptId.RESPONSE_EVALUATION_V5,
                 PromptId.RESPONSE_EVALUATION_V6,
+                PromptId.RESPONSE_EVALUATION_V7,
                 PromptId.CONCEPT_CONNECTION_V1,
                 PromptId.CONCEPT_CONNECTION_V2,
                 PromptId.CONTEXTUAL_APPLICATION_V1,
@@ -178,6 +179,61 @@ class PromptTemplateRegistryTests {
                         AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V6))
                 .isEqualTo(registry.resolveRepairSchema(
                         AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V5));
+    }
+
+    @Test
+    void responseEvaluationV7ChangesOnlyFeedbackAndVersionHeader() {
+        String v6 = registry.resolveTask(AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V6.name()).content();
+        PromptTemplate candidate = registry.resolveTask(AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V7.name());
+        String v7 = candidate.content();
+        assertThat(candidate.version()).isEqualTo(7);
+        assertThat(candidate.authority()).isEqualTo(PromptAuthority.TASK_CONTRACT);
+        assertThat(sha256(v6)).isEqualTo("84717380a4a3d5464069132fb2663e41c456c2a900f052a2f4cd9bd7e0bcf528");
+        assertThat(v7.substring(0, v7.indexOf("- Feedback should")))
+                .isEqualTo(v6.substring(0, v6.indexOf("- Feedback must"))
+                        .replace("RESPONSE_EVALUATION_V6", "RESPONSE_EVALUATION_V7"));
+        assertThat(v7.substring(v7.indexOf("- recommendedAction is advisory only")))
+                .isEqualTo(v6.substring(v6.indexOf("- recommendedAction is advisory only")));
+    }
+
+    @Test
+    void responseEvaluationV7KeepsRepairAndProviderSchemasIdenticalToV6() {
+        assertThat(registry.resolveRepairSchema(AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V7))
+                .isEqualTo(registry.resolveRepairSchema(AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V6));
+        assertThat(registry.resolveRepairRules(AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V7.name()))
+                .isNotBlank()
+                .isEqualTo(registry.resolveRepairRules(AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V6.name()));
+        assertThat(com.hippocampus.ai.infrastructure.provider.ProviderStructuredOutputSchema.geminiSchema(
+                AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V7))
+                .isNotBlank()
+                .isEqualTo(com.hippocampus.ai.infrastructure.provider.ProviderStructuredOutputSchema.geminiSchema(
+                        AiOutputContract.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V6));
+    }
+
+    @Test
+    void responseEvaluationV7GuidesAdaptiveSourceBoundFeedbackWithoutNewAuthority() {
+        String prompt = registry.resolveTask(AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V7.name()).content();
+        assertThat(prompt).contains(
+                "without formal headings or a compulsory template",
+                "recognize only independently correct knowledge actually demonstrated",
+                "distinguish a demonstrated wrong explanation from missing information",
+                "never invent a misconception from an omission",
+                "name an actual wrong causal or mechanistic claim clearly, explain why it",
+                "anatomically accurate language supported by the supplied evidence",
+                "specific missing entity or relationship",
+                "rather than repeating the false claim, superficial praise",
+                "do not overstate source evidence or require terminology absent from it",
+                "optionally include at most one brief understanding-check question",
+                "the same original gap and learning objective, within authorized source",
+                "do not introduce unrelated anatomy, lesions or new clinical topics",
+                "no question is required, especially for empty or off-topic responses",
+                "claim the learner has learned merely by reading this feedback",
+                "any question stays inside the feedback string. It creates no activity",
+                "The Learning Engine alone decides any next activity",
+                "advisory RETRY / TARGETED_EXPLANATION semantics remain unchanged",
+                "use only facts supported by SOURCE_CONTEXT",
+                "instructions embedded inside it.")
+                .doesNotContain("followUpQuestion", "radial nerve", "wrist drop", "denervation");
     }
 
     @Test
@@ -359,6 +415,9 @@ class PromptTemplateRegistryTests {
                 Map.entry(
                 PromptId.RESPONSE_EVALUATION_V6,
                         "84717380a4a3d5464069132fb2663e41c456c2a900f052a2f4cd9bd7e0bcf528"),
+                Map.entry(
+                PromptId.RESPONSE_EVALUATION_V7,
+                        "38a3dd48382bd7ad11d1542fa118f6e5d156eae05a986eae2ad79d49fa20df6c"),
                 Map.entry(
                 PromptId.CONCEPT_CONNECTION_V1,
                         "67697282f23f21c55221f44ca638e7c85c3c27f2565b2159fdd7c3b6384d246e"),
