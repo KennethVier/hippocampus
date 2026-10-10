@@ -62,6 +62,9 @@ class AiResponseEvaluationAdapterTests {
 
     @Test
     void usesResponseEvaluationV6Prompt() {
+        assertThat(new com.hippocampus.ai.application.prompt.PromptTemplateRegistry()
+                .resolveTask(AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V8.name()).promptId())
+                .isEqualTo(PromptId.RESPONSE_EVALUATION_V8);
         ResponseEvaluationResult evaluationResult = new ResponseEvaluationResult(
                 Evaluation.CORRECT,
                 List.of("AV node delay"),

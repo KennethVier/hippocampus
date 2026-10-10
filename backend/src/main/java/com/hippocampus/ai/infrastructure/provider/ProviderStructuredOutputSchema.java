@@ -99,7 +99,8 @@ public final class ProviderStructuredOutputSchema {
                 && (promptId == PromptId.RESPONSE_EVALUATION_V4
                         || promptId == PromptId.RESPONSE_EVALUATION_V5
                         || promptId == PromptId.RESPONSE_EVALUATION_V6
-                        || promptId == PromptId.RESPONSE_EVALUATION_V7)) {
+                        || promptId == PromptId.RESPONSE_EVALUATION_V7
+                        || promptId == PromptId.RESPONSE_EVALUATION_V8)) {
             return GEMINI_RESPONSE_EVALUATION_ATOMIC_SCHEMA;
         }
         return null;

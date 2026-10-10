@@ -170,7 +170,8 @@ public final class GeminiProviderAdapter implements AiProviderAdapter {
                 && (promptId == PromptId.RESPONSE_EVALUATION_V4
                         || promptId == PromptId.RESPONSE_EVALUATION_V5
                         || promptId == PromptId.RESPONSE_EVALUATION_V6
-                        || promptId == PromptId.RESPONSE_EVALUATION_V7);
+                        || promptId == PromptId.RESPONSE_EVALUATION_V7
+                        || promptId == PromptId.RESPONSE_EVALUATION_V8);
         // Repair retains the original output contract, but has its own task/prompt identity.
         // Keep this bounded transformation policy confined to response-evaluation repair.
         boolean responseEvaluationRepair = request.taskType() == AiTaskType.STRUCTURED_OUTPUT_REPAIR

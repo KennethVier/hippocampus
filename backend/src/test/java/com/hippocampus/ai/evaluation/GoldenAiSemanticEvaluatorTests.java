@@ -25,6 +25,44 @@ class GoldenAiSemanticEvaluatorTests {
     }
 
     @Test
+    void v6CaseFiveCreditsOnlyDemonstratedParalysisAndKeepsWrongNerveExplicit() {
+        var golden = new GoldenAiDatasetLoader().loadAll("v6").responseEvaluations().stream()
+                .filter(value -> value.caseId().equals("P7-09-INCORRECT-001")).findFirst().orElseThrow();
+        var partial = new ResponseEvaluationResult(Evaluation.PARTIAL,
+                List.of("Paralysis of wrist extensors"), List.of("The radial nerve supplies wrist extensors"),
+                List.of("Median nerve injury paralyzes the wrist extensors"),
+                "You recognized wrist-extensor paralysis. The median nerve is the wrong nerve here; the radial nerve supplies the wrist extensors.",
+                EvaluationCertainty.SUFFICIENT, RecommendedAction.TARGETED_EXPLANATION,
+                List.of(golden.sourceEvidence().getFirst().sourceId()), List.of());
+        assertThat(evaluator.evaluate(golden, partial).failedRules()).isEmpty();
+        var inventedCredit = new ResponseEvaluationResult(Evaluation.PARTIAL,
+                List.of("Median nerve injury paralyzes the wrist extensors"), partial.missingConcepts(),
+                partial.misconceptions(), partial.feedback(), partial.certainty(), partial.recommendedAction(),
+                partial.sourceReferences(), partial.limitations());
+        assertThat(evaluator.evaluate(golden, inventedCredit).failedRules())
+                .contains("correct-concept-not-independently-demonstrated");
+        var hiddenError = new ResponseEvaluationResult(Evaluation.PARTIAL, partial.correctConcepts(),
+                partial.missingConcepts(), List.of(), partial.feedback(), partial.certainty(),
+                partial.recommendedAction(), partial.sourceReferences(), partial.limitations());
+        assertThat(evaluator.evaluate(golden, hiddenError).failedRules())
+                .contains("wrong-nerve-misconception-required");
+        var noDemonstratedComponent = new GoldenAiDataset.ResponseEvaluationCase(golden.caseId(), golden.subject(),
+                golden.topic(), golden.question(), golden.expectedConcepts(), golden.expectedAnswer(),
+                "Median nerve injury causes wrist drop.", golden.groundingMode(), golden.learner(),
+                golden.sourceEvidence(), golden.allowedEvaluations(), golden.forbiddenEvaluations(),
+                golden.requiredCorrectConceptGroups(), golden.requiredMissingConceptGroups(),
+                golden.allowedMisconceptionGroups(), golden.requiredFeedbackConceptGroups(),
+                golden.requireNoMissingConcepts(), golden.requireNoMisconceptions(), golden.forbiddenOutputTerms(),
+                golden.reviewerNotes());
+        assertThat(evaluator.evaluate(noDemonstratedComponent, partial).failedRules())
+                .contains("correct-concept-not-independently-demonstrated");
+        var incorrect = new ResponseEvaluationResult(Evaluation.CORRECT, partial.correctConcepts(),
+                partial.missingConcepts(), partial.misconceptions(), partial.feedback(), partial.certainty(),
+                partial.recommendedAction(), partial.sourceReferences(), partial.limitations());
+        assertThat(evaluator.evaluate(golden, incorrect).failedRules()).contains("forbidden-evaluation");
+    }
+
+    @Test
     void acceptsKnownGoodStructuredFixturesForEveryTaskFamily() {
         GoldenAiDataset.ExplanationCase explanationCase = explanation("P7-07-ANAT-001");
         ExplanationResult explanation = new ExplanationResult(

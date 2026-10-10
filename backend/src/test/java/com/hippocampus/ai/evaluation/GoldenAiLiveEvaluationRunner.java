@@ -94,6 +94,7 @@ class GoldenAiLiveEvaluationRunner {
     private static final String CASE_ENVIRONMENT = "HIPPOCAMPUS_LIVE_AI_GOLDEN_CASE";
     private static final String DELAY_ENVIRONMENT = "HIPPOCAMPUS_LIVE_AI_GOLDEN_DELAY_MS";
     private static final String RESPONSE_PROMPT_ENVIRONMENT = "HIPPOCAMPUS_LIVE_AI_GOLDEN_RESPONSE_PROMPT";
+    private static final String DATASET_ENVIRONMENT = "HIPPOCAMPUS_LIVE_AI_GOLDEN_DATASET_VERSION";
     private static final UUID QUALIFICATION_USER_ID =
             UUID.fromString("00000000-0000-0000-0000-000000000709");
 
@@ -106,13 +107,14 @@ class GoldenAiLiveEvaluationRunner {
 
         GoldenTask task = GoldenTask.parse(System.getenv(TASK_ENVIRONMENT));
         long delayMillis = parseDelayMillis(System.getenv(DELAY_ENVIRONMENT));
-        GoldenAiDataset.All dataset = selectedDataset(new GoldenAiDatasetLoader().loadAll(),
+        String datasetVersion = datasetVersion(System.getenv(DATASET_ENVIRONMENT));
+        GoldenAiDataset.All dataset = selectedDataset(new GoldenAiDatasetLoader().loadAll(datasetVersion),
                 task.environmentValue, System.getenv(CASE_ENVIRONMENT));
         PromptId responsePrompt = responseEvaluationPrompt(System.getenv(RESPONSE_PROMPT_ENVIRONMENT));
         LiveProvider liveProvider = liveProvider();
         GoldenAiQualification.Identity identity = GoldenAiQualification.currentIdentity(
-                liveProvider.providerId().name(), liveProvider.configuredModel(), responsePrompt);
-        Set<String> requiredCases = new GoldenAiDatasetLoader().loadAll().responseEvaluations().stream()
+                liveProvider.providerId().name(), liveProvider.configuredModel(), responsePrompt, datasetVersion);
+        Set<String> requiredCases = new GoldenAiDatasetLoader().loadAll(datasetVersion).responseEvaluations().stream()
                 .map(GoldenAiDataset.ResponseEvaluationCase::caseId).collect(java.util.stream.Collectors.toSet());
         String reviewPath = System.getenv("HIPPOCAMPUS_LIVE_AI_GOLDEN_REVIEW_FILE");
         GoldenAiQualification.ReviewFile reviewFile = GoldenAiQualification.read(
@@ -184,7 +186,9 @@ class GoldenAiLiveEvaluationRunner {
         entries = entries.stream().map(entry -> withReview(entry, identity, reviewFile)).toList();
         Path reportDirectory = Path.of("target", "ai-golden-evaluation");
         Files.createDirectories(reportDirectory);
-        Path reportPath = reportDirectory.resolve(liveProvider.reportName() + ".json");
+        String reportBase = liveProvider.reportName() + (datasetVersion.equals("v6") ? "-v6" : "");
+        Path reportPath = reportDirectory.resolve(reportBase
+                + (datasetVersion.equals("v6") ? "-" + UUID.randomUUID() : "") + ".json");
         new ObjectMapper().writerWithDefaultPrettyPrinter().writeValue(
                 reportPath.toFile(),
                 new EvaluationReport(
@@ -197,8 +201,10 @@ class GoldenAiLiveEvaluationRunner {
                         identity,
                         reviewFile.acceptance(),
                         entries));
-        // Retain each run separately as well as the compatible latest-provider filename.
-        Files.copy(reportPath, reportDirectory.resolve(liveProvider.reportName() + "-" + UUID.randomUUID() + ".json"));
+        // Preserve the historical v5 latest-provider filename and its per-run copy.
+        if (datasetVersion.equals("v5")) {
+            Files.copy(reportPath, reportDirectory.resolve(reportBase + "-" + UUID.randomUUID() + ".json"));
+        }
 
         assertEvidenceCollection(entries, reportPath);
     }
@@ -209,9 +215,17 @@ class GoldenAiLiveEvaluationRunner {
         Assumptions.assumeTrue(retainedPath != null && !retainedPath.isBlank());
         Path input = Path.of(retainedPath);
         EvaluationReport report = new ObjectMapper().readValue(input.toFile(), EvaluationReport.class);
+        String datasetVersion = datasetVersion(System.getenv(DATASET_ENVIRONMENT));
+        if (!datasetVersion.equals(report.datasetVersion())) {
+            throw new IllegalArgumentException("Retained rubric version differs from selected qualification version");
+        }
+        if (report.qualificationIdentity() == null || report.qualificationIdentity().inputs() == null) {
+            throw new IllegalArgumentException("Incomplete retained qualification identity");
+        }
         var responsePrompt = responseEvaluationPrompt(report.qualificationIdentity().inputs().get("prompt"));
-        var currentIdentity = GoldenAiQualification.currentIdentity(report.provider(), report.configuredModel(), responsePrompt);
-        Set<String> required = new GoldenAiDatasetLoader().loadAll().responseEvaluations().stream()
+        var currentIdentity = GoldenAiQualification.currentIdentity(report.provider(), report.configuredModel(), responsePrompt,
+                datasetVersion);
+        Set<String> required = new GoldenAiDatasetLoader().loadAll(datasetVersion).responseEvaluations().stream()
                 .map(GoldenAiDataset.ResponseEvaluationCase::caseId).collect(java.util.stream.Collectors.toSet());
         var reviews = GoldenAiQualification.read(Path.of(requiredEnvironment("HIPPOCAMPUS_LIVE_AI_GOLDEN_REVIEW_FILE")), required);
         EvaluationReport reviewed = reviewRetainedReport(report, currentIdentity, reviews, required);
@@ -226,7 +240,9 @@ class GoldenAiLiveEvaluationRunner {
             throw new IllegalArgumentException("Retained run has stale configuration; recollect current evidence");
         }
         GoldenAiQualification.validate(reviews, required);
-        if (!"v5".equals(report.datasetVersion()) || report.runId() == null || report.runId().isBlank()
+        if (!Set.of("v5", "v6").contains(report.datasetVersion())
+                || !currentIdentity.inputs().getOrDefault("datasetRubric", "").startsWith(report.datasetVersion() + " (")
+                || report.runId() == null || report.runId().isBlank()
                 || report.cases() == null || report.cases().isEmpty()) {
             throw new IllegalArgumentException("Incomplete retained qualification report");
         }
@@ -542,7 +558,14 @@ class GoldenAiLiveEvaluationRunner {
         if (value == null || value.isBlank()) return PromptId.RESPONSE_EVALUATION_V6;
         if (value.equals(PromptId.RESPONSE_EVALUATION_V6.name())) return PromptId.RESPONSE_EVALUATION_V6;
         if (value.equals(PromptId.RESPONSE_EVALUATION_V7.name())) return PromptId.RESPONSE_EVALUATION_V7;
-        throw new IllegalArgumentException(RESPONSE_PROMPT_ENVIRONMENT + " must be RESPONSE_EVALUATION_V6 or RESPONSE_EVALUATION_V7");
+        if (value.equals(PromptId.RESPONSE_EVALUATION_V8.name())) return PromptId.RESPONSE_EVALUATION_V8;
+        throw new IllegalArgumentException(RESPONSE_PROMPT_ENVIRONMENT + " must be RESPONSE_EVALUATION_V6, RESPONSE_EVALUATION_V7 or RESPONSE_EVALUATION_V8");
+    }
+
+    static String datasetVersion(String value) {
+        if (value == null || value.isBlank()) return GoldenAiDatasetLoader.VERSION;
+        if (value.equals("v5") || value.equals("v6")) return value;
+        throw new IllegalArgumentException(DATASET_ENVIRONMENT + " must be v5 or v6");
     }
 
     static <C extends AiTaskContext> AiTaskRequest<C> request(

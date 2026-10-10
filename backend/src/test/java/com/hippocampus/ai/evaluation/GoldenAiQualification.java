@@ -45,10 +45,19 @@ final class GoldenAiQualification {
     }
 
     static Identity currentIdentity(String provider, String model, PromptId responsePrompt) throws IOException {
+        return currentIdentity(provider, model, responsePrompt, GoldenAiDatasetLoader.VERSION);
+    }
+
+    static Identity currentIdentity(String provider, String model, PromptId responsePrompt,
+                                    String datasetVersion) throws IOException {
         GoldenAiLiveEvaluationRunner.responseEvaluationPrompt(responsePrompt.name());
+        if (!Set.of("v5", "v6").contains(datasetVersion)) {
+            throw new IllegalArgumentException("unsupported qualification rubric version: " + datasetVersion);
+        }
         Path backend = Files.isDirectory(Path.of("src/main/java")) ? Path.of(".") : Path.of("backend");
         Map<String, String> inputs = new TreeMap<>();
-        inputs.put("datasetRubric", "v5 (v2 base + v4 rubric + v5 input contract)");
+        inputs.put("datasetRubric", datasetVersion + " (v2 base + v4 rubric + v5 input contract"
+                + (datasetVersion.equals("v6") ? " + v6 rubric override)" : ")"));
         inputs.put("provider", provider);
         inputs.put("model", model);
         inputs.put("prompt", responsePrompt.name());
@@ -57,7 +66,7 @@ final class GoldenAiQualification {
         inputs.put("route", "single configured candidate; no fallback; LATENCY_THEN_COST");
         inputs.put("budgets", "context=131072; output=2048");
         inputs.put("generation", "production adapter settings; Gemini LOW; SDK defaults identified by pom");
-        inputs.put("grounding", "loader-resolved synthetic v5 sources and modes; runner source-reference mapping");
+        inputs.put("grounding", "loader-resolved synthetic " + datasetVersion + " sources and modes; runner source-reference mapping");
         // Repository-owned source/configuration only: never rendered prompts, environment secrets,
         // unrestricted learner payloads, or provider requests. Conservative invalidation is intentional.
         Path ai = backend.resolve("src/main/java/com/hippocampus/ai");
@@ -73,6 +82,10 @@ final class GoldenAiQualification {
                 "src/test/resources/ai/golden/v2/response-evaluation-cases.json",
                 "src/test/resources/ai/golden/v4/response-evaluation-rubric-overrides.json",
                 "src/test/resources/ai/golden/v5/response-evaluation-input-contract.json")) {
+            inputs.put(file, hash(Files.readAllBytes(backend.resolve(file))));
+        }
+        if (datasetVersion.equals("v6")) {
+            String file = "src/test/resources/ai/golden/v6/response-evaluation-rubric-overrides.json";
             inputs.put(file, hash(Files.readAllBytes(backend.resolve(file))));
         }
         if (inputs.keySet().stream().noneMatch(key -> key.startsWith("code:"))) {

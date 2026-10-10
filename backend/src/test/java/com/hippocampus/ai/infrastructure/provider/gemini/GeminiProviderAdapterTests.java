@@ -103,7 +103,8 @@ class GeminiProviderAdapterTests {
     @Test
     void usesLowThinkingOnlyForCurrentAtomicResponseEvaluationPrompts() {
         for (PromptId id : List.of(PromptId.RESPONSE_EVALUATION_V4,
-                PromptId.RESPONSE_EVALUATION_V5, PromptId.RESPONSE_EVALUATION_V6, PromptId.RESPONSE_EVALUATION_V7)) {
+                PromptId.RESPONSE_EVALUATION_V5, PromptId.RESPONSE_EVALUATION_V6,
+                PromptId.RESPONSE_EVALUATION_V7, PromptId.RESPONSE_EVALUATION_V8)) {
             ChatModel model = mock(ChatModel.class);
             when(model.call(any(Prompt.class))).thenReturn(new ChatResponse(List.of(
                     new Generation(new AssistantMessage("{}")))));

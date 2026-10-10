@@ -152,6 +152,21 @@ final class GoldenAiSemanticEvaluator {
                 failures, "required-correct-concept",
                 golden.requiredCorrectConceptGroups(), join(actual.correctConcepts()),
                 SemanticMatchMode.ASSERTION);
+        if (golden.caseId().equals("P7-09-INCORRECT-001")
+                && golden.allowedEvaluations().equals(List.of(com.hippocampus.ai.domain.Evaluation.PARTIAL))) {
+            List<String> paralysis = golden.requiredCorrectConceptGroups().getFirst();
+            if (!matchesSemanticGroup(golden.studentResponse(), paralysis, SemanticMatchMode.ASSERTION)
+                    || actual.correctConcepts().stream().noneMatch(concept ->
+                            matchesSemanticGroup(concept, paralysis, SemanticMatchMode.ASSERTION)
+                                    && !concept.toLowerCase(java.util.Locale.ROOT).contains("median nerve")
+                                    && !concept.toLowerCase(java.util.Locale.ROOT).contains("radial nerve"))) {
+                failures.add("correct-concept-not-independently-demonstrated");
+            }
+            if (actual.misconceptions().stream().noneMatch(misconception ->
+                    matchesAnyGroup(misconception, golden.allowedMisconceptionGroups(), SemanticMatchMode.ASSERTION))) {
+                failures.add("wrong-nerve-misconception-required");
+            }
+        }
         for (List<String> group : golden.requiredMissingConceptGroups()) {
             boolean functionalMechanism = group.contains("radial nerve injury eliminates wrist extension");
             boolean mechanismGroup = golden.caseId().equals("P7-09-WRONG-REASONING-001")

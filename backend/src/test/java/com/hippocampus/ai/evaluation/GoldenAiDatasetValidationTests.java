@@ -18,6 +18,27 @@ class GoldenAiDatasetValidationTests {
     private final GoldenAiDatasetLoader loader = new GoldenAiDatasetLoader();
 
     @Test
+    void v6ChangesOnlyCaseFiveAndPreservesV5Classification() {
+        var v5 = loader.loadAll("v5");
+        var v6 = loader.loadAll("v6");
+        var oldCase = response(v5, "P7-09-INCORRECT-001");
+        var revised = response(v6, "P7-09-INCORRECT-001");
+        assertThat(loader.loadAll().version()).isEqualTo("v5");
+        assertThat(v6.version()).isEqualTo("v6");
+        assertThat(oldCase.allowedEvaluations()).containsExactly(com.hippocampus.ai.domain.Evaluation.INCORRECT);
+        assertThat(oldCase.forbiddenEvaluations()).contains(com.hippocampus.ai.domain.Evaluation.PARTIAL);
+        assertThat(revised.allowedEvaluations()).containsExactly(com.hippocampus.ai.domain.Evaluation.PARTIAL);
+        assertThat(revised.forbiddenEvaluations()).contains(com.hippocampus.ai.domain.Evaluation.CORRECT);
+        assertThat(revised.requiredCorrectConceptGroups().getFirst()).contains("wrist-extensor paralysis");
+        assertThat(revised.allowedMisconceptionGroups()).isEqualTo(oldCase.allowedMisconceptionGroups());
+        assertThat(revised.sourceEvidence()).isEqualTo(oldCase.sourceEvidence());
+        assertThat(v6.explanations()).isEqualTo(v5.explanations());
+        assertThat(v6.questions()).isEqualTo(v5.questions());
+        assertThat(v6.responseEvaluations().stream().filter(value -> !value.caseId().equals(revised.caseId())).toList())
+                .isEqualTo(v5.responseEvaluations().stream().filter(value -> !value.caseId().equals(revised.caseId())).toList());
+    }
+
+    @Test
     void loadsVersionedDatasetsWithUniqueIdsAndRequiredTaskCoverage() {
         GoldenAiDataset.All dataset = loader.loadAll();
         List<String> caseIds = java.util.stream.Stream.of(
@@ -248,7 +269,7 @@ class GoldenAiDatasetValidationTests {
 
     @Test
     void rejectsUnknownVersionsAndInvalidHeaders() throws IOException {
-        for (String version : List.of("v0", "v6", "", "V5")) {
+        for (String version : List.of("v0", "v7", "", "V5")) {
             assertThatThrownBy(() -> loader.loadAll(version))
                     .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("unsupported");
         }
