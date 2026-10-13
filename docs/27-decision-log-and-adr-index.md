@@ -4,7 +4,7 @@ Audience: Product, architecture, backend, frontend, AI/RAG, DevOps,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 27
-Last Updated: 2026-10-08
+Last Updated: 2026-10-11
 Owner: Project Hippocampus Team
 Prerequisites:
 - README
@@ -24,7 +24,7 @@ Scope: Decision authority, decision categories, ADR lifecycle, ADR
   Source-of-Truth freeze procedure.
 Status: Final
 Title: Decision Log / ADR Index
-Version: 1.0.11
+Version: 1.0.12
 ---
 
 # 27 - Decision Log / ADR Index
@@ -1392,6 +1392,8 @@ When ADRs exist, add an index:
 | [ADR-0009](adr/ADR-0009-explicit-application-level-selection.md) | Explicit Application Level Selection | ACCEPTED | 2026-10-01 | DOMAIN, BACKEND, AI, EDUCATION |
 | [ADR-0010](adr/ADR-0010-presentation-only-understand-progression.md) | Presentation-Only UNDERSTAND Progression and Evidence | ACCEPTED | 2026-10-02 | DOMAIN, BACKEND, EDUCATION, FRONTEND |
 | [ADR-0011](adr/ADR-0011-layered-p7-09-response-evaluation-qualification.md) | Layered P7-09 Response-Evaluation Qualification | ACCEPTED | 2026-10-08 | TESTING, AI, ARCHITECTURE |
+| [ADR-0012](adr/ADR-0012-verifiable-response-evaluation-component-attribution.md) | Verifiable Component Attribution for Response Evaluation | ACCEPTED | 2026-10-11 | AI, DOMAIN, SECURITY, TESTING |
+| [ADR-0013](adr/ADR-0013-graded-response-follow-up-question-policy.md) | Learning-Engine Follow-up Questions After Graded Responses | ACCEPTED | 2026-10-11 | EDUCATION, DOMAIN, AI |
 
 This table begins empty at initial v1 freeze unless a real pending
 decision already exists.
@@ -1517,6 +1519,34 @@ PENDING. Objective execution/contract/configuration/report failures still fail
 the automated run. Successful evidence collection never grants Golden approval
 or independently authorizes evaluation-approved routing; required semantic
 FAIL prevents qualification PASS even when evidence collection succeeds.
+
+------------------------------------------------------------------------
+
+## ADR-0012 Decision Summary
+
+P7-09 attribution must discover student assertions independently of the
+first model's proposed credit, verify exact student/source spans and complete
+concept relationships against evidence resolved from owned activity provenance
+and frozen mission material versions, and fail safely on incomplete or
+disputed verification. Authorization precedes retrieval/ranking and model use;
+provider references do not authorize evidence. `GENERAL_KNOWLEDGE` cannot
+claim source-grounded credit without an approved verification basis. An
+unresolved accepted response is `UNGRADED`, creates no scoring or mastery
+evidence, and must never be parsed as `INCORRECT`. Bounded nonrecursive
+discovery/verification uses the existing route and stays outside persistence
+transactions. P7-09 runtime remediation and new qualification remain open.
+
+## ADR-0013 Decision Summary
+
+Every safely graded nonterminal response establishes a Learning Engine
+follow-up question intent unless higher-priority safety, stop, source, or
+terminal policy prevents it. Intent can defer through prerequisite support
+or time constraints, persists across valid resume, and is consumed or
+cancelled without duplication. Feedback prose is not an answerable activity.
+P7-15 owns materialization through the authorized Learning Activity lifecycle
+and is a prerequisite to the P7-14 M3 gate; it is separate from P7-09 grading
+remediation. Phase 7 contains 15 tracker items. Documents 11, 12, 15, and 26
+reflect these accepted decisions.
 
 ------------------------------------------------------------------------
 
@@ -1774,6 +1804,8 @@ Phase 0 — Engineering Foundation
 ------------------------------------------------------------------------
 
 # 68. Revision History
+
+- **1.0.12 — 2026-10-11 — Project Hippocampus Team:** Accepted and indexed ADR-0012 and ADR-0013; aligned ungraded evaluation and Phase 7 follow-up governance without claiming runtime implementation or Golden qualification.
 
 - **1.0.11 — 2026-10-08 — Project Hippocampus Team:** Synchronized the accepted
   ADR-0011 execution-versus-qualification clarification; preserved ADR status,

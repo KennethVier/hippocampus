@@ -1,0 +1,23 @@
+{
+  "version": "v7",
+  "basedOn": "v6",
+  "caseId": "P7-09-PARTIAL-001",
+  "allowedEvaluations": ["PARTIAL"],
+  "forbiddenEvaluations": ["CORRECT", "INCORRECT"],
+  "requiredCorrectConceptGroups": [[
+    "denervates the wrist extensors",
+    "denervation of wrist extensors",
+    "loss of input to wrist extensors",
+    "wrist-extensor denervation"
+  ]],
+  "requiredMissingConceptGroups": [
+    ["radial nerve supplies wrist extensors", "radial nerve innervates wrist extensors"],
+    ["loss of wrist extension produces wrist drop", "wrist drop results from loss of wrist extension", "cannot extend the wrist, causing wrist drop"]
+  ],
+  "requiredFeedbackConceptGroups": [
+    ["radial nerve supplies wrist extensors", "radial nerve innervates wrist extensors"],
+    ["loss of wrist extension produces wrist drop", "wrist drop results from loss of wrist extension", "cannot extend the wrist, causing wrist drop"]
+  ],
+  "requireNoMisconceptions": true,
+  "reviewerNotes": "Credit only independently stated wrist-extensor denervation. The pronoun in the response does not identify the radial nerve. Identify the radial-nerve supply relation and the loss-of-extension-to-wrist-drop mechanism as missing, correct both in feedback, and invent no misconception."
+}

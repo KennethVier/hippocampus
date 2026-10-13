@@ -52,7 +52,8 @@ public class PersistActivityResponse {
                 proposed.id(), proposed.userId(), proposed.learningActivityId(), maxAttempt + 1,
                 proposed.responseText(), proposed.responsePayload(), proposed.submittedAt(),
                 proposed.evaluationStatus(), proposed.evaluationArtifactId(),
-                proposed.deterministicResult(), proposed.createdAt()));
+                proposed.deterministicResult(), proposed.createdAt(), proposed.requestId(),
+                proposed.limitationCode(), proposed.submissionReceipt()));
 
         LearningActivity completed = new LearningActivity(
                 current.id(), current.learningObjectiveId(), current.activityType(),

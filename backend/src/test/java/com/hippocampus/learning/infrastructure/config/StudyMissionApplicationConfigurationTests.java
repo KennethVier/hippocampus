@@ -31,6 +31,7 @@ import com.hippocampus.learning.port.ActivityResponseContractRepository;
 import com.hippocampus.learning.port.ActivitySourceReferenceAuthorization;
 import com.hippocampus.learning.port.GeneratedArtifactRepository;
 import com.hippocampus.learning.port.ResponseEvaluationPort;
+import com.hippocampus.learning.port.ResponseEvidenceResolver;
 import com.hippocampus.learning.port.StudyMissionRepository;
 import com.hippocampus.learning.port.StudyMissionSourceCatalog;
 import com.hippocampus.learning.port.StudyMissionSourcePresentationRepository;
@@ -47,7 +48,8 @@ class StudyMissionApplicationConfigurationTests {
                     AopAutoConfiguration.class,
                     TransactionAutoConfiguration.class,
                     StudyMissionApplicationConfiguration.class))
-            .withUserConfiguration(RequiredBeansConfiguration.class);
+            .withUserConfiguration(RequiredBeansConfiguration.class)
+            .withBean(ResponseEvidenceResolver.class, () -> mock(ResponseEvidenceResolver.class));
 
     @Test
     void resolvesTransactionProxiedStartStudyMissionUseCase() {
@@ -79,6 +81,19 @@ class StudyMissionApplicationConfigurationTests {
                 .hasSingleBean(PersistPresentationCompletion.class)
                 .hasSingleBean(SubmitActivityResponseUseCase.class)
                 .hasSingleBean(ContinueStudyMissionUseCase.class));
+    }
+
+    @Test
+    void omitsSubmissionWhenAuthorizedEvidenceResolverIsMissing() {
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(
+                        AopAutoConfiguration.class,
+                        TransactionAutoConfiguration.class,
+                        StudyMissionApplicationConfiguration.class))
+                .withUserConfiguration(RequiredBeansConfiguration.class)
+                .run(context -> assertThat(context).hasNotFailed()
+                        .doesNotHaveBean(SubmitActivityResponseUseCase.class)
+                        .hasSingleBean(ContinueStudyMissionUseCase.class));
     }
 
     @Configuration(proxyBeanMethods = false)

@@ -109,11 +109,13 @@ function responseKindFor(activity: StudyMissionActivity): 'choice' | 'text' | nu
 function SubmissionFeedback({ submission }: { submission: ActivitySubmission }) {
   return (
     <div aria-live="polite" className="mission-feedback">
-      <p className="mission-feedback-outcome">{displayLabel(submission.outcome)}</p>
+      <p className="mission-feedback-outcome">{submission.outcome === 'UNGRADED' ? 'Response saved · ungraded' : displayLabel(submission.outcome)}</p>
       <p>{submission.feedback}</p>
-      <FeedbackList heading="Correct concepts" items={submission.correctConcepts} />
-      <FeedbackList heading="Concepts to revisit" items={submission.missingConcepts} />
-      <FeedbackList heading="Misconceptions" items={submission.misconceptions} />
+      {submission.outcome !== 'UNGRADED' ? <>
+        <FeedbackList heading="Correct concepts" items={submission.correctConcepts} />
+        <FeedbackList heading="Concepts to revisit" items={submission.missingConcepts} />
+        <FeedbackList heading="Misconceptions" items={submission.misconceptions} />
+      </> : null}
     </div>
   )
 }

@@ -101,6 +101,7 @@ export const studyMissionSchema = z.strictObject({
   completedAt: instant.nullable(),
   stoppedAt: instant.nullable(),
   updatedAt: instant,
+  latestSubmission: z.lazy(() => activitySubmissionSchema).nullable().optional(),
 })
 
 export const activitySubmissionSchema = z.strictObject({
@@ -115,6 +116,8 @@ export const activitySubmissionSchema = z.strictObject({
   stage: nonEmpty,
   updatedAt: instant,
   continuationAvailable: z.boolean(),
+  attemptId: z.uuid().nullable().optional(),
+  limitationCode: nonEmpty.nullable().optional(),
 })
 
 const lifecycleSourceScopeSchema = z.strictObject({

@@ -138,8 +138,8 @@ export function useStudyMission(missionId: string) {
 
   return {
     mission,
-    submission,
-    confirmedSubmissionId,
+    submission: submission ?? mission.data?.latestSubmission ?? null,
+    confirmedSubmissionId: confirmedSubmissionId ?? mission.data?.latestSubmission?.activityId ?? null,
     confirmedContinueId,
     notice,
     interactionError,

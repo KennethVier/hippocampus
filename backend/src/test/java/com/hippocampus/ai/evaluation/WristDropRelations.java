@@ -51,6 +51,11 @@ final class WristDropRelations {
         Claim full = parse(sentence, previous, false);
         if (full.complete()) { return full; }
         List<String> words = tokens(sentence);
+        int explanation = words.indexOf("because");
+        if (explanation > 0 && supportedParalysisExplanation(words.subList(explanation + 1, words.size()))) {
+            Claim primary = parse(String.join(" ", words.subList(0, explanation)), previous, false);
+            if (primary.complete() && primary.affirmative().contains(loss())) { return primary; }
+        }
         int boundary = words.indexOf("which");
         if (boundary < 0) { return full; }
         Claim primary = parse(String.join(" ", words.subList(0, boundary)), previous, false);
@@ -64,6 +69,13 @@ final class WristDropRelations {
                 "not", "no", "never", "without");
         if (words.subList(boundary + 1, words.size()).stream().anyMatch(operators::contains)) { return full; }
         return primary;
+    }
+
+    private static boolean supportedParalysisExplanation(List<String> suffix) {
+        String explanation = String.join(" ", suffix);
+        return explanation.matches("(?:the )?(?:wrist )?extensors are paralyzed"
+                + "(?: not because (?:the )?(?:wrist )?flexors are activated"
+                + " and overpower(?:ing)? (?:the )?normal extensors)?");
     }
 
     static boolean equivalent(String text, String alternative) {
@@ -227,6 +239,10 @@ final class WristDropRelations {
             } else if ((subject == Entity.INJURY || subject == Entity.LOSS) && take(
                     "is what produces", "causes", "causing", "leads to", "results in", "resulting in", "produces", "producing")) {
                 Entity object = entity();
+                if (object == null && subject == Entity.INJURY
+                        && take("losing wrist extension", "eliminating wrist extension")) {
+                    object = Entity.LOSS;
+                }
                 if (subject == Entity.INJURY && object == Entity.LOSS) {
                     add(subject, Predicate.LOSES, Entity.EXTENSION, negative);
                 } else if (object == Entity.DROP) {

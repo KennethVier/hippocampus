@@ -63,6 +63,151 @@ class GoldenAiSemanticEvaluatorTests {
     }
 
     @Test
+    void v7CaseThreeCreditsDenervationButRejectsBorrowedNerveAndIncompleteCorrection() {
+        var golden = new GoldenAiDatasetLoader().loadAll("v7").responseEvaluations().stream()
+                .filter(value -> value.caseId().equals("P7-09-PARTIAL-001")).findFirst().orElseThrow();
+        var partial = new ResponseEvaluationResult(Evaluation.PARTIAL,
+                List.of("wrist-extensor denervation"),
+                List.of("The radial nerve supplies wrist extensors",
+                        "Loss of wrist extension produces wrist drop"),
+                List.of(),
+                "The radial nerve supplies wrist extensors. Loss of wrist extension produces wrist drop.",
+                EvaluationCertainty.SUFFICIENT, RecommendedAction.TARGETED_EXPLANATION,
+                List.of(golden.sourceEvidence().getFirst().sourceId()), List.of());
+        assertThat(evaluator.evaluate(golden, partial).failedRules()).isEmpty();
+
+        var borrowed = new ResponseEvaluationResult(Evaluation.PARTIAL,
+                List.of("The radial nerve supplies wrist extensors"), partial.missingConcepts(),
+                partial.misconceptions(), partial.feedback(), partial.certainty(),
+                partial.recommendedAction(), partial.sourceReferences(), partial.limitations());
+        assertThat(evaluator.evaluate(golden, borrowed).failedRules())
+                .contains("correct-concept-not-independently-demonstrated")
+                .anyMatch(rule -> rule.startsWith("required-correct-concept"));
+
+        var noNerveGap = new ResponseEvaluationResult(Evaluation.PARTIAL, partial.correctConcepts(),
+                List.of("Loss of wrist extension produces wrist drop"), partial.misconceptions(),
+                partial.feedback(), partial.certainty(), partial.recommendedAction(),
+                partial.sourceReferences(), partial.limitations());
+        assertThat(evaluator.evaluate(golden, noNerveGap).failedRules())
+                .anyMatch(rule -> rule.startsWith("required-missing-concept"));
+
+        var noDropFeedback = new ResponseEvaluationResult(Evaluation.PARTIAL, partial.correctConcepts(),
+                partial.missingConcepts(), partial.misconceptions(),
+                "The radial nerve supplies wrist extensors.", partial.certainty(),
+                partial.recommendedAction(), partial.sourceReferences(), partial.limitations());
+        assertThat(evaluator.evaluate(golden, noDropFeedback).failedRules())
+                .anyMatch(rule -> rule.startsWith("feedback-does-not-identify-gap"));
+
+        var positionQuestionOnly = new ResponseEvaluationResult(Evaluation.PARTIAL, partial.correctConcepts(),
+                partial.missingConcepts(), partial.misconceptions(),
+                "What happens to wrist position as a result of losing wrist extension?", partial.certainty(),
+                partial.recommendedAction(), partial.sourceReferences(), partial.limitations());
+        assertThat(evaluator.evaluate(golden, positionQuestionOnly).failedRules())
+                .containsExactly("feedback-does-not-identify-gap:"
+                        + "radial nerve supplies wrist extensors|radial nerve innervates wrist extensors");
+
+        var inventedMisconception = new ResponseEvaluationResult(Evaluation.PARTIAL,
+                partial.correctConcepts(), partial.missingConcepts(), List.of("median nerve injury"),
+                partial.feedback(), partial.certainty(), partial.recommendedAction(),
+                partial.sourceReferences(), partial.limitations());
+        assertThat(evaluator.evaluate(golden, inventedMisconception).failedRules())
+                .contains("fabricated-misconception");
+    }
+
+    @Test
+    void v7CaseFiveRetainsVerifiedParalysisAndMedianNerveCorrection() {
+        var v6 = new GoldenAiDatasetLoader().loadAll("v6").responseEvaluations().stream()
+                .filter(value -> value.caseId().equals("P7-09-INCORRECT-001")).findFirst().orElseThrow();
+        var v7 = new GoldenAiDatasetLoader().loadAll("v7").responseEvaluations().stream()
+                .filter(value -> value.caseId().equals("P7-09-INCORRECT-001")).findFirst().orElseThrow();
+        assertThat(v7).isEqualTo(v6);
+        var partial = new ResponseEvaluationResult(Evaluation.PARTIAL,
+                List.of("wrist-extensor paralysis"), List.of("The radial nerve supplies wrist extensors"),
+                List.of("Median nerve injury paralyzes the wrist extensors"),
+                "The median nerve is the wrong attribution; the radial nerve supplies wrist extensors.",
+                EvaluationCertainty.SUFFICIENT, RecommendedAction.TARGETED_EXPLANATION,
+                List.of(v7.sourceEvidence().getFirst().sourceId()), List.of());
+        assertThat(evaluator.evaluate(v7, partial).failedRules()).isEmpty();
+    }
+
+    @Test
+    void v6CaseThreeDoesNotBorrowRadialNerveIdentificationFromQuestion() {
+        var golden = new GoldenAiDatasetLoader().loadAll("v6").responseEvaluations().stream()
+                .filter(value -> value.caseId().equals("P7-09-PARTIAL-001")).findFirst().orElseThrow();
+        var credited = new ResponseEvaluationResult(Evaluation.PARTIAL,
+                List.of("The radial nerve supplies wrist extensors"),
+                List.of("Loss of wrist extension produces wrist drop"), List.of(),
+                "You identified extensor denervation. Explain the resulting loss of wrist extension.",
+                EvaluationCertainty.SUFFICIENT, RecommendedAction.RETRY,
+                List.of(golden.sourceEvidence().getFirst().sourceId()), List.of());
+        assertThat(evaluator.evaluate(golden, credited).failedRules())
+                .contains("correct-concept-not-independently-demonstrated");
+
+        var explicitlyNamed = withStudentResponse(golden, "Radial nerve injury denervates the wrist extensors.");
+        assertThat(evaluator.evaluate(explicitlyNamed, credited).failedRules()).isEmpty();
+        assertThat(evaluator.evaluate(withStudentResponse(golden,
+                "It is not the radial nerve; it denervates the wrist extensors."), credited).failedRules())
+                .contains("correct-concept-not-independently-demonstrated");
+    }
+
+    private static GoldenAiDataset.ResponseEvaluationCase withStudentResponse(
+            GoldenAiDataset.ResponseEvaluationCase golden, String studentResponse) {
+        return new GoldenAiDataset.ResponseEvaluationCase(golden.caseId(), golden.subject(), golden.topic(),
+                golden.question(), golden.expectedConcepts(), golden.expectedAnswer(), studentResponse,
+                golden.groundingMode(), golden.learner(), golden.sourceEvidence(), golden.allowedEvaluations(),
+                golden.forbiddenEvaluations(), golden.requiredCorrectConceptGroups(),
+                golden.requiredMissingConceptGroups(), golden.allowedMisconceptionGroups(),
+                golden.requiredFeedbackConceptGroups(), golden.requireNoMissingConcepts(),
+                golden.requireNoMisconceptions(), golden.forbiddenOutputTerms(), golden.reviewerNotes());
+    }
+
+    @Test
+    void v6CaseFourAcceptsBoundedFunctionalLossAndRejectsFalseCausality() {
+        var golden = new GoldenAiDatasetLoader().loadAll("v6").responseEvaluations().stream()
+                .filter(value -> value.caseId().equals("P7-09-WRONG-REASONING-001")).findFirst().orElseThrow();
+        var baseline = wrongReasoningMechanismResult(
+                "Radial nerve injury denervates wrist extensors",
+                "Radial nerve injury eliminates wrist extension. Wrist drop is identified.");
+        for (String feedback : List.of(
+                "The radial nerve supplies wrist extensors. An injury to this nerve eliminates wrist extension because the extensors are paralyzed, not because the flexors are activated and overpowering normal extensors.",
+                "The radial nerve supplies wrist extensors. An injury to this nerve causes losing wrist extension because the extensors are paralyzed.",
+                "Radial nerve injury causes eliminating wrist extension because wrist extensors are paralyzed.")) {
+            assertThat(evaluator.evaluate(golden, withFeedback(baseline, feedback + " Wrist drop is identified.")).failedRules())
+                    .as(feedback).isEmpty();
+        }
+        for (String feedback : List.of(
+                "The radial nerve supplies wrist extensors. Loss of wrist extension causes radial nerve injury because the extensors are paralyzed.",
+                "The radial nerve supplies wrist extensors. An injury to this nerve does not eliminate wrist extension because the extensors are paralyzed.",
+                "The radial nerve supplies wrist extensors. A brain tumor eliminates wrist extension because the extensors are paralyzed.",
+                "The radial nerve supplies wrist extensors. An injury to this nerve eliminates wrist extension because of a brain tumor.")) {
+            assertThat(evaluator.evaluate(golden, withFeedback(baseline, feedback + " Wrist drop is identified.")).failedRules())
+                    .as(feedback).contains("feedback-does-not-identify-gap:loss of wrist extension|cannot extend the wrist");
+        }
+    }
+
+    @Test
+    void attachedParalysisExplanationRequiresAnAffirmativeInjuryAndSupportedAntecedent() {
+        String valid = "The radial nerve supplies wrist extensors. An injury to this nerve eliminates wrist "
+                + "extension because the extensors are paralyzed, not because the flexors are activated "
+                + "and overpowering normal extensors.";
+        assertThat(WristDropRelations.propositions(valid).affirmative()).contains(
+                new WristDropRelations.Relation(WristDropRelations.Entity.INJURY,
+                        WristDropRelations.Predicate.LOSES, WristDropRelations.Entity.EXTENSION));
+        for (String invalid : List.of(
+                "An injury to this nerve eliminates wrist extension because the extensors are paralyzed.",
+                "The radial nerve does not supply wrist extensors. An injury to this nerve eliminates wrist extension because the extensors are paralyzed.",
+                "The radial nerve supplies wrist extensors. A different nerve is injured. An injury to this nerve eliminates wrist extension because the extensors are paralyzed.",
+                "The radial nerve supplies wrist extensors. An injury to this nerve does not eliminate wrist extension because the extensors are paralyzed.",
+                "The radial nerve supplies wrist extensors. Radial nerve injury. Eliminating wrist extension.",
+                "The radial nerve supplies wrist extensors. Loss of wrist extension causes radial nerve injury because the extensors are paralyzed.",
+                "The radial nerve supplies wrist extensors. An injury to this nerve eliminates wrist extension because of a brain tumor.")) {
+            assertThat(WristDropRelations.propositions(invalid).affirmative()).as(invalid).doesNotContain(
+                    new WristDropRelations.Relation(WristDropRelations.Entity.INJURY,
+                            WristDropRelations.Predicate.LOSES, WristDropRelations.Entity.EXTENSION));
+        }
+    }
+
+    @Test
     void acceptsKnownGoodStructuredFixturesForEveryTaskFamily() {
         GoldenAiDataset.ExplanationCase explanationCase = explanation("P7-07-ANAT-001");
         ExplanationResult explanation = new ExplanationResult(
@@ -603,7 +748,8 @@ class GoldenAiSemanticEvaluatorTests {
                   "limitations": []
                 }
                 """, ResponseEvaluationResult.class);
-        assertThat(evaluator.evaluate(response("P7-09-PARTIAL-001"), actual).failedRules()).isEmpty();
+        assertThat(evaluator.evaluate(response("P7-09-PARTIAL-001"), actual).failedRules())
+                .contains("correct-concept-not-independently-demonstrated");
     }
 
     @Test
@@ -621,7 +767,7 @@ class GoldenAiSemanticEvaluatorTests {
                 "wrist drop",
                 "dropped flexed posture")) {
             assertThat(evaluator.evaluate(golden, partialFeedbackResult(feedback)).failedRules())
-                    .as(feedback).isEmpty();
+                    .as(feedback).containsExactly("correct-concept-not-independently-demonstrated");
         }
     }
 
@@ -804,8 +950,10 @@ class GoldenAiSemanticEvaluatorTests {
                 List.of(partial.sourceEvidence().getFirst().sourceId()),
                 List.of());
 
-        assertThat(evaluator.evaluate(partial, firstRun).passed()).isTrue();
-        assertThat(evaluator.evaluate(partial, repeatRun).passed()).isTrue();
+        assertThat(evaluator.evaluate(partial, firstRun).failedRules())
+                .contains("correct-concept-not-independently-demonstrated");
+        assertThat(evaluator.evaluate(partial, repeatRun).failedRules())
+                .contains("correct-concept-not-independently-demonstrated");
         assertThat(evaluator.evaluate(partial, bareStemReference).failedRules())
                 .anyMatch(rule -> rule.startsWith("required-correct-concept"));
     }
@@ -1285,7 +1433,8 @@ class GoldenAiSemanticEvaluatorTests {
             var supplyResult = new ResponseEvaluationResult(partial.evaluation(), List.of(supply), partial.missingConcepts(),
                     partial.misconceptions(), partial.feedback(), partial.certainty(), partial.recommendedAction(),
                     partial.sourceReferences(), partial.limitations());
-            assertThat(evaluator.evaluate(response("P7-09-PARTIAL-001"), supplyResult).failedRules()).as(supply).isEmpty();
+            assertThat(evaluator.evaluate(response("P7-09-PARTIAL-001"), supplyResult).failedRules())
+                    .as(supply).contains("correct-concept-not-independently-demonstrated");
         }
     }
 

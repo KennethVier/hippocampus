@@ -40,6 +40,10 @@ final class GoldenAiSemanticEvaluator {
                     + "|wrist extensors (?:remain|are) (?:functional|normal|intact)"
                     + "|normal wrist extension (?:after|following|despite) denervation"
                     + "|denervation (?:preserves|maintains) wrist extension)\\b");
+    private static final Pattern RADIAL_NERVE = Pattern.compile("\\bradial nerve\\b");
+    private static final Pattern REJECTED_RADIAL_NERVE = Pattern.compile(
+            "\\b(?:not|no|never|without)(?: \\w+){0,3} radial nerve\\b"
+                    + "|\\bradial nerve (?:is |was |does |did |can |could )?(?:not|never)\\b");
 
     enum SemanticMatchMode {
         ASSERTION,
@@ -152,6 +156,11 @@ final class GoldenAiSemanticEvaluator {
                 failures, "required-correct-concept",
                 golden.requiredCorrectConceptGroups(), join(actual.correctConcepts()),
                 SemanticMatchMode.ASSERTION);
+        if (golden.caseId().equals("P7-09-PARTIAL-001")
+                && !identifiesRadialNerve(golden.studentResponse())
+                && actual.correctConcepts().stream().anyMatch(GoldenAiSemanticEvaluator::mentionsRadialNerve)) {
+            failures.add("correct-concept-not-independently-demonstrated");
+        }
         if (golden.caseId().equals("P7-09-INCORRECT-001")
                 && golden.allowedEvaluations().equals(List.of(com.hippocampus.ai.domain.Evaluation.PARTIAL))) {
             List<String> paralysis = golden.requiredCorrectConceptGroups().getFirst();
@@ -249,6 +258,9 @@ final class GoldenAiSemanticEvaluator {
             return false;
         }
         boolean identifiesGap = false;
+        // A position question names only the consequence gap; it cannot satisfy a nerve-supply group.
+        boolean positionQuestionIdentifiesGroup = alternatives.stream()
+                .noneMatch(alternative -> alternative.contains("radial nerve"));
         for (String sentence : feedback.split("[.!?;]")) {
             // Correct only the observed joined preposition locally; do not broaden normalization
             // for other fields/tasks. The complete question must link position to lost extension.
@@ -260,7 +272,9 @@ final class GoldenAiSemanticEvaluator {
                 if (!WRIST_POSITION_CONSEQUENCE_QUESTION.matcher(normalized).matches()) {
                     return false;
                 }
-                identifiesGap = true;
+                if (positionQuestionIdentifiesGroup) {
+                    identifiesGap = true;
+                }
             } else if (matchesSemanticGroup(sentence, alternatives, SemanticMatchMode.GAP_MENTION)) {
                 identifiesGap = true;
             }
@@ -270,6 +284,16 @@ final class GoldenAiSemanticEvaluator {
 
     private static boolean matchesFunctionalMechanism(List<String> concepts) {
         return concepts.stream().anyMatch(concept -> WristDropRelations.functionalLoss(concept, false));
+    }
+
+    private static boolean mentionsRadialNerve(String value) {
+        return RADIAL_NERVE.matcher(normalize(value)).find();
+    }
+
+    private static boolean identifiesRadialNerve(String value) {
+        String normalized = normalize(value);
+        return RADIAL_NERVE.matcher(normalized).find()
+                && !REJECTED_RADIAL_NERVE.matcher(normalized).find();
     }
 
     private static boolean matchesMissingDenervation(List<String> missingConcepts, List<String> alternatives) {

@@ -17,6 +17,8 @@ import com.hippocampus.learning.port.GeneratedArtifactRepository;
 import com.hippocampus.learning.port.GeneratedArtifactRepository.GeneratedArtifact;
 import com.hippocampus.learning.port.StudyMissionRepository;
 import com.hippocampus.learning.port.StudyMissionSourcePresentationRepository;
+import com.hippocampus.progress.domain.StudentAttempt;
+import com.hippocampus.progress.port.StudentAttemptRepository;
 import com.hippocampus.shared.application.error.ApplicationNotFoundException;
 import com.hippocampus.shared.domain.error.ErrorCode;
 
@@ -34,19 +36,38 @@ public class GetStudyMissionUseCase {
     private final GeneratedArtifactRepository artifacts;
     private final GeneratedActivityContentDecoder contentDecoder;
     private final StudyMissionSourcePresentationRepository sourcePresentations;
+    private final StudentAttemptRepository attempts;
 
     public GetStudyMissionUseCase(
             CurrentUser currentUser,
             StudyMissionRepository missions,
             GeneratedArtifactRepository artifacts,
             GeneratedActivityContentDecoder contentDecoder,
-            StudyMissionSourcePresentationRepository sourcePresentations) {
+            StudyMissionSourcePresentationRepository sourcePresentations,
+            StudentAttemptRepository attempts) {
         this.currentUser = Objects.requireNonNull(currentUser, "currentUser must not be null");
         this.missions = Objects.requireNonNull(missions, "missions must not be null");
         this.artifacts = Objects.requireNonNull(artifacts, "artifacts must not be null");
         this.contentDecoder = Objects.requireNonNull(contentDecoder, "contentDecoder must not be null");
         this.sourcePresentations = Objects.requireNonNull(
                 sourcePresentations, "sourcePresentations must not be null");
+        this.attempts = Objects.requireNonNull(attempts, "attempts must not be null");
+    }
+
+    public GetStudyMissionUseCase(
+            CurrentUser currentUser, StudyMissionRepository missions,
+            GeneratedArtifactRepository artifacts,
+            GeneratedActivityContentDecoder contentDecoder,
+            StudyMissionSourcePresentationRepository sourcePresentations) {
+        this(currentUser, missions, artifacts, contentDecoder, sourcePresentations,
+                (new StudentAttemptRepository() {
+                    @Override public StudentAttempt append(StudentAttempt attempt) {
+                        throw new UnsupportedOperationException();
+                    }
+                    @Override public List<StudentAttempt> findOwnedByActivity(UUID activityId, UUID ownerId) {
+                        return List.of();
+                    }
+                }));
     }
 
     @Transactional(readOnly = true)
@@ -56,11 +77,26 @@ public class GetStudyMissionUseCase {
         StudyMission mission = missions.findOwnedById(missionId, ownerId)
                 .orElseThrow(GetStudyMissionUseCase::notFound);
         CurrentActivity currentActivity = currentActivity(mission, ownerId);
+        SubmissionReceipt latestSubmission = null;
+        if (mission.currentActivityId() != null) {
+            StudentAttempt latest = attempts.findOwnedByActivity(mission.currentActivityId(), ownerId)
+                    .stream().reduce((left, right) -> right)
+                    .orElse(null);
+            if (latest != null && latest.submissionReceipt() != null) {
+                latestSubmission = SubmissionReceipt.fromJson(latest.submissionReceipt());
+                if (!latestSubmission.attemptId().equals(latest.id())
+                        || !latestSubmission.missionId().equals(mission.id())
+                        || !latestSubmission.activityId().equals(mission.currentActivityId())
+                        || !latestSubmission.outcome().equals(latest.evaluationStatus())) {
+                    throw new IllegalStateException("stored submission receipt does not match attempt");
+                }
+            }
+        }
         return new Result(
                 mission.id(), mission.status().name(),
                 mission.learningState() == null ? null : mission.learningState().name(),
                 currentActivity, mission.availableTimeMinutes(), mission.startedAt(),
-                mission.completedAt(), mission.stoppedAt(), mission.updatedAt());
+                mission.completedAt(), mission.stoppedAt(), mission.updatedAt(), latestSubmission);
     }
 
     private CurrentActivity currentActivity(StudyMission mission, UUID ownerId) {
@@ -161,7 +197,15 @@ public class GetStudyMissionUseCase {
             Instant startedAt,
             Instant completedAt,
             Instant stoppedAt,
-            Instant updatedAt) {}
+            Instant updatedAt,
+            SubmissionReceipt latestSubmission) {
+        public Result(UUID id, String status, String stage, CurrentActivity currentActivity,
+                Integer availableTimeMinutes, Instant startedAt, Instant completedAt,
+                Instant stoppedAt, Instant updatedAt) {
+            this(id, status, stage, currentActivity, availableTimeMinutes,
+                    startedAt, completedAt, stoppedAt, updatedAt, null);
+        }
+    }
 
     public record CurrentActivity(
             UUID id,

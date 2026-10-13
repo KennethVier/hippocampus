@@ -149,6 +149,28 @@ describe('StudyMissionPage', () => {
     expect(screen.getByText('Correct')).toBeInTheDocument()
   })
 
+  it('recovers an ungraded submission on refresh without showing correctness lists', async () => {
+    const ungraded = {
+      ...submission,
+      outcome: 'UNGRADED',
+      attemptId: '11111111-1111-4111-8111-111111111111',
+      limitationCode: 'EVALUATION_UNRESOLVED',
+      correctConcepts: [], missingConcepts: [], misconceptions: [],
+      feedback: 'Your response was saved, but it could not be graded reliably.',
+    }
+    vi.spyOn(api, 'getStudyMission').mockResolvedValue({
+      ...retrievalMission,
+      currentActivity: { ...retrievalMission.currentActivity!, status: 'COMPLETED' },
+      latestSubmission: ungraded,
+    })
+    renderMission()
+    expect(await screen.findByText('Response saved · ungraded')).toBeInTheDocument()
+    expect(screen.getByText(ungraded.feedback)).toBeInTheDocument()
+    expect(screen.queryByText('Correct concepts')).not.toBeInTheDocument()
+    expect(screen.queryByText('Concepts to revisit')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+  })
+
   it('submits a short-answer retrieval response as responseText', async () => {
     const submit = vi.spyOn(api, 'submitActivityResponse').mockImplementation(async (_, activityId) => ({ ...submission, activityId }))
     const shortAnswer = {

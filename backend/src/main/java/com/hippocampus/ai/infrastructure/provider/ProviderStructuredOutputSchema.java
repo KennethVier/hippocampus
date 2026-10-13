@@ -84,6 +84,57 @@ public final class ProviderStructuredOutputSchema {
                     "limitations"));
     private static final String GEMINI_RESPONSE_EVALUATION_ATOMIC_SCHEMA =
             toJson(RESPONSE_EVALUATION_ATOMIC_SCHEMA);
+    private static final Map<String, Object> INTEGER_SCHEMA = Map.of("type", "integer");
+    private static final Map<String, Object> INTEGER_ARRAY_SCHEMA = Map.of(
+            "type", "array", "items", INTEGER_SCHEMA);
+    private static final Map<String, Object> SOURCE_SPAN_SCHEMA = objectSchema(Map.of(
+            "sourceReferenceId", STRING_SCHEMA,
+            "sourceVersion", STRING_SCHEMA,
+            "sourceStart", INTEGER_SCHEMA,
+            "sourceEnd", INTEGER_SCHEMA,
+            "sourceText", STRING_SCHEMA));
+    private static final Map<String, Object> ASSERTION_SCHEMA = objectSchema(Map.of(
+            "id", STRING_SCHEMA,
+            "studentStart", INTEGER_SCHEMA,
+            "studentEnd", INTEGER_SCHEMA,
+            "studentText", STRING_SCHEMA,
+            "proposition", STRING_SCHEMA,
+            "polarity", enumSchema("AFFIRMED", "NEGATED", "UNCERTAIN"),
+            "qualifiers", STRING_ARRAY_SCHEMA,
+            "relatedExpectedConceptIndexes", INTEGER_ARRAY_SCHEMA));
+    private static final Map<String, Object> CANDIDATE_SCHEMA = objectSchema(Map.of(
+            "id", STRING_SCHEMA,
+            "assertionIds", STRING_ARRAY_SCHEMA,
+            "expectedConceptIndex", INTEGER_SCHEMA,
+            "constituentMeaning", STRING_SCHEMA,
+            "relationToExpectedConcept", STRING_SCHEMA,
+            "sourceEvidence", arraySchema(SOURCE_SPAN_SCHEMA)));
+    private static final String GEMINI_DISCOVERY_SCHEMA = toJson(objectSchema(Map.of(
+            "assertions", arraySchema(ASSERTION_SCHEMA),
+            "candidates", arraySchema(CANDIDATE_SCHEMA),
+            "coveredExpectedConceptIndexes", INTEGER_ARRAY_SCHEMA,
+            "complete", Map.of("type", "boolean"),
+            "limitations", STRING_ARRAY_SCHEMA)));
+    private static final String GEMINI_VERIFICATION_SCHEMA = toJson(objectSchema(Map.of(
+            "assertions", arraySchema(objectSchema(Map.of(
+                    "assertionId", STRING_SCHEMA,
+                    "disposition", enumSchema("SUPPORTED", "UNSUPPORTED", "AMBIGUOUS"),
+                    "reason", STRING_SCHEMA,
+                    "fidelity", enumSchema("FAITHFUL", "MISMATCH", "AMBIGUOUS")))),
+            "candidates", arraySchema(objectSchema(Map.of(
+                    "candidateId", STRING_SCHEMA,
+                    "disposition", enumSchema("SUPPORTED", "UNSUPPORTED", "AMBIGUOUS"),
+                    "reason", STRING_SCHEMA))),
+            "expectedConceptCoverage", arraySchema(objectSchema(Map.of(
+                    "expectedConceptIndex", INTEGER_SCHEMA,
+                    "coverage", enumSchema("COMPLETE", "MISSING", "AMBIGUOUS"),
+                    "reason", STRING_SCHEMA))),
+            "misconceptions", arraySchema(objectSchema(Map.of(
+                    "assertionId", STRING_SCHEMA,
+                    "description", STRING_SCHEMA))),
+            "mechanismEvidence", SOURCE_SPAN_SCHEMA,
+            "complete", Map.of("type", "boolean"),
+            "limitations", STRING_ARRAY_SCHEMA)));
 
     private ProviderStructuredOutputSchema() {}
 
@@ -96,11 +147,20 @@ public final class ProviderStructuredOutputSchema {
             return GEMINI_EXPLANATION_SCHEMA;
         }
         if (outputContract == AiOutputContract.RESPONSE_EVALUATION
+                && promptId == PromptId.RESPONSE_EVALUATION_DISCOVERY_V1) {
+            return GEMINI_DISCOVERY_SCHEMA;
+        }
+        if (outputContract == AiOutputContract.RESPONSE_EVALUATION
+                && promptId == PromptId.RESPONSE_EVALUATION_VERIFICATION_V1) {
+            return GEMINI_VERIFICATION_SCHEMA;
+        }
+        if (outputContract == AiOutputContract.RESPONSE_EVALUATION
                 && (promptId == PromptId.RESPONSE_EVALUATION_V4
                         || promptId == PromptId.RESPONSE_EVALUATION_V5
                         || promptId == PromptId.RESPONSE_EVALUATION_V6
                         || promptId == PromptId.RESPONSE_EVALUATION_V7
-                        || promptId == PromptId.RESPONSE_EVALUATION_V8)) {
+                        || promptId == PromptId.RESPONSE_EVALUATION_V8
+                        || promptId == PromptId.RESPONSE_EVALUATION_V9)) {
             return GEMINI_RESPONSE_EVALUATION_ATOMIC_SCHEMA;
         }
         return null;
@@ -120,6 +180,15 @@ public final class ProviderStructuredOutputSchema {
         return Map.of(
                 "type", "string",
                 "enum", List.of(values));
+    }
+
+    private static Map<String, Object> arraySchema(Map<String, Object> item) {
+        return Map.of("type", "array", "items", item);
+    }
+
+    private static Map<String, Object> objectSchema(Map<String, Object> properties) {
+        return Map.of("type", "object", "properties", properties,
+                "required", List.copyOf(properties.keySet()));
     }
 
     private static String toJson(Map<String, Object> schema) {

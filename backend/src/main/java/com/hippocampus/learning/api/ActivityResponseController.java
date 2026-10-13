@@ -29,6 +29,7 @@ public class ActivityResponseController {
             @Valid @RequestBody ActivityResponseRequest request) {
         return ActivitySubmissionResponse.from(submitResponse.execute(
                 new SubmitActivityResponseUseCase.Command(
-                        missionId, activityId, request.responseText(), null, request.selectedOption())));
+                        missionId, activityId, request.responseText(), null,
+                        request.selectedOption(), request.requestId())));
     }
 }

@@ -80,16 +80,16 @@ public class StudyMissionLearningStateAssembler {
                                     activity,
                                     "A mission activity has no valid learning objective.");
                     List<StudentAttempt> activityAttempts = attempts.getOrDefault(activity.id(), List.of());
-                    activityAttempts.stream()
-                            .sorted(Comparator.comparingInt(StudentAttempt::attemptNumber).reversed())
-                            .forEach(attempt -> addHistory(
-                                    recent, evidence, mission, currentObjective, activityObjective,
-                                    activity, outcome(attempt.evaluationStatus())));
                     if (activity.id().equals(current.id()) && pendingOutcome != null) {
                         addHistory(
                                 recent, evidence, mission, currentObjective, activityObjective,
                                 activity, pendingOutcome);
                     }
+                    activityAttempts.stream()
+                            .sorted(Comparator.comparingInt(StudentAttempt::attemptNumber).reversed())
+                            .forEach(attempt -> addHistory(
+                                    recent, evidence, mission, currentObjective, activityObjective,
+                                    activity, outcome(attempt.evaluationStatus())));
                     if (activityAttempts.isEmpty()
                             && !(activity.id().equals(current.id()) && pendingOutcome != null)
                             && isDurablePresentationCompletion(activity)
@@ -142,7 +142,8 @@ public class StudyMissionLearningStateAssembler {
             LearningActivity activity,
             AttemptOutcome outcome) {
         EvidenceDimension dimension = dimensionFor(activity.representedActionType());
-        if (activityObjective.id().equals(currentObjective.id()) && dimension != null) {
+        if (outcome != AttemptOutcome.UNGRADED
+                && activityObjective.id().equals(currentObjective.id()) && dimension != null) {
             EvidenceStrength strength = strengthFor(outcome);
             evidence.merge(dimension, strength, (left, right) -> left.compareTo(right) >= 0 ? left : right);
         }
@@ -154,11 +155,7 @@ public class StudyMissionLearningStateAssembler {
     }
 
     private static AttemptOutcome outcome(String status) {
-        try {
-            return AttemptOutcome.valueOf(status);
-        } catch (IllegalArgumentException invalidStatus) {
-            return AttemptOutcome.INCORRECT;
-        }
+        return AttemptOutcome.valueOf(Objects.requireNonNull(status, "evaluation status must not be null"));
     }
 
     private static EvidenceStrength strengthFor(AttemptOutcome outcome) {
@@ -166,6 +163,7 @@ public class StudyMissionLearningStateAssembler {
             case CORRECT -> EvidenceStrength.DEVELOPING;
             case PARTIAL -> EvidenceStrength.WEAK;
             case INCORRECT -> EvidenceStrength.INSUFFICIENT;
+            case UNGRADED -> throw new IllegalArgumentException("UNGRADED has no evidence strength");
         };
     }
 

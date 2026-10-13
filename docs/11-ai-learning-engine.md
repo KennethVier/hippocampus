@@ -1,12 +1,12 @@
 ---
 Document ID: 11
 Title: AI Learning Engine
-Version: 1.0.4
+Version: 1.0.5
 Status: Final
 Owner: Project Hippocampus Team
 Authors: Project Hippocampus Team
 Created: 2026-08-23
-Last Updated: 2026-10-03
+Last Updated: 2026-10-11
 Purpose: Define how Hippocampus decides the next educational action using deterministic learning rules, learner context, Study Mission state, learning evidence, source readiness, time constraints, and bounded AI assistance.
 Scope: Learning-state evaluation, mission-state transitions, next-action policy, rule precedence, AI task invocation, retries, adaptation, evidence updates, anti-repetition behavior, time-aware decisions, review decisions, failure paths, and explainability.
 Audience: Product, AI, backend, architecture, QA, UX, and medical-education contributors.
@@ -1124,6 +1124,29 @@ Is prerequisite support more appropriate?
 
 Only then is the next activity created.
 
+## ADR-0012/0013 response disposition
+
+For a validated but unresolved open-ended evaluation, persist the student's
+actual submission as `UNGRADED`, a non-scoring state distinct from `INCORRECT`,
+`PARTIAL`, and `CORRECT`. No failure evidence, correctness evidence, or mastery
+change follows from it. Learning-state reconstruction skips `UNGRADED` for
+evidence strength and graded performance; unknown or corrupt stored outcomes
+must be surfaced as data errors, never silently converted to `INCORRECT`.
+The Learning Engine selects retry as a new activity, bounded support,
+continuation, or pause under existing safety, source, time, stop, and
+completion precedence. Evaluation infrastructure failures before submission
+remain retryable without a fabricated attempt.
+
+For every safely graded, nonterminal `CORRECT`, `PARTIAL`, or `INCORRECT`
+response, the Engine establishes an appropriate follow-up question intent
+unless a higher-priority safety, stop, source, or terminal policy prevents it.
+Prerequisite support or time constraints may defer intent while the mission is
+resumable. Feedback prose that contains a question is not an answerable
+activity. Only an authorized, materialized Learning Activity with a response
+contract can accept an answer. The Engine owns durable intent, revalidation on
+resume, satisfaction/cancellation, and anti-repetition; AI does not own this
+state. P7-15 implements this policy separately from P7-09 grading remediation.
+
 ---
 
 # 26. Evidence Update Policy
@@ -1780,6 +1803,7 @@ The prompt layer must implement decisions from the Learning Engine rather than i
 | 1.0.2 | 2026-09-30 | Project Hippocampus Team | Added explicit deterministic retrieval activity type selection aligned with ADR-0007 |
 | 1.0.3 | 2026-10-01 | Project Hippocampus Team | Added explicit deterministic application activity level selection and output-difficulty mapping aligned with ADR-0009 |
 | 1.0.4 | 2026-10-03 | Project Hippocampus Team | Integrated presentation completion and Understanding Check rules into retrieval progression without shifting established top-level numbering, aligned with ADR-0010 |
+| 1.0.5 | 2026-10-11 | Project Hippocampus Team | Aligned ungraded response handling with ADR-0012 and mandatory safe follow-up intent with ADR-0013; implementation remains in separate Phase 7 tasks |
 
 ---
 

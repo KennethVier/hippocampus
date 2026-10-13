@@ -15,6 +15,14 @@ spring:
 
 hippocampus:
   ai:
+    response-evaluation:
+      max-response-characters: ${HIPPOCAMPUS_RESPONSE_EVALUATION_MAX_RESPONSE_CHARACTERS:8000}
+      max-sources: ${HIPPOCAMPUS_RESPONSE_EVALUATION_MAX_SOURCES:8}
+      max-source-characters: ${HIPPOCAMPUS_RESPONSE_EVALUATION_MAX_SOURCE_CHARACTERS:32000}
+      max-assertions: ${HIPPOCAMPUS_RESPONSE_EVALUATION_MAX_ASSERTIONS:32}
+      max-candidates: ${HIPPOCAMPUS_RESPONSE_EVALUATION_MAX_CANDIDATES:64}
+      max-source-spans: ${HIPPOCAMPUS_RESPONSE_EVALUATION_MAX_SOURCE_SPANS:128}
+      max-end-to-end-millis: ${HIPPOCAMPUS_RESPONSE_EVALUATION_MAX_END_TO_END_MILLIS:60000}
     request-manager:
       maximum-outstanding-requests-per-user: ${HIPPOCAMPUS_AI_MAXIMUM_OUTSTANDING_REQUESTS_PER_USER:4}
       gemini:

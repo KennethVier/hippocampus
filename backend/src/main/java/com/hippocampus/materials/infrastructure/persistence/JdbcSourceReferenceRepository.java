@@ -86,6 +86,33 @@ public final class JdbcSourceReferenceRepository implements SourceReferenceRepos
                 .query(SEED_MAPPER).optional();
     }
 
+    @Override
+    public Optional<SourceReferenceSeed> findOwnedFrozenChunk(
+            UUID userId, ChunkSourceTarget target) {
+        Objects.requireNonNull(userId, "userId must not be null");
+        Objects.requireNonNull(target, "target must not be null");
+        return jdbc.sql("""
+                SELECT m.id AS material_id, mv.id AS material_version_id,
+                       c.document_node_id, c.id AS chunk_id, NULL::uuid AS visual_asset_id,
+                       CASE WHEN c.page_start IS NOT NULL AND c.page_start = c.page_end
+                            THEN c.page_start END AS page_number,
+                       m.title AS material_title, dn.title AS document_node_title
+                FROM materials m
+                JOIN material_versions mv ON mv.material_id = m.id
+                JOIN chunks c ON c.material_version_id = mv.id
+                LEFT JOIN document_nodes dn
+                  ON dn.id = c.document_node_id AND dn.material_version_id = mv.id
+                WHERE m.id = :materialId AND mv.id = :versionId AND c.id = :chunkId
+                  AND m.user_id = :userId AND m.status <> 'DELETED'
+                  AND c.is_active = true AND btrim(m.title) <> ''
+                """)
+                .param("materialId", target.materialId())
+                .param("versionId", target.materialVersionId())
+                .param("chunkId", target.chunkId())
+                .param("userId", userId)
+                .query(SEED_MAPPER).optional();
+    }
+
     private Optional<SourceReferenceSeed> findVisual(UUID userId, VisualSourceTarget target) {
         return jdbc.sql("""
                 SELECT m.id AS material_id, mv.id AS material_version_id,

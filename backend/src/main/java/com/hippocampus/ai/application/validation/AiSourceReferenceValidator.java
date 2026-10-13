@@ -13,12 +13,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.hippocampus.ai.application.prompt.PromptContext;
 import com.hippocampus.ai.domain.AiTaskRequest;
+import com.hippocampus.ai.domain.AiTaskType;
 import com.hippocampus.ai.domain.ConceptConnectionResult;
 import com.hippocampus.ai.domain.ConceptConnectionV2Result;
 import com.hippocampus.ai.domain.ContextualApplicationResult;
 import com.hippocampus.ai.domain.ExplanationResult;
 import com.hippocampus.ai.domain.QuestionGenerationResult;
 import com.hippocampus.ai.domain.ResponseEvaluationResult;
+import com.hippocampus.ai.domain.ResponseAttributionDiscovery;
+import com.hippocampus.ai.domain.ResponseAttributionVerification;
 import com.hippocampus.ai.domain.ValidatedAiResult;
 import com.hippocampus.materials.domain.ChunkSourceTarget;
 import com.hippocampus.materials.port.SourceReferenceRepository;
@@ -77,7 +80,8 @@ public class AiSourceReferenceValidator {
                 fail(AiGroundingValidationException.Reason.EVIDENCE_PROVENANCE_MISMATCH);
             }
 
-            SourceReferenceSeed current = resolveCurrent(authenticatedUserId, prompted);
+            SourceReferenceSeed current = resolveCurrent(authenticatedUserId, prompted,
+                    request.taskType() == AiTaskType.RESPONSE_EVALUATION);
             if (!matchesCurrent(prompted, current)) {
                 fail(AiGroundingValidationException.Reason.CURRENT_PROVENANCE_MISMATCH);
             }
@@ -90,6 +94,8 @@ public class AiSourceReferenceValidator {
             case ExplanationResult value -> value.sourceReferences();
             case QuestionGenerationResult value -> value.sourceReferences();
             case ResponseEvaluationResult value -> value.sourceReferences();
+            case ResponseAttributionDiscovery ignored -> List.of();
+            case ResponseAttributionVerification ignored -> List.of();
             case ConceptConnectionResult value -> value.sourceReferences();
             case ConceptConnectionV2Result value -> value.sourceReferences();
             case ContextualApplicationResult value -> value.sourceReferences();
@@ -122,12 +128,14 @@ public class AiSourceReferenceValidator {
         return result;
     }
 
-    private SourceReferenceSeed resolveCurrent(UUID userId, PromptContext.IncludedSource source) {
+    private SourceReferenceSeed resolveCurrent(
+            UUID userId, PromptContext.IncludedSource source, boolean frozenMissionVersion) {
         try {
-            return sourceReferences.findAuthorizedTarget(
-                            userId,
-                            new ChunkSourceTarget(
-                                    source.materialId(), source.materialVersionId(), source.chunkId()))
+            ChunkSourceTarget target = new ChunkSourceTarget(
+                    source.materialId(), source.materialVersionId(), source.chunkId());
+            return (frozenMissionVersion
+                    ? sourceReferences.findOwnedFrozenChunk(userId, target)
+                    : sourceReferences.findAuthorizedTarget(userId, target))
                     .orElseThrow(() -> new AiGroundingValidationException(
                             AiGroundingValidationException.Reason.AUTHORIZATION_NOT_CONFIRMED));
         } catch (AiGroundingValidationException exception) {

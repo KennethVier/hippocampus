@@ -24,18 +24,21 @@ public class JdbcStudentAttemptRepository implements StudentAttemptRepository {
             INSERT INTO student_attempts (
                 id, user_id, learning_activity_id, attempt_number, response_text,
                 response_payload, submitted_at, evaluation_status,
-                evaluation_artifact_id, deterministic_result, created_at
+                evaluation_artifact_id, deterministic_result, created_at,
+                request_id, limitation_code, submission_receipt
             )
             SELECT :id, :userId, activity.id, :attemptNumber, :responseText,
                    CAST(:responsePayload AS JSONB), :submittedAt, :evaluationStatus,
-                   :evaluationArtifactId, :deterministicResult, :createdAt
+                   :evaluationArtifactId, :deterministicResult, :createdAt,
+                   :requestId, :limitationCode, CAST(:submissionReceipt AS JSONB)
             FROM learning_activities activity
             JOIN study_missions mission ON mission.id = activity.study_mission_id
             WHERE activity.id = :learningActivityId
               AND mission.user_id = :userId
             RETURNING id, user_id, learning_activity_id, attempt_number, response_text,
                       response_payload::text AS response_payload, submitted_at,
-                      evaluation_status, evaluation_artifact_id, deterministic_result, created_at
+                      evaluation_status, evaluation_artifact_id, deterministic_result, created_at,
+                      request_id, limitation_code, submission_receipt::text AS submission_receipt
             """;
 
     private static final String FIND_OWNED_BY_ACTIVITY = """
@@ -44,7 +47,8 @@ public class JdbcStudentAttemptRepository implements StudentAttemptRepository {
                    attempt.response_payload::text AS response_payload,
                    attempt.submitted_at, attempt.evaluation_status,
                    attempt.evaluation_artifact_id, attempt.deterministic_result,
-                   attempt.created_at
+                   attempt.created_at, attempt.request_id, attempt.limitation_code,
+                   attempt.submission_receipt::text AS submission_receipt
             FROM student_attempts attempt
             JOIN learning_activities activity
               ON activity.id = attempt.learning_activity_id
@@ -76,6 +80,9 @@ public class JdbcStudentAttemptRepository implements StudentAttemptRepository {
                 .param("evaluationStatus", attempt.evaluationStatus())
                 .param("evaluationArtifactId", attempt.evaluationArtifactId(), Types.OTHER)
                 .param("deterministicResult", attempt.deterministicResult(), Types.VARCHAR)
+                .param("requestId", attempt.requestId(), Types.OTHER)
+                .param("limitationCode", attempt.limitationCode(), Types.VARCHAR)
+                .param("submissionReceipt", attempt.submissionReceipt(), Types.VARCHAR)
                 .param("createdAt", attempt.createdAt().atOffset(ZoneOffset.UTC),
                         Types.TIMESTAMP_WITH_TIMEZONE)
                 .query(JdbcStudentAttemptRepository::mapAttempt)
@@ -107,6 +114,9 @@ public class JdbcStudentAttemptRepository implements StudentAttemptRepository {
                 row.getString("evaluation_status"),
                 row.getObject("evaluation_artifact_id", UUID.class),
                 row.getString("deterministic_result"),
-                row.getObject("created_at", OffsetDateTime.class).toInstant());
+                row.getObject("created_at", OffsetDateTime.class).toInstant(),
+                row.getObject("request_id", UUID.class),
+                row.getString("limitation_code"),
+                row.getString("submission_receipt"));
     }
 }

@@ -10,10 +10,20 @@ public interface ResponseEvaluationPort {
             String question,
             List<String> expectedConcepts,
             String expectedAnswer,
-            String studentResponse) {
+            String studentResponse,
+            AuthorizedResponseEvidence evidence) {
 
         public Request {
             expectedConcepts = List.copyOf(expectedConcepts);
+            java.util.Objects.requireNonNull(evidence, "evidence must not be null");
+        }
+
+        public Request(String question, List<String> expectedConcepts,
+                String expectedAnswer, String studentResponse) {
+            this(question, expectedConcepts, expectedAnswer, studentResponse,
+                    new AuthorizedResponseEvidence(
+                            com.hippocampus.learning.domain.StudyMissionGroundingMode.GENERAL_KNOWLEDGE,
+                            List.of()));
         }
     }
 

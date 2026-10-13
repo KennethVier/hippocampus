@@ -15,7 +15,10 @@ public record StudentAttempt(
         String evaluationStatus,
         UUID evaluationArtifactId,
         String deterministicResult,
-        Instant createdAt) {
+        Instant createdAt,
+        UUID requestId,
+        String limitationCode,
+        String submissionReceipt) {
 
     public StudentAttempt {
         Objects.requireNonNull(id, "id must not be null");
@@ -30,5 +33,22 @@ public record StudentAttempt(
             throw new IllegalArgumentException("evaluationStatus must not be blank");
         }
         Objects.requireNonNull(createdAt, "createdAt must not be null");
+        if (limitationCode != null && limitationCode.isBlank()) {
+            throw new IllegalArgumentException("limitationCode must not be blank");
+        }
+        if ("UNGRADED".equals(evaluationStatus)
+                && (deterministicResult != null || limitationCode == null)) {
+            throw new IllegalArgumentException("UNGRADED requires a limitation and no deterministic result");
+        }
+    }
+
+    public StudentAttempt(
+            UUID id, UUID userId, UUID learningActivityId, int attemptNumber,
+            String responseText, String responsePayload, Instant submittedAt,
+            String evaluationStatus, UUID evaluationArtifactId,
+            String deterministicResult, Instant createdAt) {
+        this(id, userId, learningActivityId, attemptNumber, responseText, responsePayload,
+                submittedAt, evaluationStatus, evaluationArtifactId, deterministicResult,
+                createdAt, null, null, null);
     }
 }

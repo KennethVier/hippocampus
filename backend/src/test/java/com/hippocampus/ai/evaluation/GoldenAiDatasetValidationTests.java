@@ -39,6 +39,39 @@ class GoldenAiDatasetValidationTests {
     }
 
     @Test
+    void v7ChangesOnlyCaseThreeAndInheritsCaseFiveWithoutChangingHistoricalVersions() {
+        var v6 = loader.loadAll("v6");
+        var v7 = loader.loadAll("v7");
+        var before = response(v6, "P7-09-PARTIAL-001");
+        var revised = response(v7, "P7-09-PARTIAL-001");
+        assertThat(v7.version()).isEqualTo("v7");
+        assertThat(loader.loadAll().version()).isEqualTo("v5");
+        assertThat(revised.question()).isEqualTo(before.question());
+        assertThat(revised.studentResponse()).isEqualTo(before.studentResponse());
+        assertThat(revised.sourceEvidence()).isEqualTo(before.sourceEvidence());
+        assertThat(revised.allowedEvaluations()).containsExactly(com.hippocampus.ai.domain.Evaluation.PARTIAL);
+        assertThat(revised.requiredCorrectConceptGroups()).hasSize(1);
+        assertThat(revised.requiredCorrectConceptGroups().getFirst())
+                .contains("wrist-extensor denervation")
+                .noneMatch(term -> term.contains("radial nerve"));
+        assertThat(revised.requiredMissingConceptGroups()).hasSize(2);
+        assertThat(revised.requiredMissingConceptGroups().getFirst()).contains("radial nerve supplies wrist extensors");
+        assertThat(revised.requiredMissingConceptGroups().get(1))
+                .contains("loss of wrist extension produces wrist drop");
+        assertThat(revised.requiredFeedbackConceptGroups()).hasSize(2);
+        assertThat(revised.requireNoMisconceptions()).isTrue();
+        assertThat(response(v7, "P7-09-INCORRECT-001"))
+                .isEqualTo(response(v6, "P7-09-INCORRECT-001"));
+        assertThat(v7.explanations()).isEqualTo(v6.explanations());
+        assertThat(v7.questions()).isEqualTo(v6.questions());
+        assertThat(v7.responseEvaluations().stream()
+                .filter(value -> !value.caseId().equals(revised.caseId())).toList())
+                .isEqualTo(v6.responseEvaluations().stream()
+                        .filter(value -> !value.caseId().equals(revised.caseId())).toList());
+        assertThat(response(loader.loadAll("v6"), before.caseId())).isEqualTo(before);
+    }
+
+    @Test
     void loadsVersionedDatasetsWithUniqueIdsAndRequiredTaskCoverage() {
         GoldenAiDataset.All dataset = loader.loadAll();
         List<String> caseIds = java.util.stream.Stream.of(
@@ -269,7 +302,7 @@ class GoldenAiDatasetValidationTests {
 
     @Test
     void rejectsUnknownVersionsAndInvalidHeaders() throws IOException {
-        for (String version : List.of("v0", "v7", "", "V5")) {
+        for (String version : List.of("v0", "v8", "", "V5")) {
             assertThatThrownBy(() -> loader.loadAll(version))
                     .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("unsupported");
         }

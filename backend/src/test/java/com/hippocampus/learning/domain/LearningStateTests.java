@@ -53,7 +53,8 @@ class LearningStateTests {
         assertThat(EnumSet.allOf(AttemptOutcome.class)).containsExactly(
                 AttemptOutcome.CORRECT,
                 AttemptOutcome.PARTIAL,
-                AttemptOutcome.INCORRECT);
+                AttemptOutcome.INCORRECT,
+                AttemptOutcome.UNGRADED);
         assertThat(EnumSet.allOf(LearningActivityIntent.class)).containsExactly(
                 LearningActivityIntent.STANDARD,
                 LearningActivityIntent.CORRECTIVE_RETRY,

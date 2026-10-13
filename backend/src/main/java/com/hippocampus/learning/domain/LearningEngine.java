@@ -7,6 +7,7 @@ import static com.hippocampus.learning.domain.LearningRationaleCodes.MISSION_TER
 import static com.hippocampus.learning.domain.LearningRationaleCodes.OBJECTIVE_COMPLETE;
 import static com.hippocampus.learning.domain.LearningRationaleCodes.PREREQUISITE_SUPPORT;
 import static com.hippocampus.learning.domain.LearningRationaleCodes.REFLECTION_DUE;
+import static com.hippocampus.learning.domain.LearningRationaleCodes.UNGRADED_RETRY;
 
 import com.hippocampus.learning.domain.policy.AiRagFailurePolicy;
 import com.hippocampus.learning.domain.policy.AntiRepetitionPolicy;
@@ -48,7 +49,10 @@ public final class LearningEngine {
             return lifecycleAction;
         }
 
-        NextLearningAction candidate = progressionAction(state);
+        NextLearningAction candidate = ungradedRetry(state);
+        if (candidate == null) {
+            candidate = progressionAction(state);
+        }
         if (candidate.actionType() == LearningActionType.APPLY
                 || state.currentStage() != LearningStage.APPLICATION) {
             candidate = scaffoldingPolicy.select(state).orElse(candidate);
@@ -56,6 +60,17 @@ public final class LearningEngine {
         NextLearningAction sourceSafe = sourceCapabilityPolicy.adjust(state, candidate);
         NextLearningAction timeSafe = timeAwareMissionPolicy.adjust(state, sourceSafe);
         return antiRepetitionPolicy.adjust(state, timeSafe);
+    }
+
+    private static NextLearningAction ungradedRetry(LearningState state) {
+        RecentLearningActivity latest = state.recentActivityHistory().stream()
+                .filter(activity -> activity.conceptKey().equals(state.conceptKey()))
+                .findFirst().orElse(null);
+        if (latest == null || latest.attemptOutcome() != AttemptOutcome.UNGRADED) {
+            return null;
+        }
+        return action(state, LearningActionType.RETRY, latest.difficulty(),
+                UNGRADED_RETRY, true);
     }
 
     public NextLearningAction handleFailure(

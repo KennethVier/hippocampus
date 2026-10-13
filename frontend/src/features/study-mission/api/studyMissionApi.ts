@@ -11,6 +11,7 @@ import {
 export interface ActivityResponseInput {
   responseText?: string
   selectedOption?: string
+  requestId?: string
 }
 
 export async function getStudyMission(missionId: string, signal?: AbortSignal): Promise<StudyMission> {
@@ -37,11 +38,33 @@ export async function submitActivityResponse(
   activityId: string,
   input: ActivityResponseInput,
 ): Promise<ActivitySubmission> {
-  const response = await apiClient.requestJson<unknown>(
-    `/api/study-missions/${encodeURIComponent(missionId)}/activities/${encodeURIComponent(activityId)}/responses`,
-    { method: 'POST', body: input },
-  )
-  return parseResponse(activitySubmissionSchema, response)
+  const requestId = input.requestId ?? submissionRequestId(missionId, activityId)
+  try {
+    const response = await apiClient.requestJson<unknown>(
+      `/api/study-missions/${encodeURIComponent(missionId)}/activities/${encodeURIComponent(activityId)}/responses`,
+      { method: 'POST', body: { ...input, requestId } },
+    )
+    return parseResponse(activitySubmissionSchema, response)
+  } catch (error) {
+    if (input.requestId === undefined && error instanceof ApiError && error.kind === 'http' && error.status === 400) {
+      const key = submissionRequestKey(missionId, activityId)
+      if (sessionStorage.getItem(key) === requestId) sessionStorage.removeItem(key)
+    }
+    throw error
+  }
+}
+
+function submissionRequestId(missionId: string, activityId: string): string {
+  const key = submissionRequestKey(missionId, activityId)
+  const existing = sessionStorage.getItem(key)
+  if (existing) return existing
+  const requestId = crypto.randomUUID()
+  sessionStorage.setItem(key, requestId)
+  return requestId
+}
+
+function submissionRequestKey(missionId: string, activityId: string): string {
+  return `hippocampus:submission:${missionId}:${activityId}`
 }
 
 export async function continueStudyMission(missionId: string, activityId: string): Promise<void> {

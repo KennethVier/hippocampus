@@ -9,6 +9,11 @@ import com.hippocampus.materials.domain.SourceReferenceTarget;
 public interface SourceReferenceRepository {
     Optional<SourceReferenceSeed> findAuthorizedTarget(UUID userId, SourceReferenceTarget target);
 
+    default Optional<SourceReferenceSeed> findOwnedFrozenChunk(
+            UUID userId, com.hippocampus.materials.domain.ChunkSourceTarget target) {
+        return findAuthorizedTarget(userId, target);
+    }
+
     SourceReference upsert(SourceReferenceSeed seed, String displayLabel);
 
     Optional<SourceReference> resolveAuthorized(UUID userId, UUID sourceReferenceId);

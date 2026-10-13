@@ -15,14 +15,25 @@ public record StudyMissionResponse(
         Instant startedAt,
         Instant completedAt,
         Instant stoppedAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        ActivitySubmissionResponse latestSubmission) {
+
+    public StudyMissionResponse(
+            UUID id, String status, String stage, CurrentActivityResponse currentActivity,
+            Integer availableTimeMinutes, Instant startedAt, Instant completedAt,
+            Instant stoppedAt, Instant updatedAt) {
+        this(id, status, stage, currentActivity, availableTimeMinutes,
+                startedAt, completedAt, stoppedAt, updatedAt, null);
+    }
 
     static StudyMissionResponse from(GetStudyMissionUseCase.Result result) {
         return new StudyMissionResponse(
                 result.id(), result.status(), result.stage(),
                 result.currentActivity() == null ? null : CurrentActivityResponse.from(result.currentActivity()),
                 result.availableTimeMinutes(), result.startedAt(), result.completedAt(),
-                result.stoppedAt(), result.updatedAt());
+                result.stoppedAt(), result.updatedAt(),
+                result.latestSubmission() == null ? null
+                        : ActivitySubmissionResponse.from(result.latestSubmission()));
     }
 
     public record CurrentActivityResponse(

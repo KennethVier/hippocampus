@@ -4,7 +4,7 @@ Audience: Architecture, backend, frontend, AI/RAG, DevOps, security, QA,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 26
-Last Updated: 2026-08-28
+Last Updated: 2026-10-11
 Owner: Project Hippocampus Team
 Prerequisites:
 - README
@@ -25,7 +25,7 @@ Scope: Documentation freeze, implementation authority, phase sequencing,
   governance.
 Status: Final
 Title: Development Roadmap & Implementation Phases
-Version: 1.0.2
+Version: 1.0.3
 ---
 
 # 26 - Development Roadmap & Implementation Phases
@@ -865,6 +865,15 @@ Next Learning Action
 ```
 
 The exact path may adapt according to evidence and policy.
+
+For M3, every safely graded nonterminal response establishes an appropriate
+Learning Engine follow-up question intent unless higher-priority safety,
+stop, source, or terminal policy prevents it. An answerable follow-up uses the
+normal authorized Learning Activity lifecycle; prerequisite support or time
+may defer intent. Phase 7 P7-15 implements this separately from P7-09
+response grading and is required before the P7-14 First Hippocampus gate.
+The Phase 7 tracker therefore contains 15 implementation items, including
+its gate. This does not start Phase 8 evidence/review implementation.
 
 ## Product Boundary
 
@@ -1861,6 +1870,11 @@ Hippocampus v1.0 Source of Truth
                                       Hippocampus Team  ADR-0002 credential
                                                         decision and P1-02
                                                         sequencing boundary
+
+  1.0.3             2026-10-11        Project           Aligned ADR-0013
+                                      Hippocampus Team  follow-up intent as
+                                                        P7-15 before the M3
+                                                        Phase 7 gate
 
   ------------------------------------------------------------------------
 

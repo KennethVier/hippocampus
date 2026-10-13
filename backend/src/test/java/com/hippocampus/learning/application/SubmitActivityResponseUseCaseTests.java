@@ -8,10 +8,16 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,6 +37,7 @@ import com.hippocampus.learning.domain.StudyMission;
 import com.hippocampus.learning.domain.StudyMissionGroundingMode;
 import com.hippocampus.learning.domain.StudyMissionStatus;
 import com.hippocampus.learning.port.ActivityResponseContractRepository;
+import com.hippocampus.learning.port.AuthorizedResponseEvidence;
 import com.hippocampus.learning.port.ResponseEvaluationPort;
 import com.hippocampus.learning.port.StudyMissionRepository;
 import com.hippocampus.progress.domain.StudentAttempt;
@@ -61,6 +68,8 @@ class SubmitActivityResponseUseCaseTests {
         var persistence = new PersistActivityResponse(missions, attempts);
         useCase = new SubmitActivityResponseUseCase(
                 () -> new AuthenticatedUser(USER_ID), missions, attempts, contracts, evaluation,
+                (userId, missionId, activityId, mode, materials, references) ->
+                        new AuthorizedResponseEvidence(mode, List.of()),
                 engine(), new StudyMissionLearningStateAssembler(), persistence,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
@@ -78,6 +87,18 @@ class SubmitActivityResponseUseCaseTests {
         assertThat(result.attempt().deterministicResult()).isEqualTo("CORRECT");
         assertThat(result.activity().status()).isEqualTo("COMPLETED");
         assertThat(evaluation.calls).isZero();
+    }
+
+    @Test
+    void legacyDeterministicResponseWithoutRequestIdUsesStaleConflictOnReplay() {
+        contracts.contract = deterministicContract();
+        var command = new SubmitActivityResponseUseCase.Command(
+                MISSION_ID, ACTIVITY_ID, null, null, "B");
+
+        assertThat(useCase.execute(command).outcome()).isEqualTo("CORRECT");
+        assertReason(() -> useCase.execute(command),
+                ActivityResponseException.Reason.ACTIVITY_ALREADY_COMPLETED);
+        assertThat(attempts.appended).hasSize(1);
     }
 
     @Test
@@ -102,6 +123,50 @@ class SubmitActivityResponseUseCaseTests {
         assertThat(result.attempt().evaluationStatus()).isEqualTo("PARTIAL");
         assertThat(result.attempt().deterministicResult()).isNull();
         assertThat(evaluation.calls).isOne();
+    }
+
+    @Test
+    void unresolvedEvaluationSavesUngradedAttemptAndReplaysExactReceipt() {
+        contracts.contract = aiContract();
+        evaluation.result = new ResponseEvaluationPort.Result(
+                ResponseEvaluationPort.Outcome.UNCERTAIN, List.of(), List.of(), List.of(),
+                "Unable to grade", ResponseEvaluationPort.Certainty.LIMITED,
+                ResponseEvaluationPort.RecommendedAction.RETRY, true);
+        UUID requestId = UUID.randomUUID();
+        var command = new SubmitActivityResponseUseCase.Command(
+                MISSION_ID, ACTIVITY_ID, "My response", null, null, requestId);
+
+        var original = useCase.execute(command);
+        assertThat(original.outcome()).isEqualTo("UNGRADED");
+        assertThat(original.correctConcepts()).isEmpty();
+        assertThat(original.missingConcepts()).isEmpty();
+        assertThat(original.misconceptions()).isEmpty();
+        assertThat(original.limitationCode()).isEqualTo("EVALUATION_UNRESOLVED");
+        assertThat(original.attempt().deterministicResult()).isNull();
+        assertThat(original.attempt().submissionReceipt()).isNotBlank();
+        assertThat(attempts.appended).hasSize(1);
+
+        var replay = useCase.execute(command);
+        assertThat(replay.attemptId()).isEqualTo(original.attemptId());
+        assertThat(replay.receipt()).isEqualTo(original.receipt());
+        assertThat(attempts.appended).hasSize(1);
+        assertThat(evaluation.calls).isOne();
+
+        assertReason(() -> useCase.execute(new SubmitActivityResponseUseCase.Command(
+                MISSION_ID, ACTIVITY_ID, "Changed response", null, null, requestId)),
+                ActivityResponseException.Reason.STALE_SUBMISSION);
+        assertThat(attempts.appended).hasSize(1);
+    }
+
+    @Test
+    void writtenResponseWithoutRequestIdIsRejectedBeforeEvaluation() {
+        contracts.contract = aiContract();
+
+        assertReason(() -> useCase.execute(new SubmitActivityResponseUseCase.Command(
+                MISSION_ID, ACTIVITY_ID, "My response", null, null)),
+                ActivityResponseException.Reason.INVALID_RESPONSE);
+        assertThat(evaluation.calls).isZero();
+        assertThat(attempts.appended).isEmpty();
     }
 
     @Test
@@ -226,9 +291,182 @@ class SubmitActivityResponseUseCaseTests {
         assertThat(attempts.appended).isEmpty();
     }
 
+    @Test
+    void concurrentSameAndDifferentRequestIdsUseOneEvaluationAndPreserveReplay() throws Exception {
+        contracts.contract = aiContract();
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var calls = new AtomicInteger();
+        ResponseEvaluationPort blockingEvaluation = request -> {
+            calls.incrementAndGet();
+            entered.countDown();
+            try {
+                if (!release.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("test timeout");
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(interrupted);
+            }
+            return aiResult(ResponseEvaluationPort.Outcome.UNCERTAIN);
+        };
+        var guarded = useCase(blockingEvaluation);
+        UUID requestId = UUID.randomUUID();
+        var original = new SubmitActivityResponseUseCase.Command(
+                MISSION_ID, ACTIVITY_ID, "My response", null, null, requestId);
+        var distinct = new SubmitActivityResponseUseCase.Command(
+                MISSION_ID, ACTIVITY_ID, "Different", null, null, UUID.randomUUID());
+        var first = CompletableFuture.supplyAsync(() -> guarded.execute(original));
+        try {
+            assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+            assertReason(() -> guarded.execute(original), ActivityResponseException.Reason.STALE_SUBMISSION);
+            assertReason(() -> guarded.execute(distinct), ActivityResponseException.Reason.STALE_SUBMISSION);
+            assertThat(calls).hasValue(1);
+            assertThat(attempts.appended).isEmpty();
+        } finally {
+            release.countDown();
+        }
+        var saved = first.get(5, TimeUnit.SECONDS);
+        assertThat(saved.outcome()).isEqualTo("UNGRADED");
+        assertThat(guarded.execute(original).attemptId()).isEqualTo(saved.attemptId());
+        assertReason(() -> guarded.execute(distinct), ActivityResponseException.Reason.ACTIVITY_ALREADY_COMPLETED);
+        assertThat(calls).hasValue(1);
+        assertThat(attempts.appended).hasSize(1);
+    }
+
+    @Test
+    void failedEvaluationReleasesAdmissionForRetry() throws Exception {
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var calls = new AtomicInteger();
+        ResponseEvaluationPort failingEvaluation = request -> {
+            if (calls.incrementAndGet() == 1) {
+                entered.countDown();
+                try {
+                    if (!release.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("test timeout");
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(interrupted);
+                }
+                throw new IllegalStateException("provider timeout");
+            }
+            return aiResult(ResponseEvaluationPort.Outcome.UNCERTAIN);
+        };
+        var guarded = useCase(failingEvaluation);
+        var command = new SubmitActivityResponseUseCase.Command(
+                MISSION_ID, ACTIVITY_ID, "My response", null, null, UUID.randomUUID());
+        var first = CompletableFuture.runAsync(() -> assertReason(
+                () -> guarded.execute(command), ActivityResponseException.Reason.EXTERNAL_EVALUATION_FAILED));
+        try {
+            assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+            assertReason(() -> guarded.execute(command), ActivityResponseException.Reason.STALE_SUBMISSION);
+        } finally {
+            release.countDown();
+        }
+        first.get(5, TimeUnit.SECONDS);
+        assertThat(guarded.execute(command).outcome()).isEqualTo("UNGRADED");
+        assertThat(calls).hasValue(2);
+        assertThat(attempts.appended).hasSize(1);
+    }
+
+    @Test
+    void anotherOwnerCanEvaluateWhileFirstOwnerIsInFlight() throws Exception {
+        UUID secondOwner = UUID.randomUUID();
+        UUID secondMissionId = UUID.randomUUID();
+        UUID secondActivityId = UUID.randomUUID();
+        StudyMission firstMission = missions.current;
+        StudyMission secondMission = missionFor(secondOwner, secondMissionId, secondActivityId);
+        Map<UUID, StudyMission> owned = new HashMap<>();
+        owned.put(firstMission.id(), firstMission);
+        owned.put(secondMission.id(), secondMission);
+        StudyMissionRepository repository = new StudyMissionRepository() {
+            @Override public StudyMission save(StudyMission mission) {
+                synchronized (owned) { owned.put(mission.id(), mission); }
+                return mission;
+            }
+            @Override public Optional<StudyMission> findOwnedById(UUID missionId, UUID ownerId) {
+                synchronized (owned) {
+                    return Optional.ofNullable(owned.get(missionId))
+                            .filter(mission -> mission.userId().equals(ownerId));
+                }
+            }
+            @Override public Optional<StudyMission> findOwnedByIdForUpdate(UUID missionId, UUID ownerId) {
+                return findOwnedById(missionId, ownerId);
+            }
+        };
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var calls = new AtomicInteger();
+        ResponseEvaluationPort port = request -> {
+            calls.incrementAndGet();
+            if ("First answer".equals(request.studentResponse())) {
+                entered.countDown();
+                try {
+                    if (!release.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("test timeout");
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(interrupted);
+                }
+            }
+            return aiResult(ResponseEvaluationPort.Outcome.UNCERTAIN);
+        };
+        ThreadLocal<UUID> owner = new ThreadLocal<>();
+        var guarded = new SubmitActivityResponseUseCase(
+                () -> new AuthenticatedUser(owner.get()), repository, attempts, contracts, port,
+                (userId, missionId, activityId, mode, materials, references) ->
+                        new AuthorizedResponseEvidence(mode, List.of()),
+                engine(), new StudyMissionLearningStateAssembler(),
+                new PersistActivityResponse(repository, attempts), Clock.fixed(NOW, ZoneOffset.UTC));
+        var first = CompletableFuture.supplyAsync(() -> {
+            owner.set(USER_ID);
+            try {
+                return guarded.execute(new SubmitActivityResponseUseCase.Command(
+                        MISSION_ID, ACTIVITY_ID, "First answer", null, null, UUID.randomUUID()));
+            } finally {
+                owner.remove();
+            }
+        });
+        try {
+            assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+            owner.set(secondOwner);
+            assertThat(guarded.execute(new SubmitActivityResponseUseCase.Command(
+                    secondMissionId, secondActivityId, "Second answer", null, null,
+                    UUID.randomUUID())).outcome()).isEqualTo("UNGRADED");
+            assertThat(calls).hasValue(2);
+        } finally {
+            owner.remove();
+            release.countDown();
+        }
+        assertThat(first.get(5, TimeUnit.SECONDS).outcome()).isEqualTo("UNGRADED");
+        assertThat(attempts.appended).hasSize(2);
+    }
+
+    private static StudyMission missionFor(UUID ownerId, UUID missionId, UUID activityId) {
+        StudyMission template = mission(StudyMissionStatus.ACTIVE, "ACTIVE", ACTIVITY_ID);
+        LearningActivity activity = template.activities().getFirst();
+        LearningActivity renamed = new LearningActivity(
+                activityId, activity.learningObjectiveId(), activity.activityType(),
+                activity.representedActionType(), activity.questionIntent(), activity.templateSignature(),
+                activity.status(), activity.difficulty(), activity.sequenceNumber(),
+                activity.generatedArtifactId(), activity.sourceRequired(), activity.startedAt(),
+                activity.completedAt(), activity.createdAt(), activity.sourceReferenceIds());
+        return new StudyMission(missionId, ownerId, template.topicId(), template.subtopicId(),
+                template.status(), template.learningState(), template.groundingMode(),
+                template.availableTimeMinutes(), template.startedAt(), template.completedAt(),
+                template.stoppedAt(), activityId, template.materials(), template.objectives(),
+                List.of(renamed), template.createdAt(), template.updatedAt());
+    }
+
+    private SubmitActivityResponseUseCase useCase(ResponseEvaluationPort port) {
+        return new SubmitActivityResponseUseCase(
+                () -> new AuthenticatedUser(USER_ID), missions, attempts, contracts, port,
+                (userId, missionId, activityId, mode, materials, references) ->
+                        new AuthorizedResponseEvidence(mode, List.of()),
+                engine(), new StudyMissionLearningStateAssembler(),
+                new PersistActivityResponse(missions, attempts), Clock.fixed(NOW, ZoneOffset.UTC));
+    }
+
     private SubmitActivityResponseUseCase.Result execute(String response, String selectedOption) {
         return useCase.execute(new SubmitActivityResponseUseCase.Command(
-                MISSION_ID, ACTIVITY_ID, response, null, selectedOption));
+                MISSION_ID, ACTIVITY_ID, response, null, selectedOption, UUID.randomUUID()));
     }
 
     private static void assertReason(

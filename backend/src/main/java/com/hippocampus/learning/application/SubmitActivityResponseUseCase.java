@@ -5,7 +5,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.learning.domain.AttemptOutcome;
@@ -17,6 +19,8 @@ import com.hippocampus.learning.domain.NextLearningAction;
 import com.hippocampus.learning.domain.StudyMission;
 import com.hippocampus.learning.domain.StudyMissionStatus;
 import com.hippocampus.learning.port.ActivityResponseContractRepository;
+import com.hippocampus.learning.port.AuthorizedResponseEvidence;
+import com.hippocampus.learning.port.ResponseEvidenceResolver;
 import com.hippocampus.learning.port.ResponseEvaluationPort;
 import com.hippocampus.learning.port.StudyMissionRepository;
 import com.hippocampus.progress.domain.StudentAttempt;
@@ -33,10 +37,12 @@ public class SubmitActivityResponseUseCase {
     private final StudentAttemptRepository attempts;
     private final ActivityResponseContractRepository contracts;
     private final ResponseEvaluationPort responseEvaluation;
+    private final ResponseEvidenceResolver evidenceResolver;
     private final LearningEngine learningEngine;
     private final StudyMissionLearningStateAssembler learningStateAssembler;
     private final PersistActivityResponse persistence;
     private final Clock clock;
+    private final Set<SubmissionKey> inFlightSubmissions = ConcurrentHashMap.newKeySet();
 
     public SubmitActivityResponseUseCase(
             CurrentUser currentUser,
@@ -44,6 +50,7 @@ public class SubmitActivityResponseUseCase {
             StudentAttemptRepository attempts,
             ActivityResponseContractRepository contracts,
             ResponseEvaluationPort responseEvaluation,
+            ResponseEvidenceResolver evidenceResolver,
             LearningEngine learningEngine,
             StudyMissionLearningStateAssembler learningStateAssembler,
             PersistActivityResponse persistence,
@@ -54,6 +61,7 @@ public class SubmitActivityResponseUseCase {
         this.contracts = Objects.requireNonNull(contracts, "contracts must not be null");
         this.responseEvaluation = Objects.requireNonNull(
                 responseEvaluation, "responseEvaluation must not be null");
+        this.evidenceResolver = Objects.requireNonNull(evidenceResolver, "evidenceResolver must not be null");
         this.learningEngine = Objects.requireNonNull(learningEngine, "learningEngine must not be null");
         this.learningStateAssembler = Objects.requireNonNull(
                 learningStateAssembler, "learningStateAssembler must not be null");
@@ -64,8 +72,27 @@ public class SubmitActivityResponseUseCase {
     public Result execute(Command command) {
         Objects.requireNonNull(command, "command must not be null");
         UUID userId = currentUser.authenticatedUser().userId();
-        StudyMission mission = missions.findOwnedById(command.missionId(), userId)
+        missions.findOwnedById(command.missionId(), userId)
                 .orElseThrow(SubmitActivityResponseUseCase::missionNotFound);
+        SubmissionKey key = new SubmissionKey(userId, command.missionId(), command.activityId());
+        if (!inFlightSubmissions.add(key)) {
+            throw failure(ActivityResponseException.Reason.STALE_SUBMISSION,
+                    "A response for this activity is already being submitted. Please retry.");
+        }
+        try {
+            StudyMission mission = missions.findOwnedById(command.missionId(), userId)
+                    .orElseThrow(SubmitActivityResponseUseCase::missionNotFound);
+            return executeAdmitted(command, userId, mission);
+        } finally {
+            inFlightSubmissions.remove(key);
+        }
+    }
+
+    private Result executeAdmitted(Command command, UUID userId, StudyMission mission) {
+        Result replay = replayIfExact(command, userId, mission);
+        if (replay != null) {
+            return replay;
+        }
         LearningActivity activity = validateCurrentActivity(mission, command.activityId());
         List<StudentAttempt> currentAttempts = attempts.findOwnedByActivity(activity.id(), userId);
         int maxAttempt = currentAttempts.stream().mapToInt(StudentAttempt::attemptNumber).max().orElse(0);
@@ -78,10 +105,14 @@ public class SubmitActivityResponseUseCase {
                 .orElseThrow(() -> failure(
                         ActivityResponseException.Reason.EVALUATION_CONTRACT_NOT_FOUND,
                         "The activity cannot be evaluated safely."));
+        if (!contract.supportsDeterministicEvaluation() && command.requestId() == null) {
+            throw failure(ActivityResponseException.Reason.INVALID_RESPONSE,
+                    "A request ID is required for a written response.");
+        }
         String persistedResponseText = contract.supportsDeterministicEvaluation()
                 ? firstNonBlank(command.selectedOption(), command.responseText())
                 : command.responseText();
-        Evaluation evaluation = evaluate(contract, command);
+        Evaluation evaluation = evaluate(contract, command, mission, activity, userId);
 
         Map<UUID, List<StudentAttempt>> attemptHistory = new java.util.LinkedHashMap<>();
         for (LearningActivity historicalActivity : mission.activities()) {
@@ -95,22 +126,90 @@ public class SubmitActivityResponseUseCase {
         NextLearningAction nextAction = learningEngine.decide(
                 learningStateAssembler.assembleForSubmission(
                         mission, activity, attemptHistory, evaluation.outcome(), now));
+        UUID attemptId = UUID.randomUUID();
+        LearningStage nextStage = stageFor(nextAction, mission.learningState());
+        boolean completeMission = nextAction.actionType() == LearningActionType.COMPLETE;
+        String limitationCode = evaluation.outcome() == AttemptOutcome.UNGRADED
+                ? "EVALUATION_UNRESOLVED" : null;
+        SubmissionReceipt receipt = new SubmissionReceipt(
+                mission.id(), activity.id(), attemptId, evaluation.outcome().name(),
+                evaluation.correctConcepts(), evaluation.missingConcepts(),
+                evaluation.misconceptions(), evaluation.feedback(), limitationCode,
+                completeMission ? StudyMissionStatus.COMPLETED.name() : mission.status().name(),
+                nextStage.name(), now.toString(),
+                !completeMission && isMaterializable(nextAction.actionType()));
         StudentAttempt attempt = new StudentAttempt(
-                UUID.randomUUID(), userId, activity.id(), maxAttempt + 1,
+                attemptId, userId, activity.id(), maxAttempt + 1,
                 persistedResponseText, command.responsePayload(), now,
                 evaluation.outcome().name(), null,
                 evaluation.deterministic() ? evaluation.outcome().name() : null,
-                now);
-        LearningStage nextStage = stageFor(nextAction, mission.learningState());
-        PersistActivityResponse.Result persisted = persistence.persist(new PersistActivityResponse.Command(
-                mission.id(), userId, snapshot, attempt, nextStage,
-                nextAction.actionType() == LearningActionType.COMPLETE, now));
-        return new Result(persisted.attempt(), persisted.activity(), persisted.mission(), evaluation, nextAction);
+                now, command.requestId(), limitationCode, receipt.toJson());
+        PersistActivityResponse.Result persisted;
+        try {
+            persisted = persistence.persist(new PersistActivityResponse.Command(
+                    mission.id(), userId, snapshot, attempt, nextStage,
+                    completeMission, now));
+        } catch (ActivityResponseException stale) {
+            if (stale.reason() == ActivityResponseException.Reason.STALE_SUBMISSION) {
+                StudyMission latest = missions.findOwnedById(mission.id(), userId)
+                        .orElseThrow(SubmitActivityResponseUseCase::missionNotFound);
+                Result replayAfterRace = replayIfExact(command, userId, latest);
+                if (replayAfterRace != null) {
+                    return replayAfterRace;
+                }
+            }
+            throw stale;
+        }
+        return new Result(persisted.attempt(), persisted.activity(), persisted.mission(),
+                evaluation, nextAction, receipt);
+    }
+
+    private Result replayIfExact(Command command, UUID userId, StudyMission mission) {
+        if (command.requestId() == null) {
+            return null;
+        }
+        LearningActivity activity = mission.activities().stream()
+                .filter(candidate -> candidate.id().equals(command.activityId()))
+                .findFirst().orElse(null);
+        if (activity == null) {
+            return null;
+        }
+        for (StudentAttempt previous : attempts.findOwnedByActivity(activity.id(), userId)) {
+            if (!command.requestId().equals(previous.requestId())) {
+                continue;
+            }
+            String submitted = previous.deterministicResult() != null
+                    ? firstNonBlank(command.selectedOption(), command.responseText())
+                    : command.responseText();
+            if (!Objects.equals(previous.responseText(), submitted)
+                    || !Objects.equals(previous.responsePayload(), command.responsePayload())
+                    || previous.submissionReceipt() == null) {
+                throw failure(ActivityResponseException.Reason.STALE_SUBMISSION,
+                        "The request does not match its saved submission.");
+            }
+            SubmissionReceipt receipt = SubmissionReceipt.fromJson(previous.submissionReceipt());
+            if (!receipt.attemptId().equals(previous.id())
+                    || !receipt.activityId().equals(activity.id())
+                    || !receipt.missionId().equals(mission.id())) {
+                throw failure(ActivityResponseException.Reason.STALE_SUBMISSION,
+                        "The saved submission could not be confirmed.");
+            }
+            return new Result(previous, activity, mission, null, null, receipt);
+        }
+        return null;
+    }
+
+    private static boolean isMaterializable(LearningActionType actionType) {
+        return switch (actionType) {
+            case START, RESUME, PAUSE, STOP, SOURCE_ONLY, COMMUNICATE_LIMITATION,
+                    RETRY_DEPENDENCY, COMPLETE -> false;
+            default -> true;
+        };
     }
 
     private Evaluation evaluate(
             ActivityResponseContractRepository.ResponseContract contract,
-            Command command) {
+            Command command, StudyMission mission, LearningActivity activity, UUID userId) {
         if (contract.supportsDeterministicEvaluation()) {
             String answer = firstNonBlank(command.selectedOption(), command.responseText());
             if (answer == null) {
@@ -137,9 +236,12 @@ public class SubmitActivityResponseUseCase {
         }
         ResponseEvaluationPort.Result evaluated;
         try {
+            AuthorizedResponseEvidence evidence = evidenceResolver.resolve(
+                    userId, mission.id(), activity.id(), mission.groundingMode(),
+                    mission.materials(), activity.sourceReferenceIds());
             evaluated = responseEvaluation.evaluate(new ResponseEvaluationPort.Request(
                     contract.question(), contract.expectedConcepts(), contract.expectedAnswer(),
-                    command.responseText()));
+                    command.responseText(), evidence));
         } catch (RuntimeException externalFailure) {
             throw failure(ActivityResponseException.Reason.EXTERNAL_EVALUATION_FAILED,
                     "The response could not be evaluated. Please try again.");
@@ -147,7 +249,6 @@ public class SubmitActivityResponseUseCase {
         if (evaluated == null
                 || !evaluated.validated()
                 || evaluated.outcome() == null
-                || evaluated.outcome() == ResponseEvaluationPort.Outcome.UNCERTAIN
                 || evaluated.feedback() == null
                 || evaluated.feedback().isBlank()
                 || evaluated.certainty() == null
@@ -159,8 +260,14 @@ public class SubmitActivityResponseUseCase {
             case CORRECT -> AttemptOutcome.CORRECT;
             case PARTIAL -> AttemptOutcome.PARTIAL;
             case INCORRECT -> AttemptOutcome.INCORRECT;
-            case UNCERTAIN -> throw new IllegalStateException("uncertain evaluation was not rejected");
+            case UNCERTAIN -> AttemptOutcome.UNGRADED;
         };
+        if (outcome == AttemptOutcome.UNGRADED) {
+            return new Evaluation(outcome, List.of(), List.of(), List.of(),
+                    "Your response was saved, but it could not be graded reliably. You can continue safely.",
+                    ResponseEvaluationPort.Certainty.LIMITED,
+                    ResponseEvaluationPort.RecommendedAction.RETRY, false);
+        }
         return new Evaluation(
                 outcome, evaluated.correctConcepts(), evaluated.missingConcepts(),
                 evaluated.misconceptions(), evaluated.feedback(), evaluated.certainty(),
@@ -216,16 +323,24 @@ public class SubmitActivityResponseUseCase {
         return new ActivityResponseException(reason, message);
     }
 
+    private record SubmissionKey(UUID ownerId, UUID missionId, UUID activityId) {}
+
     public record Command(
             UUID missionId,
             UUID activityId,
             String responseText,
             String responsePayload,
-            String selectedOption) {
+            String selectedOption,
+            UUID requestId) {
 
         public Command {
             Objects.requireNonNull(missionId, "missionId must not be null");
             Objects.requireNonNull(activityId, "activityId must not be null");
+        }
+
+        public Command(UUID missionId, UUID activityId, String responseText,
+                String responsePayload, String selectedOption) {
+            this(missionId, activityId, responseText, responsePayload, selectedOption, null);
         }
     }
 
@@ -244,7 +359,13 @@ public class SubmitActivityResponseUseCase {
             LearningActivity activity,
             StudyMission mission,
             Evaluation evaluation,
-            NextLearningAction nextAction) {
+            NextLearningAction nextAction,
+            SubmissionReceipt receipt) {
+
+        public Result(StudentAttempt attempt, LearningActivity activity,
+                StudyMission mission, Evaluation evaluation, NextLearningAction nextAction) {
+            this(attempt, activity, mission, evaluation, nextAction, null);
+        }
 
         public UUID missionId() {
             return mission.id();
@@ -255,48 +376,49 @@ public class SubmitActivityResponseUseCase {
         }
 
         public String outcome() {
-            return evaluation.outcome().name();
+            return receipt != null ? receipt.outcome() : evaluation.outcome().name();
         }
 
         public List<String> correctConcepts() {
-            return List.copyOf(evaluation.correctConcepts());
+            return receipt != null ? receipt.correctConcepts() : List.copyOf(evaluation.correctConcepts());
         }
 
         public List<String> missingConcepts() {
-            return List.copyOf(evaluation.missingConcepts());
+            return receipt != null ? receipt.missingConcepts() : List.copyOf(evaluation.missingConcepts());
         }
 
         public List<String> misconceptions() {
-            return List.copyOf(evaluation.misconceptions());
+            return receipt != null ? receipt.misconceptions() : List.copyOf(evaluation.misconceptions());
         }
 
         public String feedback() {
-            return evaluation.feedback();
+            return receipt != null ? receipt.feedback() : evaluation.feedback();
         }
 
         public String missionStatus() {
-            return mission.status().name();
+            return receipt != null ? receipt.missionStatus() : mission.status().name();
         }
 
         public String stage() {
-            return mission.learningState().name();
+            return receipt != null ? receipt.stage() : mission.learningState().name();
         }
 
         public Instant updatedAt() {
-            return mission.updatedAt();
+            return receipt != null ? receipt.updatedInstant() : mission.updatedAt();
         }
 
         public boolean continuationAvailable() {
-            return mission.status() == StudyMissionStatus.ACTIVE
-                    && isMaterializable(nextAction.actionType());
+            return receipt != null ? receipt.continuationAvailable()
+                    : mission.status() == StudyMissionStatus.ACTIVE
+                            && SubmitActivityResponseUseCase.isMaterializable(nextAction.actionType());
         }
 
-        private static boolean isMaterializable(LearningActionType actionType) {
-            return switch (actionType) {
-                case START, RESUME, PAUSE, STOP, SOURCE_ONLY, COMMUNICATE_LIMITATION,
-                        RETRY_DEPENDENCY, COMPLETE -> false;
-                default -> true;
-            };
+        public UUID attemptId() {
+            return attempt.id();
+        }
+
+        public String limitationCode() {
+            return attempt.limitationCode();
         }
     }
 }

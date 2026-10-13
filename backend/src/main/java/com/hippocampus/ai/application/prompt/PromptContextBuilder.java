@@ -105,7 +105,7 @@ public final class PromptContextBuilder {
             case QUESTION_GENERATION -> addQuestionVariables(
                     variables, (QuestionGenerationInput) request.taskContext(), 0);
             case RESPONSE_EVALUATION -> addEvaluationVariables(
-                    variables, (ResponseEvaluationInput) request.taskContext());
+                    variables, (ResponseEvaluationInput) request.taskContext(), taskTemplate.content());
             case CONCEPT_CONNECTION -> addConnectionVariables(
                     variables, (ConceptConnectionInput) request.taskContext(), 0);
             case CONTEXTUAL_APPLICATION -> addApplicationVariables(
@@ -121,7 +121,9 @@ public final class PromptContextBuilder {
             String systemPrompt,
             String taskTemplate,
             PromptTokenBudget budget) {
-        List<EvidenceChunk> deduplicated = deduplicateSources(request.evidencePackage().chunks());
+        List<EvidenceChunk> deduplicated = request.taskType() == AiTaskType.RESPONSE_EVALUATION
+                ? request.evidencePackage().chunks()
+                : deduplicateSources(request.evidencePackage().chunks());
         BuildState current = state;
         for (EvidenceChunk chunk : deduplicated) {
             List<PromptContext.IncludedSource> selected = new ArrayList<>(current.includedSources());
@@ -140,6 +142,11 @@ public final class PromptContextBuilder {
             throw new IllegalArgumentException(
                     "token budget cannot fit any source evidence required by grounding mode "
                             + request.groundingMode());
+        }
+        if (request.taskType() == AiTaskType.RESPONSE_EVALUATION
+                && current.includedSources().size() != deduplicated.size()) {
+            throw new IllegalArgumentException(
+                    "response evaluation source evidence exceeds the configured prompt budget");
         }
         return current;
     }
@@ -302,11 +309,19 @@ public final class PromptContextBuilder {
     }
 
     private static void addEvaluationVariables(
-            Map<String, String> variables, ResponseEvaluationInput input) {
+            Map<String, String> variables, ResponseEvaluationInput input, String template) {
         variables.put("question", jsonString(input.question()));
         variables.put("expectedConcepts", jsonArray(input.expectedConcepts()));
         variables.put("expectedAnswer", jsonString(input.expectedAnswer()));
         variables.put("studentResponse", escapeXmlText(input.studentResponse()));
+        if (template.contains("{sourceReferenceMap}")) {
+            variables.put("sourceReferenceMap", jsonString(Objects.requireNonNull(
+                    input.sourceReferenceMap(), "sourceReferenceMap required by prompt")));
+        }
+        if (template.contains("{verificationContext}")) {
+            variables.put("verificationContext", jsonString(Objects.requireNonNull(
+                    input.verificationContext(), "verificationContext required by prompt")));
+        }
     }
 
     private static void addConnectionVariables(

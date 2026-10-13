@@ -38,7 +38,10 @@ const mission = {
   updatedAt: '2026-10-02T01:01:00Z',
 }
 
-afterEach(() => transport.json.mockReset())
+afterEach(() => {
+  transport.json.mockReset()
+  sessionStorage.clear()
+})
 
 describe('study mission API contract', () => {
   it('requests through the API client with the query abort signal and validates the response', async () => {
@@ -151,7 +154,8 @@ describe('study mission API contract', () => {
     await expect(submitActivityResponse(missionId, activityId, { selectedOption: 'option-b' })).resolves.toEqual(result)
     expect(transport.json).toHaveBeenCalledWith(
       `/api/study-missions/${missionId}/activities/${activityId}/responses`,
-      { method: 'POST', body: { selectedOption: 'option-b' } },
+      { method: 'POST', body: { selectedOption: 'option-b',
+        requestId: expect.stringMatching(/^[0-9a-f-]{36}$/) } },
     )
   })
 
@@ -162,6 +166,30 @@ describe('study mission API contract', () => {
       continuationAvailable: true, expectedAnswer: 'private',
     })
     await expect(submitActivityResponse(missionId, activityId, { responseText: 'answer' })).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+
+  it('rotates the generated request ID after a confirmed validation rejection', async () => {
+    transport.json.mockRejectedValue(new ApiError({ kind: 'http', status: 400,
+      code: 'ACTIVITY_RESPONSE_INVALID_RESPONSE', message: 'Invalid response' }))
+
+    await expect(submitActivityResponse(missionId, activityId, { responseText: 'first' })).rejects.toBeInstanceOf(ApiError)
+    await expect(submitActivityResponse(missionId, activityId, { responseText: 'revised' })).rejects.toBeInstanceOf(ApiError)
+
+    const firstId = transport.json.mock.calls[0][1].body.requestId
+    const secondId = transport.json.mock.calls[1][1].body.requestId
+    expect(secondId).not.toBe(firstId)
+  })
+
+  it('retains the generated request ID when the network outcome is unknown', async () => {
+    transport.json.mockRejectedValue(new ApiError({ kind: 'network', status: null,
+      code: 'NETWORK_ERROR', message: 'Connection lost' }))
+
+    await expect(submitActivityResponse(missionId, activityId, { responseText: 'answer' })).rejects.toBeInstanceOf(ApiError)
+    await expect(submitActivityResponse(missionId, activityId, { responseText: 'answer' })).rejects.toBeInstanceOf(ApiError)
+
+    const firstId = transport.json.mock.calls[0][1].body.requestId
+    const secondId = transport.json.mock.calls[1][1].body.requestId
+    expect(secondId).toBe(firstId)
   })
 
   it('continues without sending a client-selected next action', async () => {

@@ -33,6 +33,7 @@ class StudentAttemptPersistenceIntegrationTests extends PostgresIntegrationTestS
         try (var context = startApplicationWithFlyway()) {
             assertThat(context.isActive()).isTrue();
             assertThat(successfulMigration("21")).isTrue();
+            assertThat(successfulMigration("25")).isTrue();
             assertThat(columnContract()).containsExactlyInAnyOrderEntriesOf(Map.ofEntries(
                     Map.entry("id", "uuid:NO"),
                     Map.entry("user_id", "uuid:NO"),
@@ -44,14 +45,18 @@ class StudentAttemptPersistenceIntegrationTests extends PostgresIntegrationTestS
                     Map.entry("evaluation_status", "character varying:NO"),
                     Map.entry("evaluation_artifact_id", "uuid:YES"),
                     Map.entry("deterministic_result", "character varying:YES"),
-                    Map.entry("created_at", "timestamp with time zone:NO")));
+                    Map.entry("created_at", "timestamp with time zone:NO"),
+                    Map.entry("request_id", "uuid:YES"),
+                    Map.entry("limitation_code", "character varying:YES"),
+                    Map.entry("submission_receipt", "jsonb:YES")));
             assertThat(constraintNames()).containsExactlyInAnyOrder(
                     "pk_student_attempts",
                     "uq_student_attempts_activity_number",
                     "fk_student_attempts_user",
                     "fk_student_attempts_learning_activity",
                     "fk_student_attempts_evaluation_artifact",
-                    "chk_student_attempts_attempt_number");
+                    "chk_student_attempts_attempt_number",
+                    "chk_student_attempts_ungraded_shape");
             assertThat(constraintDefinition("uq_student_attempts_activity_number"))
                     .contains("UNIQUE (learning_activity_id, attempt_number)");
             assertThat(constraintDefinition("chk_student_attempts_attempt_number"))
@@ -60,6 +65,35 @@ class StudentAttemptPersistenceIntegrationTests extends PostgresIntegrationTestS
                     "fk_student_attempts_user", "RESTRICT",
                     "fk_student_attempts_learning_activity", "RESTRICT",
                     "fk_student_attempts_evaluation_artifact", "RESTRICT"));
+        }
+    }
+
+    @Test
+    void ungradedAttemptPersistsLimitationReceiptAndRejectsDuplicateRequestId() throws Exception {
+        try (var context = startApplicationWithFlyway()) {
+            Fixture fixture = insertFixture();
+            StudentAttemptRepository repository = context.getBean(StudentAttemptRepository.class);
+            UUID requestId = UUID.randomUUID();
+            StudentAttempt ungraded = new StudentAttempt(
+                    UUID.randomUUID(), fixture.ownerId(), fixture.firstActivityId(), 1,
+                    "Student explanation", null, BASE_TIME, "UNGRADED", null, null,
+                    BASE_TIME, requestId, "EVALUATION_UNRESOLVED", "{\"outcome\":\"UNGRADED\"}");
+
+            StudentAttempt saved = repository.append(ungraded);
+            assertThat(saved.requestId()).isEqualTo(requestId);
+            assertThat(saved.limitationCode()).isEqualTo("EVALUATION_UNRESOLVED");
+            assertThat(saved.submissionReceipt()).contains("\"outcome\": \"UNGRADED\"");
+            assertThat(repository.findOwnedByActivity(
+                    fixture.firstActivityId(), fixture.ownerId())).containsExactly(saved);
+            assertThat(repository.findOwnedByActivity(
+                    fixture.firstActivityId(), fixture.foreignOwnerId())).isEmpty();
+
+            StudentAttempt duplicate = new StudentAttempt(
+                    UUID.randomUUID(), fixture.ownerId(), fixture.firstActivityId(), 2,
+                    "Different", null, BASE_TIME, "UNGRADED", null, null,
+                    BASE_TIME, requestId, "EVALUATION_UNRESOLVED", "{}");
+            assertThatThrownBy(() -> repository.append(duplicate))
+                    .isInstanceOf(DataIntegrityViolationException.class);
         }
     }
 

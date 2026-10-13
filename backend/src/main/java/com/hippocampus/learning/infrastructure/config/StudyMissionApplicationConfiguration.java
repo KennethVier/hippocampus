@@ -32,6 +32,7 @@ import com.hippocampus.learning.port.ActivityResponseContractRepository;
 import com.hippocampus.learning.port.GeneratedArtifactRepository;
 import com.hippocampus.learning.port.GeneratedActivityContentDecoder;
 import com.hippocampus.learning.port.ResponseEvaluationPort;
+import com.hippocampus.learning.port.ResponseEvidenceResolver;
 import com.hippocampus.learning.port.StudyMissionSourceCatalog;
 import com.hippocampus.learning.port.StudyMissionSourcePresentationRepository;
 import com.hippocampus.learning.port.SubtopicRepository;
@@ -153,19 +154,21 @@ public class StudyMissionApplicationConfiguration {
     @Lazy
     @ConditionalOnMissingBean
     @ConditionalOnBean({StudentAttemptRepository.class, ActivityResponseContractRepository.class,
-            ResponseEvaluationPort.class, PersistActivityResponse.class})
+            ResponseEvaluationPort.class, ResponseEvidenceResolver.class,
+            PersistActivityResponse.class})
     SubmitActivityResponseUseCase submitActivityResponseUseCase(
             CurrentUser currentUser,
             StudyMissionRepository missions,
             StudentAttemptRepository attempts,
             ActivityResponseContractRepository contracts,
             ResponseEvaluationPort responseEvaluation,
+            ResponseEvidenceResolver evidenceResolver,
             LearningEngine learningEngine,
             StudyMissionLearningStateAssembler learningStateAssembler,
             PersistActivityResponse persistence,
             Clock studyMissionClock) {
         return new SubmitActivityResponseUseCase(
-                currentUser, missions, attempts, contracts, responseEvaluation,
+                currentUser, missions, attempts, contracts, responseEvaluation, evidenceResolver,
                 learningEngine, learningStateAssembler, persistence, studyMissionClock);
     }
 
@@ -207,15 +210,17 @@ public class StudyMissionApplicationConfiguration {
     @ConditionalOnBean({
             GeneratedArtifactRepository.class,
             GeneratedActivityContentDecoder.class,
-            StudyMissionSourcePresentationRepository.class
+            StudyMissionSourcePresentationRepository.class,
+            StudentAttemptRepository.class
     })
     GetStudyMissionUseCase getStudyMissionUseCase(
             CurrentUser currentUser,
             StudyMissionRepository missions,
             GeneratedArtifactRepository artifacts,
             GeneratedActivityContentDecoder contentDecoder,
-            StudyMissionSourcePresentationRepository sourcePresentations) {
+            StudyMissionSourcePresentationRepository sourcePresentations,
+            StudentAttemptRepository attempts) {
         return new GetStudyMissionUseCase(
-                currentUser, missions, artifacts, contentDecoder, sourcePresentations);
+                currentUser, missions, artifacts, contentDecoder, sourcePresentations, attempts);
     }
 }

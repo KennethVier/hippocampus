@@ -6,12 +6,32 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.Clock;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+import com.hippocampus.identity.domain.AuthenticatedUser;
+import com.hippocampus.learning.application.ActivityResponseException;
+import com.hippocampus.learning.application.PersistActivityResponse;
+import com.hippocampus.learning.application.StudyMissionLearningStateAssembler;
+import com.hippocampus.learning.application.SubmitActivityResponseUseCase;
+import com.hippocampus.learning.domain.LearningEngine;
+import com.hippocampus.learning.port.ActivityResponseContractRepository;
+import com.hippocampus.learning.port.AuthorizedResponseEvidence;
+import com.hippocampus.learning.port.ResponseEvaluationPort;
+import com.hippocampus.progress.port.StudentAttemptRepository;
 
 import com.hippocampus.learning.domain.LearningActivity;
 import com.hippocampus.learning.domain.LearningActionType;
@@ -111,6 +131,130 @@ class StudyMissionPersistenceIntegrationTests extends PostgresIntegrationTestSup
 
             assertThat(repository.findOwnedById(mission.id(), fixture.foreignOwnerId())).isEmpty();
             assertThat(repository.findOwnedById(UUID.randomUUID(), fixture.ownerId())).isEmpty();
+        }
+    }
+
+    @Test
+    void responseEvidenceIsFrozenToOwnedMissionAndActivity() throws Exception {
+        try (var context = startApplicationWithFlyway()) {
+            Fixture fixture = insertFixture();
+            StudyMission mission = context.getBean(StudyMissionRepository.class)
+                    .save(representativeMission(fixture));
+            UUID activityId = mission.activities().get(1).id();
+            UUID chunkId = UUID.randomUUID();
+            UUID referenceId = UUID.randomUUID();
+            var jdbc = context.getBean(org.springframework.jdbc.core.simple.JdbcClient.class);
+            jdbc.sql("""
+                    INSERT INTO chunks(id,material_version_id,document_node_id,chunk_index,
+                        content,content_type,extraction_method,quality,created_at)
+                    VALUES (?,?,?,1,'Radial nerve injury paralyzes wrist extensors.',
+                        'TEXT','NATIVE','STRONG',now())
+                    """).params(chunkId, fixture.versionOneId(), fixture.nodeOneId()).update();
+            jdbc.sql("""
+                    INSERT INTO source_references(id,material_id,material_version_id,
+                        document_node_id,chunk_id,display_label,created_at)
+                    VALUES (?,?,?,?,?,'Frozen text',now())
+                    """).params(referenceId, fixture.materialId(), fixture.versionOneId(),
+                        fixture.nodeOneId(), chunkId).update();
+            insertActivitySource(activityId, referenceId);
+            activateMaterialVersion(fixture.materialId(), fixture.versionTwoId());
+            var resolver = context.getBean(JdbcResponseEvidenceResolver.class);
+
+            var evidence = resolver.resolve(fixture.ownerId(), mission.id(), activityId,
+                    mission.groundingMode(), mission.materials(), Set.of(referenceId));
+            assertThat(evidence.sources()).hasSize(1);
+            assertThat(evidence.sources().getFirst().materialVersionId())
+                    .isEqualTo(fixture.versionOneId());
+            assertThat(evidence.sources().getFirst().content())
+                    .isEqualTo("Radial nerve injury paralyzes wrist extensors.");
+            insertActivitySource(activityId, fixture.sourceReferenceId());
+            var nonChunkEvidence = resolver.resolve(fixture.ownerId(), mission.id(), activityId,
+                    mission.groundingMode(), mission.materials(),
+                    Set.of(referenceId, fixture.sourceReferenceId()));
+            assertThat(nonChunkEvidence.sources()).isEmpty();
+            assertThat(nonChunkEvidence.limitation()).isEqualTo(
+                    com.hippocampus.learning.port.AuthorizedResponseEvidence.Limitation
+                            .NON_CHUNK_REFERENCE_UNSUPPORTED);
+            assertThatThrownBy(() -> resolver.resolve(fixture.foreignOwnerId(), mission.id(),
+                    activityId, mission.groundingMode(), mission.materials(), Set.of(referenceId)))
+                    .isInstanceOf(InvalidDataAccessApiUsageException.class)
+                    .hasRootCauseInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("activity evidence is outside owned mission scope");
+            assertThatThrownBy(() -> resolver.resolve(fixture.ownerId(), mission.id(),
+                    mission.activities().getFirst().id(), mission.groundingMode(),
+                    mission.materials(), Set.of(referenceId)))
+                    .isInstanceOf(InvalidDataAccessApiUsageException.class)
+                    .hasRootCauseInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("activity evidence reference is not authorized");
+        }
+    }
+
+    @Test
+    void concurrentResponsesAdmitOneEvaluationBeforeDatabasePersistence() throws Exception {
+        try (var context = startApplicationWithFlyway()) {
+            Fixture fixture = insertFixture();
+            StudyMissionRepository missions = context.getBean(StudyMissionRepository.class);
+            StudentAttemptRepository attempts = context.getBean(StudentAttemptRepository.class);
+            StudyMission mission = missions.save(representativeMission(fixture));
+            UUID activityId = mission.currentActivityId();
+            var entered = new CountDownLatch(1);
+            var release = new CountDownLatch(1);
+            var calls = new AtomicInteger();
+            var transactionDuringEvaluation = new AtomicBoolean();
+            ResponseEvaluationPort evaluator = request -> {
+                calls.incrementAndGet();
+                transactionDuringEvaluation.set(TransactionSynchronizationManager.isActualTransactionActive());
+                entered.countDown();
+                try {
+                    if (!release.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("test timeout");
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(interrupted);
+                }
+                return new ResponseEvaluationPort.Result(
+                        ResponseEvaluationPort.Outcome.UNCERTAIN, List.of(), List.of(), List.of(),
+                        "Unable to grade", ResponseEvaluationPort.Certainty.LIMITED,
+                        ResponseEvaluationPort.RecommendedAction.RETRY, true);
+            };
+            ActivityResponseContractRepository contracts = (id, artifactId, ownerId) ->
+                    java.util.Optional.of(new ActivityResponseContractRepository.ResponseContract(
+                            "Explain the concept", List.of("concept"), "Expected answer", null,
+                            "Reference answer"));
+            var submit = new SubmitActivityResponseUseCase(
+                    () -> new AuthenticatedUser(fixture.ownerId()), missions, attempts, contracts,
+                    evaluator, (ownerId, missionId, id, mode, materials, references) ->
+                            new AuthorizedResponseEvidence(mode, List.of()),
+                    context.getBean(LearningEngine.class),
+                    context.getBean(StudyMissionLearningStateAssembler.class),
+                    context.getBean(PersistActivityResponse.class),
+                    Clock.fixed(Instant.parse("2026-09-29T12:00:00Z"), ZoneOffset.UTC));
+            UUID requestId = UUID.randomUUID();
+            var original = new SubmitActivityResponseUseCase.Command(
+                    mission.id(), activityId, "Student response", null, null, requestId);
+            var different = new SubmitActivityResponseUseCase.Command(
+                    mission.id(), activityId, "Different response", null, null, UUID.randomUUID());
+            var first = CompletableFuture.supplyAsync(() -> submit.execute(original));
+            try {
+                assertThat(entered.await(10, TimeUnit.SECONDS)).isTrue();
+                assertThatThrownBy(() -> submit.execute(original))
+                        .isInstanceOf(ActivityResponseException.class)
+                        .extracting(failure -> ((ActivityResponseException) failure).reason())
+                        .isEqualTo(ActivityResponseException.Reason.STALE_SUBMISSION);
+                assertThatThrownBy(() -> submit.execute(different))
+                        .isInstanceOf(ActivityResponseException.class)
+                        .extracting(failure -> ((ActivityResponseException) failure).reason())
+                        .isEqualTo(ActivityResponseException.Reason.STALE_SUBMISSION);
+                assertThat(calls).hasValue(1);
+                assertThat(attempts.findOwnedByActivity(activityId, fixture.ownerId())).isEmpty();
+            } finally {
+                release.countDown();
+            }
+            var saved = first.get(10, TimeUnit.SECONDS);
+            assertThat(saved.outcome()).isEqualTo("UNGRADED");
+            assertThat(submit.execute(original).attemptId()).isEqualTo(saved.attemptId());
+            assertThat(attempts.findOwnedByActivity(activityId, fixture.ownerId())).hasSize(1);
+            assertThat(calls).hasValue(1);
+            assertThat(transactionDuringEvaluation).isFalse();
         }
     }
 

@@ -1849,7 +1849,7 @@ responsibilities remain outside P5-06.
 
 **Milestone:** M3 — First Hippocampus
 
-**Implementation items:** 14
+**Implementation items:** 15
 
 
 ## P7-01 — Create StudyMission/LearningObjective/LearningActivity schema
@@ -2003,6 +2003,13 @@ responsibilities remain outside P5-06.
 
 - **Golden v6 rubric reconciliation:** [2026-10-10 proportional partial-credit decision](testing/p7-09-golden-v6-partial-credit-2026-10-10.md) introduces Golden v6 from Golden v5. Case 5 permits PARTIAL for the independently demonstrated wrist-extensor paralysis component while forbidding CORRECT; the incorrect median-nerve attribution must remain explicit and be corrected in feedback. Historical Golden v5 resources, reports, and original reviewer evidence are preserved. The selected rubric version and relevant resource hashes produce a distinct qualification identity, so v5 evidence cannot qualify v6. Production response evaluation remains on `RESPONSE_EVALUATION_V6`; [the V8 meaning/feedback candidate](testing/p7-09-v8-meaning-feedback-candidate-2026-10-10.md) remains test-only. User-reported validation for this Golden v6 change: focused Maven 7 tests, 0 failures, 0 errors; `backend-clean-verify` PASS; `git-diff-check` PASS; overall validation PASS. Independent review still needs to resolve Case 3's possible overcrediting of radial-nerve identification and Case 4's duplicated missing concepts; neither is adjudicated here. The original human judgments, complete version-bound ADR-0011 qualification, independent human semantic review/adjudication, applicable release acceptance, and general/security review gates remain outstanding. No Golden PASS or Done is asserted; P7-09 remains Ready for Review.
 
+- **V9 grading-consistency candidate:** [2026-10-11 implementation note](testing/p7-09-v9-grading-consistency-2026-10-11.md) records Golden v6 live run `ee5511fc-0891-44ac-b6c9-355b3c4f0e67`: all nine outputs were collected, but Gemini V8 returned INCORRECT with no correct concepts for Case 5, contrary to the approved PARTIAL rubric. V9 is an explicit test-only prompt candidate that credits a stated, source-supported functional component while retaining a wrong causal attribution as a misconception and the correct explanation as missing. Its Case 3 instruction prevents a question-referential pronoun from becoming credited nerve identification. Golden v6 resources and historical evidence are unchanged; V6/V7/V8 prompt content remains frozen; production still selects V6. User-verified focused Maven: 21 tests, 0 failures, 0 errors, 0 skipped. User-verified repository-root `node scripts/validation/validate.mjs backend`: `backend-clean-verify` PASS, `git-diff-check` PASS, overall PASS. Earlier agent-run validation was blocked by local dependency/network restrictions and is superseded by this user evidence. Golden v6 + V9 still needs live identity-bound ADR-0011 qualification and independent human review. Case 4's duplicated missing concepts remains unresolved, as do original reviewer evidence, adjudication, release acceptance, and general/security gates. P7-09 stays Ready for Review; no Golden PASS or Done is asserted.
+
+- **V9 live qualification attempt / Phase 7 disposition, 2026-10-11:** The original [Golden v6 + V9 report](testing/evidence/p7-09/gemini-v6-0aab7267-e8b8-4c55-b3d5-bdc193d44295.json) is retained byte-for-byte; source and copy SHA-256: `21146FBAFF6C1F54A5B22FA0D59152BCA67727D5FB8F212F0F7486EE3614CEA3`. Run `f44dd5df-4413-4ba7-8a71-c65af2d1fb14` collected all nine cases with 9/9 contract PASS and 7/9 deterministic semantic matcher PASS. [The V9 qualification note](testing/p7-09-v9-grading-consistency-2026-10-11.md) records Case 4's apparent feedback matcher wording false negative and duplicated missing concepts, Case 5's genuine `INCORRECT`/empty-credit output against the Golden v6 `PARTIAL` rubric, and Case 3's possible overcrediting of radial-nerve identification. The report's `qualificationStatus` is PENDING without human review; the observed Case 5 failure blocks approval. Golden qualification has **not passed**. Independent case review/adjudication, Case 5 remediation and new identity-bound qualification, release acceptance, and general/security gates remain outstanding. P7-09 stays Ready for Review, not Done. Reviews of already implemented P7 items and P7-14 evidence planning can proceed; P7-14's `All P7` dependency and Golden checks prevent M3 completion. Changing those dependencies or starting Phase 8 implementation early requires an explicit Document 27 decision.
+
+- **Evidence-attribution remediation in progress, 2026-10-11:** The test-only Golden matcher now flags Case 3 credit for radial-nerve identification absent from the student's response and accepts bounded Case 4 feedback expressing loss or elimination of wrist extension while retaining causal, negation, and unsupported-subject guards. The inherited v4 Case 3 `requiredCorrectConceptAlternatives` still names radial-nerve supply; that expectation cannot be met by the exact student's answer without overcredit and needs separate rubric reconciliation before semantic PASS. Golden v6 resources, production V6 selection, and V9 prompt content are unchanged. Initial focused Maven tests could not reach compilation because the Spring Boot 4.1.1 parent POM was absent from the local offline cache. User then reported five of six focused tests passing, with Case 4 failing on a missing structured causal link. After correcting that test fixture and limiting grammatical loss forms to attached injury clauses, agent-run focused Maven passed 7 tests, 0 failures, 0 errors; the complete `GoldenAiSemanticEvaluatorTests` class passed 58 tests, 0 failures, 0 errors; `git diff --check` passed. Proposed [ADR-0012](adr/ADR-0012-verifiable-response-evaluation-component-attribution.md) defines the unresolved runtime attribution contract; proposed [ADR-0013](adr/ADR-0013-graded-response-follow-up-question-policy.md) records the separate Learning Engine follow-up policy. Neither proposal is accepted or implemented. Case 5, complete Golden qualification, general review, and security review remain open; P7-09 stays Ready for Review, not Done.
+- **ADR acceptance and remediation planning, 2026-10-11:** [ADR-0012](adr/ADR-0012-verifiable-response-evaluation-component-attribution.md) and [ADR-0013](adr/ADR-0013-graded-response-follow-up-question-policy.md) are now accepted with controlling adjustments. The earlier note above remains historical. [The bounded P7-09 implementation packet](testing/p7-09-runtime-remediation-packet-2026-10-11.md) covers source-grounded assertion discovery, verification, graded aggregation, and non-scoring `UNGRADED` submission; it authorizes no runtime change by itself. [The prospective Golden v7 rubric proposal](testing/p7-09-golden-v7-case-3-rubric-proposal-2026-10-11.md) corrects the inherited Case 3 alternative in a new dataset identity without modifying Golden v6, historical reports, prompt selection, or V9. P7-15 owns follow-up activity implementation separately. Case 5 remediation, version-bound qualification, independent general/security review, and release acceptance remain open. P7-09 remains Ready for Review, not Done.
+
 ## P7-10 — Implement concept-connection task
 
 - **Workstream:** AI
@@ -2087,15 +2094,31 @@ Critical 0 / High 0 / Medium 0.
 - **Priority:** Must
 - **Status:** Not Started
 - **Goal:** Prove full source-grounded Study Mission.
-- **Build:** From topic + processed material: start mission → understand → retrieve → connect → apply → feedback → complete/pause.
+- **Build:** From topic + processed material: start mission → understand → retrieve → connect → apply → feedback → follow-up intent/authorized activity where safe → complete/pause.
 - **How it works:** Sources visible and provider abstracted.
-- **Dependencies:** All P7
+- **Dependencies:** All P7 implementation items, explicitly including P7-15; validated P7-09 Golden checks.
 - **Tests / validation:** Critical Playwright E2E + source validation + AI golden checks.
 - **Expected result:** M3 First Hippocampus works end-to-end.
 - **Definition of Done:** Milestone evidence recorded.
 - **Authority:** Documents 26
 - **Evidence / link:** _To be recorded during implementation_
 - **Notes / blockers:** _None_
+
+## P7-15 — Implement graded-response follow-up question lifecycle
+
+- **Workstream:** Learning Engine / Application / Frontend
+- **Priority:** Must
+- **Status:** Not Started
+- **Goal:** Make a focused answerable follow-up available after every safely graded nonterminal response while preserving higher-priority mission policies.
+- **Build:** Persist Engine-owned attempt/objective-linked intent; defer through prerequisite support or time constraints; revalidate on resume; materialize one authorized response-bearing Learning Activity; satisfy or cancel intent without duplicate creation; distinguish feedback prose from the answerable activity in the UI.
+- **How it works:** ADR-0013 governs creation and lifecycle. Safety, learner stop, source readiness/authorization, time, and terminal completion retain precedence. `UNGRADED` is outside this graded-response requirement.
+- **Dependencies:** Accepted ADR-0013; validated P7-09 graded-outcome contract; P6 policies; P7-04/P7-05/P7-06/P7-08/P7-13 mission and UX paths. P7-14 depends on this task.
+- **Tests / validation:** Scenario and integration coverage for CORRECT/PARTIAL/INCORRECT, deferral, resume, stale/duplicate continuation, source loss, stop, safety, time limit, objective change, completion, and anti-repetition; user/CI validation and independent general/security review.
+- **Expected result:** The student can answer the follow-up only through a current authorized activity, once; feedback text alone never counts as an activity or evidence.
+- **Definition of Done:** Lifecycle and source/ownership regressions pass, required user/CI and independent reviews are recorded, and P7-14 can exercise the behavior end to end.
+- **Authority:** Documents 11, 12, 15, 26; ADR-0013.
+- **Evidence / link:** _To be recorded during implementation_
+- **Notes / blockers:** Separate from P7-09 runtime grading remediation. No Phase 8 work is authorized.
 
 # Phase 8 — Learning Evidence + Review System
 

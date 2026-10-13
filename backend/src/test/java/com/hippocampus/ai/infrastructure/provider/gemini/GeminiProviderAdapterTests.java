@@ -104,7 +104,8 @@ class GeminiProviderAdapterTests {
     void usesLowThinkingOnlyForCurrentAtomicResponseEvaluationPrompts() {
         for (PromptId id : List.of(PromptId.RESPONSE_EVALUATION_V4,
                 PromptId.RESPONSE_EVALUATION_V5, PromptId.RESPONSE_EVALUATION_V6,
-                PromptId.RESPONSE_EVALUATION_V7, PromptId.RESPONSE_EVALUATION_V8)) {
+                PromptId.RESPONSE_EVALUATION_V7, PromptId.RESPONSE_EVALUATION_V8,
+                PromptId.RESPONSE_EVALUATION_V9)) {
             ChatModel model = mock(ChatModel.class);
             when(model.call(any(Prompt.class))).thenReturn(new ChatResponse(List.of(
                     new Generation(new AssistantMessage("{}")))));
@@ -216,6 +217,10 @@ class GeminiProviderAdapterTests {
         assertThat(ProviderStructuredOutputSchema.geminiSchema(
                         AiOutputContract.RESPONSE_EVALUATION,
                         PromptId.RESPONSE_EVALUATION_V5))
+                .isEqualTo(currentSchema);
+        assertThat(ProviderStructuredOutputSchema.geminiSchema(
+                        AiOutputContract.RESPONSE_EVALUATION,
+                        PromptId.RESPONSE_EVALUATION_V9))
                 .isEqualTo(currentSchema);
 
         ChatModel legacyModel = mock(ChatModel.class);

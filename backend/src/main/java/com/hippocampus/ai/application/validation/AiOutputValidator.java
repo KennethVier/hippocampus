@@ -18,6 +18,8 @@ import com.hippocampus.ai.domain.QuestionGenerationInput;
 import com.hippocampus.ai.domain.QuestionOption;
 import com.hippocampus.ai.domain.ResponseEvaluationInput;
 import com.hippocampus.ai.domain.ResponseEvaluationResult;
+import com.hippocampus.ai.domain.ResponseAttributionDiscovery;
+import com.hippocampus.ai.domain.ResponseAttributionVerification;
 import com.hippocampus.ai.domain.ResponseEvaluationV4Result;
 import com.hippocampus.ai.domain.ValidatedAiResult;
 import com.hippocampus.ai.port.AiOutputDecodingException;
@@ -81,11 +83,16 @@ public final class AiOutputValidator {
         Class<?> resultType = switch (outputContract) {
             case EXPLANATION -> ExplanationResult.class;
             case QUESTION_GENERATION -> QuestionGenerationResult.class;
-            case RESPONSE_EVALUATION -> promptId == PromptId.RESPONSE_EVALUATION_V4
+            case RESPONSE_EVALUATION -> promptId == PromptId.RESPONSE_EVALUATION_DISCOVERY_V1
+                    ? ResponseAttributionDiscovery.class
+                    : promptId == PromptId.RESPONSE_EVALUATION_VERIFICATION_V1
+                            ? ResponseAttributionVerification.class
+                    : promptId == PromptId.RESPONSE_EVALUATION_V4
                             || promptId == PromptId.RESPONSE_EVALUATION_V5
                             || promptId == PromptId.RESPONSE_EVALUATION_V6
                             || promptId == PromptId.RESPONSE_EVALUATION_V7
                             || promptId == PromptId.RESPONSE_EVALUATION_V8
+                            || promptId == PromptId.RESPONSE_EVALUATION_V9
                     ? ResponseEvaluationV4Result.class
                     : ResponseEvaluationResult.class;
             case CONCEPT_CONNECTION -> promptId == PromptId.CONCEPT_CONNECTION_V1

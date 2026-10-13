@@ -559,7 +559,8 @@ class GoldenAiLiveEvaluationRunner {
         if (value.equals(PromptId.RESPONSE_EVALUATION_V6.name())) return PromptId.RESPONSE_EVALUATION_V6;
         if (value.equals(PromptId.RESPONSE_EVALUATION_V7.name())) return PromptId.RESPONSE_EVALUATION_V7;
         if (value.equals(PromptId.RESPONSE_EVALUATION_V8.name())) return PromptId.RESPONSE_EVALUATION_V8;
-        throw new IllegalArgumentException(RESPONSE_PROMPT_ENVIRONMENT + " must be RESPONSE_EVALUATION_V6, RESPONSE_EVALUATION_V7 or RESPONSE_EVALUATION_V8");
+        if (value.equals(PromptId.RESPONSE_EVALUATION_V9.name())) return PromptId.RESPONSE_EVALUATION_V9;
+        throw new IllegalArgumentException(RESPONSE_PROMPT_ENVIRONMENT + " must be RESPONSE_EVALUATION_V6, RESPONSE_EVALUATION_V7, RESPONSE_EVALUATION_V8 or RESPONSE_EVALUATION_V9");
     }
 
     static String datasetVersion(String value) {

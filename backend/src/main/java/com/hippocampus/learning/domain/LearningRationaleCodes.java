@@ -32,6 +32,7 @@ public final class LearningRationaleCodes {
     public static final String REFLECTION_DUE = "REFLECTION_DUE";
     public static final String OBJECTIVE_COMPLETE = "OBJECTIVE_COMPLETE";
     public static final String UNDERSTANDING_CHECK_REQUIRED = "UNDERSTANDING_CHECK_REQUIRED";
+    public static final String UNGRADED_RETRY = "UNGRADED_RETRY";
 
     private LearningRationaleCodes() {
     }

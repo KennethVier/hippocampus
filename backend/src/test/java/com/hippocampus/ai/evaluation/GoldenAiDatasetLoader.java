@@ -25,7 +25,7 @@ final class GoldenAiDatasetLoader {
     }
 
     GoldenAiDataset.All loadAll(String version) {
-        if (!Set.of("v1", "v2", "v3", "v4", "v5", "v6").contains(version)) {
+        if (!Set.of("v1", "v2", "v3", "v4", "v5", "v6", "v7").contains(version)) {
             throw new IllegalArgumentException("unsupported Golden AI dataset version: " + version);
         }
         String base = "ai/golden/" + (version.equals("v1") ? "v1" : SOURCE_VERSION) + "/";
@@ -35,20 +35,24 @@ final class GoldenAiDatasetLoader {
                 base + "question-generation-cases.json", GoldenAiDataset.QuestionFile.class, false);
         GoldenAiDataset.ResponseEvaluationFile evaluations = readResource(
                 base + "response-evaluation-cases.json", GoldenAiDataset.ResponseEvaluationFile.class, false);
-        if (Set.of("v3", "v4", "v5", "v6").contains(version)) {
-            String overlayVersion = Set.of("v5", "v6").contains(version) ? "v4" : version;
+        if (Set.of("v3", "v4", "v5", "v6", "v7").contains(version)) {
+            String overlayVersion = Set.of("v5", "v6", "v7").contains(version) ? "v4" : version;
             ResponseEvaluationOverrides overrides = readResource(
                     "ai/golden/" + overlayVersion + "/response-evaluation-rubric-overrides.json",
                     ResponseEvaluationOverrides.class, false);
             evaluations = applyOverrides(evaluations, overrides, overlayVersion);
         }
-        if (Set.of("v5", "v6").contains(version)) {
+        if (Set.of("v5", "v6", "v7").contains(version)) {
             evaluations = applyInputContract(evaluations, readResource(
                     "ai/golden/v5/response-evaluation-input-contract.json", ResponseEvaluationInputContract.class, false));
         }
-        if (version.equals("v6")) {
+        if (Set.of("v6", "v7").contains(version)) {
             evaluations = applyV6Rubric(evaluations, readResource(
                     "ai/golden/v6/response-evaluation-rubric-overrides.json", V6RubricOverride.class, false));
+        }
+        if (version.equals("v7")) {
+            evaluations = applyV7Rubric(evaluations, readResource(
+                    "ai/golden/v7/response-evaluation-rubric-overrides.json", V7RubricOverride.class, false));
         }
         GoldenAiDataset.All validated = validate(explanations, questions, evaluations);
         return new GoldenAiDataset.All(version, validated.explanations(), validated.questions(), validated.responseEvaluations());
@@ -425,4 +429,60 @@ final class GoldenAiDatasetLoader {
             List<List<String>> requiredMissingConceptGroups,
             boolean requireWrongNerveMisconception,
             List<List<String>> requiredFeedbackConceptGroups, String reviewerNotes) {}
+
+    private static GoldenAiDataset.ResponseEvaluationFile applyV7Rubric(
+            GoldenAiDataset.ResponseEvaluationFile evaluations, V7RubricOverride override) {
+        if (!"v7".equals(override.version()) || !"v6".equals(override.basedOn())
+                || !"P7-09-PARTIAL-001".equals(override.caseId())) {
+            throw new IllegalArgumentException("unsupported Golden AI v7 rubric override");
+        }
+        validateConceptGroups(override.requiredCorrectConceptGroups(), override.caseId(), "requiredCorrectConceptGroups");
+        validateConceptGroups(override.requiredMissingConceptGroups(), override.caseId(), "requiredMissingConceptGroups");
+        validateConceptGroups(override.requiredFeedbackConceptGroups(), override.caseId(), "requiredFeedbackConceptGroups");
+        if (!List.of(com.hippocampus.ai.domain.Evaluation.PARTIAL).equals(override.allowedEvaluations())
+                || !List.of(com.hippocampus.ai.domain.Evaluation.CORRECT,
+                        com.hippocampus.ai.domain.Evaluation.INCORRECT).equals(override.forbiddenEvaluations())
+                || !override.requireNoMisconceptions()
+                || override.requiredCorrectConceptGroups().size() != 1
+                || override.requiredCorrectConceptGroups().getFirst().stream().anyMatch(
+                        value -> normalize(value).contains("radial nerve"))
+                || override.requiredCorrectConceptGroups().getFirst().stream().noneMatch(
+                        value -> normalize(value).contains("denervat"))
+                || override.requiredMissingConceptGroups().size() != 2
+                || override.requiredFeedbackConceptGroups().size() != 2
+                || override.requiredMissingConceptGroups().getFirst().stream().noneMatch(
+                        value -> normalize(value).contains("radial nerve"))
+                || override.requiredFeedbackConceptGroups().getFirst().stream().noneMatch(
+                        value -> normalize(value).contains("radial nerve"))
+                || override.requiredMissingConceptGroups().get(1).stream().noneMatch(
+                        value -> normalize(value).contains("wrist drop"))
+                || override.requiredFeedbackConceptGroups().get(1).stream().noneMatch(
+                        value -> normalize(value).contains("wrist drop"))) {
+            throw new IllegalArgumentException("incomplete Golden AI v7 Case 3 rubric");
+        }
+        requiredText(override.reviewerNotes(), "reviewerNotes");
+        if (evaluations.cases().stream().noneMatch(value -> value.caseId().equals(override.caseId()))) {
+            throw new IllegalArgumentException("v7 rubric references unknown case");
+        }
+        List<GoldenAiDataset.ResponseEvaluationCase> cases = evaluations.cases().stream().map(value -> {
+            if (!value.caseId().equals(override.caseId())) return value;
+            return new GoldenAiDataset.ResponseEvaluationCase(
+                    value.caseId(), value.subject(), value.topic(), value.question(), value.expectedConcepts(),
+                    value.expectedAnswer(), value.studentResponse(), value.groundingMode(), value.learner(),
+                    value.sourceEvidence(), override.allowedEvaluations(), override.forbiddenEvaluations(),
+                    override.requiredCorrectConceptGroups(), override.requiredMissingConceptGroups(),
+                    value.allowedMisconceptionGroups(), override.requiredFeedbackConceptGroups(),
+                    value.requireNoMissingConcepts(), override.requireNoMisconceptions(),
+                    value.forbiddenOutputTerms(), override.reviewerNotes());
+        }).toList();
+        return new GoldenAiDataset.ResponseEvaluationFile(evaluations.version(), evaluations.task(), cases);
+    }
+
+    private record V7RubricOverride(String version, String basedOn, String caseId,
+            List<com.hippocampus.ai.domain.Evaluation> allowedEvaluations,
+            List<com.hippocampus.ai.domain.Evaluation> forbiddenEvaluations,
+            List<List<String>> requiredCorrectConceptGroups,
+            List<List<String>> requiredMissingConceptGroups,
+            List<List<String>> requiredFeedbackConceptGroups,
+            boolean requireNoMisconceptions, String reviewerNotes) {}
 }

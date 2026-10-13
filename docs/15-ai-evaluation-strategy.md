@@ -4,7 +4,7 @@ Audience: Architecture, AI, backend, QA, product, medical-education
 Authors: Project Hippocampus Team
 Created: 2026-08-23
 Document ID: 15
-Last Updated: 2026-10-08
+Last Updated: 2026-10-11
 Owner: Project Hippocampus Team
 Prerequisites:
 - 00 - Project Vision
@@ -32,7 +32,7 @@ Scope: Evaluation principles, datasets, rubrics, RAG evaluation,
   analysis, and MVP acceptance criteria.
 Status: Final
 Title: AI Evaluation Strategy
-Version: 1.0.4
+Version: 1.0.5
 ---
 
 # 15 - AI Evaluation Strategy
@@ -702,6 +702,30 @@ discrimination.
 ------------------------------------------------------------------------
 
 # 31. Response Evaluation Quality
+
+Accepted ADR-0012 adds assertion discovery that works when the first model
+proposes zero credit, exact student/source attribution, complete expected
+concept and relevant-assertion coverage, source authorization before model
+use, bounded semantic verification, and a non-scoring `UNGRADED` submission
+path for unresolved assessments. Qualification must prove Case 5's independently
+demonstrated constituent can receive verified partial credit from zero initial
+candidates while Case 3 cannot borrow radial-nerve identification from its
+question. Test source forgery, stale/other-user evidence, negation, paraphrase,
+false attribution, verifier disagreement/failure, unknown stored outcomes,
+and retry/idempotency behavior. Record latency, token/cost, route identity,
+limits, and uncertainty rates for the full flow. A second LLM opinion does not
+replace ADR-0011 independent human semantic review or medical judgment.
+
+The inherited v4 Case 3 `requiredCorrectConceptAlternatives` includes
+radial-nerve identification absent from that student's response. Preserve
+Golden v6 and historical reports. A prospective, separately versioned Golden
+v7 rubric correction must credit only independently demonstrated Case 3
+knowledge, retain the missing nerve identity, and keep Case 5's proportional
+partial-credit and misconception requirements. Golden dataset version and
+production prompt version are separate qualification identity fields. A new
+dataset requires new identity-bound qualification; historical evidence cannot
+be relabeled to pass. ADR-0013's follow-up activity policy is evaluated under
+its separate P7-15 task and P7-14 mission gate, not P7-09 grading remediation.
 
 When AI evaluates an open-ended student response, test:
 
@@ -2010,6 +2034,8 @@ remains overall qualification FAIL even if evidence collection succeeded.
 ------------------------------------------------------------------------
 
 # 91. Revision History
+
+- **1.0.5 — 2026-10-11 — Project Hippocampus Team:** Aligned ADR-0012 verified attribution and ungraded qualification, prospective Golden v7 Case 3 correction, and separate ADR-0013 follow-up task without changing historical evidence.
 
 - **1.0.4 — 2026-10-08 — Project Hippocampus Team:** Clarified ADR-0011 evidence
   collection success versus semantic review and Golden qualification approval.

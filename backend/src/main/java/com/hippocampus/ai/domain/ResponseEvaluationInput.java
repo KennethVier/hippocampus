@@ -7,12 +7,19 @@ public record ResponseEvaluationInput(
         String question,
         List<String> expectedConcepts,
         String expectedAnswer,
-        String studentResponse) implements AiTaskContext {
+        String studentResponse,
+        String sourceReferenceMap,
+        String verificationContext) implements AiTaskContext {
 
     public ResponseEvaluationInput {
         question = ContractChecks.requiredText(question, "question");
         expectedConcepts = ContractChecks.immutableList(expectedConcepts, "expectedConcepts");
         expectedAnswer = ContractChecks.requiredText(expectedAnswer, "expectedAnswer");
         Objects.requireNonNull(studentResponse, "studentResponse must not be null");
+    }
+
+    public ResponseEvaluationInput(String question, List<String> expectedConcepts,
+            String expectedAnswer, String studentResponse) {
+        this(question, expectedConcepts, expectedAnswer, studentResponse, null, null);
     }
 }
