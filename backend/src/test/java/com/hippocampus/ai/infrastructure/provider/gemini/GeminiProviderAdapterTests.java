@@ -105,7 +105,9 @@ class GeminiProviderAdapterTests {
         for (PromptId id : List.of(PromptId.RESPONSE_EVALUATION_V4,
                 PromptId.RESPONSE_EVALUATION_V5, PromptId.RESPONSE_EVALUATION_V6,
                 PromptId.RESPONSE_EVALUATION_V7, PromptId.RESPONSE_EVALUATION_V8,
-                PromptId.RESPONSE_EVALUATION_V9)) {
+                PromptId.RESPONSE_EVALUATION_V9,
+                PromptId.RESPONSE_EVALUATION_DISCOVERY_V1,
+                PromptId.RESPONSE_EVALUATION_VERIFICATION_V1)) {
             ChatModel model = mock(ChatModel.class);
             when(model.call(any(Prompt.class))).thenReturn(new ChatResponse(List.of(
                     new Generation(new AssistantMessage("{}")))));

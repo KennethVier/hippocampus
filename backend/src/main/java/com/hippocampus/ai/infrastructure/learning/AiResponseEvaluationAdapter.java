@@ -37,8 +37,11 @@ import com.hippocampus.rag.domain.EvidencePackage;
 import com.hippocampus.rag.domain.GroundingMode;
 import com.hippocampus.rag.domain.RetrievalDiagnostics;
 import com.hippocampus.rag.domain.RetrievalQuality;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class AiResponseEvaluationAdapter implements ResponseEvaluationPort {
+    private static final Logger LOG = LoggerFactory.getLogger(AiResponseEvaluationAdapter.class);
     private static final ObjectMapper JSON = new ObjectMapper();
     private final AiExecutionOrchestrator orchestrator;
     private final AiTaskExecutionPolicy executionPolicy;
@@ -89,9 +92,12 @@ public final class AiResponseEvaluationAdapter implements ResponseEvaluationPort
                     request.studentResponse(), referenceMap, null);
             Object discovered = executePass(PromptId.RESPONSE_EVALUATION_DISCOVERY_V1,
                     discoveryInput, evidence, deadline);
-            if (!(discovered instanceof ResponseAttributionDiscovery discovery)) {
+            if (!(discovered instanceof ResponseAttributionDiscovery rawDiscovery)) {
                 return VerifiedResponseEvaluationAggregator.uncertain();
             }
+            var normalizedDiscovery = SourceSpanOffsetNormalizer.discovery(rawDiscovery, authorized);
+            auditCorrections(normalizedDiscovery.corrections());
+            ResponseAttributionDiscovery discovery = normalizedDiscovery.value();
             attributionValidator.validateDiscovery(discoveryInput, authorized, discovery);
             if (!discovery.complete()) {
                 return VerifiedResponseEvaluationAggregator.uncertain();
@@ -101,14 +107,26 @@ public final class AiResponseEvaluationAdapter implements ResponseEvaluationPort
                     request.studentResponse(), referenceMap, toJson(discovery));
             Object verified = executePass(PromptId.RESPONSE_EVALUATION_VERIFICATION_V1,
                     verificationInput, evidence, deadline);
-            if (!(verified instanceof ResponseAttributionVerification verification)) {
+            if (!(verified instanceof ResponseAttributionVerification rawVerification)) {
                 return VerifiedResponseEvaluationAggregator.uncertain();
             }
+            var normalizedVerification = SourceSpanOffsetNormalizer.verification(rawVerification, authorized);
+            auditCorrections(normalizedVerification.corrections());
+            ResponseAttributionVerification verification = normalizedVerification.value();
             attributionValidator.validateVerification(
                     verificationInput, authorized, discovery, verification);
             return aggregator.aggregate(verificationInput, discovery, verification);
         } catch (RuntimeException unresolved) {
             return VerifiedResponseEvaluationAggregator.uncertain();
+        }
+    }
+
+    private static void auditCorrections(List<SourceSpanOffsetNormalizer.Correction> corrections) {
+        for (var correction : corrections) {
+            LOG.info("Response evaluation source offset corrected: reference={}, version={}, original=[{},{}), corrected=[{},{})",
+                    correction.sourceReferenceId(), correction.sourceVersion(),
+                    correction.originalStart(), correction.originalEnd(),
+                    correction.correctedStart(), correction.correctedEnd());
         }
     }
 

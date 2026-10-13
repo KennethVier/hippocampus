@@ -112,8 +112,8 @@ class AiResponseEvaluationAdapterTests {
                 List.of(new ResponseAttributionDiscovery.Candidate("c", List.of("a"), 0,
                         "wrist extensor paralysis", "CONSTITUENT",
                         List.of(new ResponseAttributionDiscovery.SourceSpan(
-                                reference.toString(), version.toString(), sourceStart,
-                                sourceStart + "paralyze".length(), "paralyze")))),
+                                reference.toString(), version.toString(), sourceStart + 1,
+                                sourceStart + "paralyze".length() + 1, "paralyze")))),
                 List.of(0), true, List.of());
         var verification = new ResponseAttributionVerification(
                 List.of(new ResponseAttributionVerification.AssertionDisposition("a",

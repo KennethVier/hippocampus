@@ -20,6 +20,21 @@ class PromptTemplateRegistryTests {
     private final PromptTemplateRegistry registry = new PromptTemplateRegistry();
 
     @Test
+    void discoveryInventoryCompletenessAndStudentEvidenceRemainSeparateFromCorrectness() {
+        String prompt = registry.resolveTask(AiTaskType.RESPONSE_EVALUATION,
+                PromptId.RESPONSE_EVALUATION_DISCOVERY_V1.name()).content();
+        assertThat(prompt).contains(
+                "does not mean the student answer is",
+                "An examined but absent expected concept does not make",
+                "Set complete false for an unresolved student assertion",
+                "does not independently demonstrate",
+                "cannot supply a missing student assertion",
+                "independently state the entire expected relation",
+                "Use CONSTITUENT for a meaningful source-",
+                "verification decides candidate fidelity and support");
+    }
+
+    @Test
     void repairBusinessRulesAreConfinedToAtomicResponseEvaluation() {
         for (PromptId id : List.of(PromptId.RESPONSE_EVALUATION_V4, PromptId.RESPONSE_EVALUATION_V5,
                 PromptId.RESPONSE_EVALUATION_V6)) {
@@ -507,7 +522,7 @@ class PromptTemplateRegistryTests {
                         "f325582f1220a06baaacd2d1b477dc444c9c4f3b312df53a5fe7ea491848513f"),
                 Map.entry(
                 PromptId.RESPONSE_EVALUATION_DISCOVERY_V1,
-                        "2eaf835de59663573263fa5250b32cb7db20084b77d545acd4112949601a69d5"),
+                        "6545c186d6f3d17ca805799728d30d09783a800c3b77c844ff09fa2fda41871f"),
                 Map.entry(
                 PromptId.RESPONSE_EVALUATION_VERIFICATION_V1,
                         "0f9ffbcf515d73ebce3444a160e43461cc2fdaa58dbf12c49b02771dd3d9b19d"),

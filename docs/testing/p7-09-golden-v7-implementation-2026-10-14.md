@@ -68,6 +68,22 @@ rerun by the user.
 ## Two-pass live collector preparation (2026-10-14)
 
 Created test-only live collector `GoldenResponseAdapterLiveCollector` and its test suite `GoldenResponseAdapterLiveCollectorTests` for the current production two-pass `AiResponseEvaluationAdapter`:
+
+The live collector requires an explicit provider, model, positive model-specific input/output token prices, and limits before dispatch. For example, from `backend` with `GEMINI_API_KEY` provisioned:
+
+```powershell
+$env:HIPPOCAMPUS_LIVE_AI_GOLDEN_ADAPTER = 'true'
+$env:HIPPOCAMPUS_LIVE_AI_GOLDEN_PROVIDER = 'GEMINI'
+$env:HIPPOCAMPUS_GEMINI_SMOKE_MODEL = '<explicit model>'
+$env:HIPPOCAMPUS_LIVE_AI_COST_PER_MILLION_INPUT = '<verified USD price for that model>'
+$env:HIPPOCAMPUS_LIVE_AI_COST_PER_MILLION_OUTPUT = '<verified USD price for that model>'
+$env:HIPPOCAMPUS_LIVE_AI_GOLDEN_MAX_REQUESTS = '25'
+$env:HIPPOCAMPUS_LIVE_AI_GOLDEN_MAX_TOKENS = '100000'
+$env:HIPPOCAMPUS_LIVE_AI_GOLDEN_MAX_COST_USD = '1.00'
+.\mvnw.cmd '-Dtest=GoldenResponseAdapterLiveCollector#collectsLiveGoldenV7EvidenceWhenExplicitlyAuthorized' test
+```
+
+The configured prices are operator supplied estimates, not verified by the collector. Provider token reporting and post-request billing can exceed an estimated allowance; this is not a mathematically absolute dollar ceiling. No live execution is authorized by this example.
 - Exercises discovery pass (`RESPONSE_EVALUATION_DISCOVERY_V1`), verification pass (`RESPONSE_EVALUATION_VERIFICATION_V1`), and `VerifiedResponseEvaluationAggregator`.
 - Supports all 9 Golden v7 response-evaluation cases.
 - Captures discovery and verification records, validated final evaluations, semantic matcher evaluation, diagnostic metadata, source references, model identity, token usage, latency, and cost estimates.

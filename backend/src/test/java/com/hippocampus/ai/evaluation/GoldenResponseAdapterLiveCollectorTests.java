@@ -8,16 +8,28 @@ import com.hippocampus.ai.application.provider.ProviderEventStream;
 import com.hippocampus.ai.application.provider.ProviderExecutionRequest;
 import com.hippocampus.ai.application.provider.ProviderExecutionResult;
 import com.hippocampus.ai.application.provider.ProviderUsage;
+import com.hippocampus.ai.application.prompt.PromptContext;
+import com.hippocampus.ai.application.prompt.PromptId;
 import com.hippocampus.ai.application.routing.ProviderId;
+import com.hippocampus.ai.application.routing.ProviderRoute;
+import com.hippocampus.ai.domain.AiOutputContract;
 import com.hippocampus.ai.domain.AiTaskType;
+import com.hippocampus.materials.domain.ChunkSourceTarget;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.time.Duration;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.TreeMap;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
 
 class GoldenResponseAdapterLiveCollectorTests {
 
@@ -44,7 +56,7 @@ class GoldenResponseAdapterLiveCollectorTests {
     }
 
     @Test
-    void qualificationIdentityHasCompleteCryptographicInputs() throws IOException {
+    void qualificationIdentityHasCompleteCryptographicInputs() throws Exception {
         var identity = GoldenResponseAdapterLiveCollector.currentIdentity("GEMINI", "gemini-2.5-flash");
 
         assertThat(identity.version()).isEqualTo("P7-09-two-pass-adapter-v1");
@@ -58,6 +70,31 @@ class GoldenResponseAdapterLiveCollectorTests {
                 .containsKey("src/test/resources/ai/golden/v7/response-evaluation-rubric-overrides.json");
 
         assertThat(identity.fingerprint()).hasSize(64);
+        var changedLimits = new GoldenResponseAdapterLiveCollector.CollectorLimits(
+                24, 100_000, 120, new BigDecimal("1.00"), 0);
+        var changed = GoldenResponseAdapterLiveCollector.currentIdentity(
+                "GEMINI", "gemini-2.5-flash", changedLimits,
+                GoldenResponseAdapterLiveCollector.CostRates.defaults());
+        assertThat(changed.fingerprint()).isNotEqualTo(identity.fingerprint());
+        assertThat(identity.inputs()).containsKey(
+                "src/main/java/com/hippocampus/ai/application/prompt/PromptTemplateRegistry.java");
+        String geminiAdapter = "src/main/java/com/hippocampus/ai/infrastructure/provider/gemini/GeminiProviderAdapter.java";
+        assertThat(identity.inputs()).containsKey(geminiAdapter);
+        assertThat(identity.inputs().get(geminiAdapter)).hasSize(64);
+        assertThat(identity.inputs()).containsKey(
+                "src/main/java/com/hippocampus/ai/infrastructure/learning/SourceSpanOffsetNormalizer.java");
+        for (String file : List.of(
+                "src/main/java/com/hippocampus/ai/infrastructure/provider/ProviderStructuredOutputSchema.java",
+                "src/main/java/com/hippocampus/ai/application/validation/AiOutputValidator.java")) {
+            String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(Files.readAllBytes(Path.of(file))));
+            assertThat(identity.inputs()).containsEntry(file, hash);
+            var modifiedInputs = new TreeMap<>(identity.inputs());
+            modifiedInputs.put(file, "changed implementation hash");
+            String changedFingerprint = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(new ObjectMapper().writeValueAsBytes(modifiedInputs)));
+            assertThat(changedFingerprint).isNotEqualTo(identity.fingerprint());
+        }
     }
 
     @Test
@@ -181,7 +218,7 @@ class GoldenResponseAdapterLiveCollectorTests {
     }
 
     @Test
-    void enforcesMaxRequestsLimit() {
+    void enforcesMaxRequestsLimit() throws IOException {
         SyntheticRecordingAdapter mockAdapter = new SyntheticRecordingAdapter(sequence("{}", "{}"));
         var liveProvider = new GoldenResponseAdapterLiveCollector.LiveProvider(
                 ProviderId.GEMINI, "offline-test-model", mockAdapter, "test");
@@ -190,9 +227,125 @@ class GoldenResponseAdapterLiveCollectorTests {
                 1, 100_000L, 120L, new BigDecimal("1.00"), 0L);
         var rates = GoldenResponseAdapterLiveCollector.CostRates.defaults();
 
-        assertThatThrownBy(() -> GoldenResponseAdapterLiveCollector.runCollection(
-                liveProvider, limits, rates, "P7-09-PARTIAL-001"))
-                .isInstanceOf(Exception.class);
+        var report = GoldenResponseAdapterLiveCollector.runCollection(
+                liveProvider, limits, rates, "P7-09-PARTIAL-001");
+        assertThat(report).isNotNull();
+        assertThat(report.totals().totalRequests()).isEqualTo(1);
+        assertThat(report.cases().getFirst().diagnosticMetadata()).containsKey("limitViolation");
+        assertThat(mockAdapter.requests).hasSize(1);
+    }
+
+    @Test
+    void rejectsInvalidConfigurationAndNormalizesProvider() {
+        assertThat(GoldenResponseAdapterLiveCollector.normalizeProvider(" GEMINI ")).isEqualTo("gemini");
+        assertThat(GoldenResponseAdapterLiveCollector.normalizeProvider("OLLAMA_CLOUD")).isEqualTo("ollama-cloud");
+        assertThatThrownBy(() -> GoldenResponseAdapterLiveCollector.normalizeProvider("other"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new GoldenResponseAdapterLiveCollector.CollectorLimits(
+                0, 100, 10, BigDecimal.ONE, 0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new GoldenResponseAdapterLiveCollector.CostRates(
+                BigDecimal.ZERO, BigDecimal.ONE)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void missingUsageStopsBeforeAnotherDispatch() {
+        SyntheticRecordingAdapter delegate = new SyntheticRecordingAdapter(request -> new ProviderExecutionResult(
+                ProviderId.GEMINI, "offline-test-model", "{}", ProviderUsage.NONE, Duration.ZERO));
+        var tracker = tracker(delegate, GoldenResponseAdapterLiveCollector.CollectorLimits.defaultLimits());
+        var request = request(PromptId.RESPONSE_EVALUATION_DISCOVERY_V1);
+        assertThatThrownBy(() -> tracker.execute(request)).hasMessageContaining("usage unavailable");
+        assertThatThrownBy(() -> tracker.execute(request)).hasMessageContaining("collector stopped");
+        assertThat(delegate.requests).hasSize(1);
+    }
+
+    @Test
+    void preRequestBudgetRejectsWithoutDispatch() {
+        SyntheticRecordingAdapter delegate = new SyntheticRecordingAdapter(sequence("{}"));
+        var limits = new GoldenResponseAdapterLiveCollector.CollectorLimits(
+                5, 50, 120, BigDecimal.ONE, 0);
+        var tracker = tracker(delegate, limits);
+        assertThatThrownBy(() -> tracker.execute(request(PromptId.RESPONSE_EVALUATION_DISCOVERY_V1)))
+                .hasMessageContaining("pre-request token allowance");
+        assertThat(delegate.requests).isEmpty();
+    }
+
+    @Test
+    void failedRequestWithUnknownUsageStopsFurtherDispatch() {
+        AtomicInteger count = new AtomicInteger();
+        SyntheticRecordingAdapter delegate = new SyntheticRecordingAdapter(request -> {
+            if (count.getAndIncrement() == 0) throw new IllegalStateException("first failed");
+            return new ProviderExecutionResult(ProviderId.GEMINI, "offline-test-model", "{}",
+                    ProviderUsage.of(10, 10, 20), Duration.ofMillis(2));
+        });
+        var tracker = tracker(delegate, GoldenResponseAdapterLiveCollector.CollectorLimits.defaultLimits());
+        assertThatThrownBy(() -> tracker.execute(request(PromptId.RESPONSE_EVALUATION_DISCOVERY_V1)))
+                .hasMessageContaining("first failed");
+        assertThatThrownBy(() -> tracker.execute(request(PromptId.RESPONSE_EVALUATION_VERIFICATION_V1)))
+                .hasMessageContaining("collector stopped");
+        assertThat(tracker.usageUnknown()).isTrue();
+        assertThat(tracker.findAttempt(PromptId.RESPONSE_EVALUATION_DISCOVERY_V1).orElseThrow().result()).isEmpty();
+        assertThat(tracker.findAttempt(PromptId.RESPONSE_EVALUATION_DISCOVERY_V1).orElseThrow().failure()).isPresent();
+        assertThat(tracker.findAttempt(PromptId.RESPONSE_EVALUATION_VERIFICATION_V1)).isEmpty();
+        assertThat(delegate.requests).hasSize(1);
+    }
+
+    @Test
+    void unknownUsageStopsCollectionAndLeavesTotalsUnknown() throws IOException {
+        SyntheticRecordingAdapter delegate = new SyntheticRecordingAdapter(request -> {
+            throw new IllegalStateException("provider failed without usage");
+        });
+        var liveProvider = new GoldenResponseAdapterLiveCollector.LiveProvider(
+                ProviderId.GEMINI, "offline-test-model", delegate, "test");
+
+        var report = GoldenResponseAdapterLiveCollector.runCollection(liveProvider,
+                GoldenResponseAdapterLiveCollector.CollectorLimits.defaultLimits(),
+                GoldenResponseAdapterLiveCollector.CostRates.defaults(), null);
+
+        assertThat(report.cases()).hasSize(1);
+        assertThat(delegate.requests).hasSize(1);
+        assertThat(report.cases().getFirst().diagnosticMetadata())
+                .containsEntry("usageUnknown", "true")
+                .containsKey("limitViolation")
+                .containsKey("request.0.failure");
+        assertThat(report.totals().totalRequests()).isEqualTo(1);
+        assertThat(report.totals().totalInputTokens()).isNull();
+        assertThat(report.totals().totalOutputTokens()).isNull();
+        assertThat(report.totals().totalTokens()).isNull();
+        assertThat(report.totals().totalEstimatedCostUsd()).isNull();
+        assertThat(report.evidenceCollectionStatus())
+                .isEqualTo(GoldenResponseAdapterLiveCollector.Status.FAIL);
+    }
+
+    @Test
+    void syntheticSourcesAreLimitedToCurrentCaseAndMaterial() throws IOException {
+        var cases = new GoldenAiDatasetLoader().loadAll("v7").responseEvaluations();
+        var current = cases.getFirst();
+        var repository = new GoldenResponseAdapterLiveCollector.GoldenSourceReferenceRepository(current);
+        UUID user = UUID.fromString("00000000-0000-0000-0000-000000000709");
+        UUID material = UUID.fromString("00000000-0000-0000-0000-000000000710");
+        UUID version = user;
+        UUID chunk = UUID.fromString(current.sourceEvidence().getFirst().sourceId());
+        assertThat(repository.findAuthorizedTarget(user, new ChunkSourceTarget(material, version, chunk))).isPresent();
+        assertThat(repository.findAuthorizedTarget(UUID.randomUUID(), new ChunkSourceTarget(material, version, chunk))).isEmpty();
+        assertThat(repository.findAuthorizedTarget(user, new ChunkSourceTarget(UUID.randomUUID(), version, chunk))).isEmpty();
+        assertThat(repository.findAuthorizedTarget(user, new ChunkSourceTarget(material, version, UUID.randomUUID()))).isEmpty();
+    }
+
+    private static GoldenResponseAdapterLiveCollector.TrackingProviderAdapter tracker(
+            AiProviderAdapter delegate, GoldenResponseAdapterLiveCollector.CollectorLimits limits) {
+        return new GoldenResponseAdapterLiveCollector.TrackingProviderAdapter(
+                delegate, new GoldenResponseAdapterLiveCollector.RequestPacer(0, ignored -> {}),
+                "offline-test-model", limits, GoldenResponseAdapterLiveCollector.CostRates.defaults(),
+                new AtomicInteger(), new java.util.concurrent.atomic.AtomicLong(),
+                new java.util.concurrent.atomic.AtomicLong());
+    }
+
+    private static ProviderExecutionRequest request(PromptId promptId) {
+        return new ProviderExecutionRequest(AiTaskType.RESPONSE_EVALUATION,
+                AiOutputContract.RESPONSE_EVALUATION,
+                new PromptContext(PromptId.HIPPOCAMPUS_SYSTEM_V1, promptId,
+                        "system", "task", 10, 64, List.of()),
+                new ProviderRoute.Target(ProviderId.GEMINI, "offline-test-model"));
     }
 
     private static Function<ProviderExecutionRequest, ProviderExecutionResult> sequence(

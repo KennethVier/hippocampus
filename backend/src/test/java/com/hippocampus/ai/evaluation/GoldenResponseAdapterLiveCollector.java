@@ -64,13 +64,13 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Locale;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -130,6 +130,14 @@ public class GoldenResponseAdapterLiveCollector {
             BigDecimal maxCostUsd,
             long delayMillis) {
 
+        public CollectorLimits {
+            if (maxRequests <= 0 || maxTokens <= 0 || timeoutSeconds <= 0
+                    || maxCostUsd == null || maxCostUsd.signum() <= 0 || delayMillis < 0
+                    || timeoutSeconds > Long.MAX_VALUE / 1000) {
+                throw new IllegalArgumentException("invalid live collector limits");
+            }
+        }
+
         public static final int DEFAULT_MAX_REQUESTS = 25;
         public static final long DEFAULT_MAX_TOKENS = 100_000L;
         public static final long DEFAULT_TIMEOUT_SECONDS = 120L;
@@ -147,6 +155,12 @@ public class GoldenResponseAdapterLiveCollector {
     }
 
     public record CostRates(BigDecimal perMillionInputTokens, BigDecimal perMillionOutputTokens) {
+        public CostRates {
+            if (perMillionInputTokens == null || perMillionOutputTokens == null
+                    || perMillionInputTokens.signum() <= 0 || perMillionOutputTokens.signum() <= 0) {
+                throw new IllegalArgumentException("positive model-specific input and output prices are required");
+            }
+        }
         public static final BigDecimal DEFAULT_INPUT_RATE = new BigDecimal("0.10");
         public static final BigDecimal DEFAULT_OUTPUT_RATE = new BigDecimal("0.40");
 
@@ -157,10 +171,10 @@ public class GoldenResponseAdapterLiveCollector {
         public BigDecimal estimate(long inputTokens, long outputTokens) {
             BigDecimal inputCost = BigDecimal.valueOf(inputTokens)
                     .multiply(perMillionInputTokens)
-                    .divide(BigDecimal.valueOf(1_000_000), 6, RoundingMode.HALF_UP);
+                    .divide(BigDecimal.valueOf(1_000_000), 12, RoundingMode.UP);
             BigDecimal outputCost = BigDecimal.valueOf(outputTokens)
                     .multiply(perMillionOutputTokens)
-                    .divide(BigDecimal.valueOf(1_000_000), 6, RoundingMode.HALF_UP);
+                    .divide(BigDecimal.valueOf(1_000_000), 12, RoundingMode.UP);
             return inputCost.add(outputCost);
         }
     }
@@ -237,9 +251,9 @@ public class GoldenResponseAdapterLiveCollector {
 
     public record CollectorTotals(
             int totalRequests,
-            long totalInputTokens,
-            long totalOutputTokens,
-            long totalTokens,
+            Long totalInputTokens,
+            Long totalOutputTokens,
+            Long totalTokens,
             long totalLatencyMs,
             BigDecimal totalEstimatedCostUsd) {}
 
@@ -304,10 +318,8 @@ public class GoldenResponseAdapterLiveCollector {
     }
 
     public static CostRates parseCostRates() {
-        BigDecimal inputRate = parseBigDecimal(
-                System.getenv(INPUT_COST_PER_MILLION_ENVIRONMENT), CostRates.DEFAULT_INPUT_RATE);
-        BigDecimal outputRate = parseBigDecimal(
-                System.getenv(OUTPUT_COST_PER_MILLION_ENVIRONMENT), CostRates.DEFAULT_OUTPUT_RATE);
+        BigDecimal inputRate = parseBigDecimal(requiredEnvironment(INPUT_COST_PER_MILLION_ENVIRONMENT), null);
+        BigDecimal outputRate = parseBigDecimal(requiredEnvironment(OUTPUT_COST_PER_MILLION_ENVIRONMENT), null);
         return new CostRates(inputRate, outputRate);
     }
 
@@ -316,6 +328,14 @@ public class GoldenResponseAdapterLiveCollector {
             CollectorLimits limits,
             CostRates costRates,
             String caseFilter) throws IOException {
+
+        Objects.requireNonNull(liveProvider, "liveProvider");
+        Objects.requireNonNull(limits, "limits");
+        Objects.requireNonNull(costRates, "costRates");
+        if (liveProvider.configuredModel() == null || liveProvider.configuredModel().isBlank()
+                || liveProvider.adapter() == null || liveProvider.adapter().providerId() != liveProvider.providerId()) {
+            throw new IllegalArgumentException("explicit model and matching provider adapter are required");
+        }
 
         GoldenAiDataset.All dataset = new GoldenAiDatasetLoader().loadAll(DATASET_VERSION);
         List<GoldenAiDataset.ResponseEvaluationCase> allCases = dataset.responseEvaluations();
@@ -335,7 +355,8 @@ public class GoldenResponseAdapterLiveCollector {
             throw new IllegalStateException("Golden v7 response evaluations must contain exactly 9 cases");
         }
 
-        QualificationIdentity identity = currentIdentity(liveProvider.providerId().name(), liveProvider.configuredModel());
+        QualificationIdentity identity = currentIdentity(
+                liveProvider.providerId().name(), liveProvider.configuredModel(), limits, costRates);
         RequestPacer pacer = new RequestPacer(limits.delayMillis(), GoldenResponseAdapterLiveCollector::sleep);
         GoldenAiSemanticEvaluator semanticEvaluator = new GoldenAiSemanticEvaluator();
 
@@ -350,20 +371,25 @@ public class GoldenResponseAdapterLiveCollector {
                     golden, liveProvider, limits, costRates, pacer, semanticEvaluator,
                     totalRequests, totalInputTokens, totalOutputTokens, totalLatencyMs);
             entries.add(entry);
+            if (entry.diagnosticMetadata().containsKey("limitViolation")) {
+                break;
+            }
         }
 
+        boolean usageUnknown = entries.stream().anyMatch(entry ->
+                "true".equals(entry.diagnosticMetadata().get("usageUnknown")));
         long allTokens = totalInputTokens.get() + totalOutputTokens.get();
         BigDecimal totalCost = costRates.estimate(totalInputTokens.get(), totalOutputTokens.get());
 
         CollectorTotals totals = new CollectorTotals(
                 totalRequests.get(),
-                totalInputTokens.get(),
-                totalOutputTokens.get(),
-                allTokens,
+                usageUnknown ? null : totalInputTokens.get(),
+                usageUnknown ? null : totalOutputTokens.get(),
+                usageUnknown ? null : allTokens,
                 totalLatencyMs.get(),
-                totalCost);
+                usageUnknown ? null : totalCost);
 
-        boolean allCollectionPass = entries.stream()
+        boolean allCollectionPass = entries.size() == targetCases.size() && entries.stream()
                 .allMatch(e -> e.evidenceCollectionStatus() == PASS);
 
         return new EvaluationReport(
@@ -475,11 +501,6 @@ public class GoldenResponseAdapterLiveCollector {
             requestManager.close();
         }
 
-        if (trackingAdapter.limitViolation() != null) {
-            throw new IllegalStateException("Collector limit exceeded for case " + caseId + ": "
-                    + trackingAdapter.limitViolation().getMessage(), trackingAdapter.limitViolation());
-        }
-
         long caseLatencyMs = (System.nanoTime() - startNs) / 1_000_000L;
         totalLatencyMs.addAndGet(caseLatencyMs);
 
@@ -501,9 +522,7 @@ public class GoldenResponseAdapterLiveCollector {
                     refStrings,
                     portResult.validated());
         } else {
-            finalEvaluationRecord = new FinalEvaluationRecord(
-                    "UNCERTAIN", List.of(), List.of(), List.of(), "",
-                    "LIMITED", "MANUAL_REVIEW", List.of(), false);
+            finalEvaluationRecord = null;
         }
 
         SemanticMatcherRecord semanticMatcherRecord;
@@ -521,7 +540,7 @@ public class GoldenResponseAdapterLiveCollector {
             GoldenAiSemanticEvaluator.Result evalResult = semanticEvaluator.evaluate(golden, evaluationResult);
             semanticMatcherRecord = new SemanticMatcherRecord(evalResult.passed(), evalResult.failedRules());
         } else {
-            semanticMatcherRecord = new SemanticMatcherRecord(false, List.of("no-evaluated-output"));
+            semanticMatcherRecord = null;
         }
 
         Map<String, String> diagnostics = buildDiagnostics(
@@ -534,7 +553,7 @@ public class GoldenResponseAdapterLiveCollector {
                 && verificationRecord.valid();
         Status evidenceStatus = contractPassed ? PASS : FAIL;
         Status contractStatus = contractPassed ? PASS : FAIL;
-        Status semanticStatus = semanticMatcherRecord.passed() ? PASS : FAIL;
+        Status semanticStatus = semanticMatcherRecord == null ? NOT_RUN : semanticMatcherRecord.passed() ? PASS : FAIL;
 
         return new CaseReportEntry(
                 caseId,
@@ -560,9 +579,10 @@ public class GoldenResponseAdapterLiveCollector {
     private static DiscoveryRecord extractDiscoveryRecord(
             TrackingStructuredOutputDecoder decoder, TrackingProviderAdapter trackingAdapter) {
         var optResult = decoder.findLatest(ResponseAttributionDiscovery.class);
-        var optProviderResult = trackingAdapter.findResult(PromptId.RESPONSE_EVALUATION_DISCOVERY_V1);
+        var attempt = trackingAdapter.findAttempt(PromptId.RESPONSE_EVALUATION_DISCOVERY_V1);
+        var optProviderResult = attempt.flatMap(RequestAttempt::result);
 
-        boolean executed = optProviderResult.isPresent();
+        boolean executed = attempt.isPresent();
         boolean valid = optResult.isPresent();
         ResponseAttributionDiscovery output = optResult.orElse(null);
 
@@ -570,8 +590,9 @@ public class GoldenResponseAdapterLiveCollector {
         Integer outTokens = optProviderResult.flatMap(r -> r.usage().outputTokens()).orElse(null);
         Long latency = optProviderResult.map(r -> r.latency().toMillis()).orElse(null);
         String finish = optProviderResult.flatMap(ProviderExecutionResult::finishReason).orElse(null);
-        String error = decoder.findError(ResponseAttributionDiscovery.class)
-                .map(Throwable::getMessage).orElse(null);
+        String error = attempt.flatMap(RequestAttempt::failure).map(Throwable::toString)
+                .orElseGet(() -> decoder.findError(ResponseAttributionDiscovery.class)
+                        .map(Throwable::toString).orElse(null));
 
         return new DiscoveryRecord(
                 PromptId.RESPONSE_EVALUATION_DISCOVERY_V1.name(), "1",
@@ -581,9 +602,10 @@ public class GoldenResponseAdapterLiveCollector {
     private static VerificationRecord extractVerificationRecord(
             TrackingStructuredOutputDecoder decoder, TrackingProviderAdapter trackingAdapter) {
         var optResult = decoder.findLatest(ResponseAttributionVerification.class);
-        var optProviderResult = trackingAdapter.findResult(PromptId.RESPONSE_EVALUATION_VERIFICATION_V1);
+        var attempt = trackingAdapter.findAttempt(PromptId.RESPONSE_EVALUATION_VERIFICATION_V1);
+        var optProviderResult = attempt.flatMap(RequestAttempt::result);
 
-        boolean executed = optProviderResult.isPresent();
+        boolean executed = attempt.isPresent();
         boolean valid = optResult.isPresent();
         ResponseAttributionVerification output = optResult.orElse(null);
 
@@ -591,8 +613,9 @@ public class GoldenResponseAdapterLiveCollector {
         Integer outTokens = optProviderResult.flatMap(r -> r.usage().outputTokens()).orElse(null);
         Long latency = optProviderResult.map(r -> r.latency().toMillis()).orElse(null);
         String finish = optProviderResult.flatMap(ProviderExecutionResult::finishReason).orElse(null);
-        String error = decoder.findError(ResponseAttributionVerification.class)
-                .map(Throwable::getMessage).orElse(null);
+        String error = attempt.flatMap(RequestAttempt::failure).map(Throwable::toString)
+                .orElseGet(() -> decoder.findError(ResponseAttributionVerification.class)
+                        .map(Throwable::toString).orElse(null));
 
         return new VerificationRecord(
                 PromptId.RESPONSE_EVALUATION_VERIFICATION_V1.name(), "1",
@@ -605,6 +628,18 @@ public class GoldenResponseAdapterLiveCollector {
         metadata.put("totalCaseLatencyMs", Long.toString(totalLatencyMs));
         metadata.put("providerRequests", Integer.toString(adapter.requests().size()));
         metadata.put("structuredRepairUsed", Boolean.toString(adapter.structuredRepairUsed()));
+        if (adapter.limitViolation() != null) {
+            metadata.put("limitViolation", adapter.limitViolation().getMessage());
+        }
+        if (adapter.usageUnknown()) {
+            metadata.put("usageUnknown", "true");
+        }
+        for (int i = 0; i < adapter.attempts().size(); i++) {
+            RequestAttempt attempt = adapter.attempts().get(i);
+            String requestKey = "request." + i;
+            metadata.put(requestKey + ".prompt", attempt.request().promptContext().taskPromptId().name());
+            attempt.failure().ifPresent(f -> metadata.put(requestKey + ".failure", f.toString()));
+        }
         if (error != null) {
             metadata.put("executionError", error.getClass().getSimpleName() + ": " + error.getMessage());
         }
@@ -612,12 +647,24 @@ public class GoldenResponseAdapterLiveCollector {
     }
 
     public static QualificationIdentity currentIdentity(String provider, String model) throws IOException {
+        return currentIdentity(provider, model, CollectorLimits.defaultLimits(), CostRates.defaults());
+    }
+
+    public static QualificationIdentity currentIdentity(
+            String provider, String model, CollectorLimits limits, CostRates rates) throws IOException {
         Path backend = Files.isDirectory(Path.of("src/main/java")) ? Path.of(".") : Path.of("backend");
         Map<String, String> inputs = new TreeMap<>();
         inputs.put("dataset", DATASET_VERSION);
         inputs.put("datasetRubric", "v7 (v2 base + v4 rubric + v5 input contract + v6 rubric override + v7 rubric override)");
         inputs.put("provider", provider);
         inputs.put("model", model);
+        inputs.put("maxRequests", Integer.toString(limits.maxRequests()));
+        inputs.put("maxTokens", Long.toString(limits.maxTokens()));
+        inputs.put("timeoutSeconds", Long.toString(limits.timeoutSeconds()));
+        inputs.put("maxCostUsd", limits.maxCostUsd().stripTrailingZeros().toPlainString());
+        inputs.put("delayMillis", Long.toString(limits.delayMillis()));
+        inputs.put("inputCostPerMillion", rates.perMillionInputTokens().stripTrailingZeros().toPlainString());
+        inputs.put("outputCostPerMillion", rates.perMillionOutputTokens().stripTrailingZeros().toPlainString());
         inputs.put("discoveryPrompt", PromptId.RESPONSE_EVALUATION_DISCOVERY_V1.name());
         inputs.put("verificationPrompt", PromptId.RESPONSE_EVALUATION_VERIFICATION_V1.name());
         inputs.put("repairPrompt", PromptId.STRUCTURED_OUTPUT_REPAIR_V1.name());
@@ -630,6 +677,12 @@ public class GoldenResponseAdapterLiveCollector {
         for (String file : List.of(
                 "pom.xml",
                 "src/main/java/com/hippocampus/ai/infrastructure/learning/AiResponseEvaluationAdapter.java",
+                "src/main/java/com/hippocampus/ai/infrastructure/learning/SourceSpanOffsetNormalizer.java",
+                "src/main/java/com/hippocampus/ai/infrastructure/provider/gemini/GeminiProviderAdapter.java",
+                "src/main/java/com/hippocampus/ai/infrastructure/provider/ProviderStructuredOutputSchema.java",
+                "src/main/java/com/hippocampus/ai/application/prompt/PromptTemplateRegistry.java",
+                "src/main/java/com/hippocampus/ai/application/prompt/PromptContextBuilder.java",
+                "src/main/java/com/hippocampus/ai/application/validation/AiOutputValidator.java",
                 "src/main/java/com/hippocampus/ai/application/validation/ResponseAttributionValidator.java",
                 "src/main/java/com/hippocampus/ai/application/validation/VerifiedResponseEvaluationAggregator.java",
                 "src/test/java/com/hippocampus/ai/evaluation/GoldenResponseAdapterLiveCollector.java",
@@ -639,9 +692,8 @@ public class GoldenResponseAdapterLiveCollector {
                 "src/test/resources/ai/golden/v6/response-evaluation-rubric-overrides.json",
                 "src/test/resources/ai/golden/v7/response-evaluation-rubric-overrides.json")) {
             Path target = backend.resolve(file);
-            if (Files.exists(target)) {
-                inputs.put(file, sha256Hex(Files.readAllBytes(target)));
-            }
+            if (!Files.isRegularFile(target)) throw new IOException("missing qualification input: " + target);
+            inputs.put(file, sha256Hex(Files.readAllBytes(target)));
         }
         return new QualificationIdentity(
                 "P7-09-two-pass-adapter-v1",
@@ -650,12 +702,20 @@ public class GoldenResponseAdapterLiveCollector {
     }
 
     private static LiveProvider liveProvider() {
-        String provider = requiredEnvironment(PROVIDER_ENVIRONMENT);
-        return switch (provider) {
+        return switch (normalizeProvider(requiredEnvironment(PROVIDER_ENVIRONMENT))) {
             case "gemini" -> geminiProvider();
             case "ollama-cloud" -> ollamaProvider();
-            default -> throw new IllegalArgumentException("unsupported live Golden AI provider: " + provider);
+            default -> throw new IllegalStateException("unreachable provider");
         };
+    }
+
+    static String normalizeProvider(String provider) {
+        if (provider == null) throw new IllegalArgumentException("provider is required");
+        String normalized = provider.trim().toLowerCase(Locale.ROOT).replace('_', '-');
+        if (!normalized.equals("gemini") && !normalized.equals("ollama-cloud")) {
+            throw new IllegalArgumentException("unsupported live Golden AI provider: " + provider);
+        }
+        return normalized;
     }
 
     private static LiveProvider geminiProvider() {
@@ -744,7 +804,7 @@ public class GoldenResponseAdapterLiveCollector {
         if (value == null || value.isBlank()) return defaultValue;
         try {
             BigDecimal parsed = new BigDecimal(value.trim());
-            if (parsed.signum() < 0) throw new IllegalArgumentException("must not be negative: " + value);
+            if (parsed.signum() <= 0) throw new IllegalArgumentException("must be positive: " + value);
             return parsed;
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("invalid decimal: " + value, e);
@@ -778,6 +838,9 @@ public class GoldenResponseAdapterLiveCollector {
         }
     }
 
+    public record RequestAttempt(ProviderExecutionRequest request,
+            Optional<ProviderExecutionResult> result, Optional<Throwable> failure) {}
+
     public static final class TrackingProviderAdapter implements AiProviderAdapter {
         private final AiProviderAdapter delegate;
         private final RequestPacer pacer;
@@ -788,9 +851,9 @@ public class GoldenResponseAdapterLiveCollector {
         private final AtomicLong globalInputTokens;
         private final AtomicLong globalOutputTokens;
 
-        private final List<ProviderExecutionRequest> requests = new CopyOnWriteArrayList<>();
-        private final List<ProviderExecutionResult> results = new CopyOnWriteArrayList<>();
+        private final List<RequestAttempt> attempts = new CopyOnWriteArrayList<>();
         private volatile Throwable limitViolation;
+        private volatile boolean usageUnknown;
 
         public TrackingProviderAdapter(
                 AiProviderAdapter delegate,
@@ -815,6 +878,10 @@ public class GoldenResponseAdapterLiveCollector {
             return limitViolation;
         }
 
+        public boolean usageUnknown() {
+            return usageUnknown;
+        }
+
         @Override
         public ProviderId providerId() {
             return delegate.providerId();
@@ -827,6 +894,7 @@ public class GoldenResponseAdapterLiveCollector {
 
         @Override
         public ProviderExecutionResult execute(ProviderExecutionRequest request) {
+            if (limitViolation != null) throw new IllegalStateException("collector stopped", limitViolation);
             if (globalRequests.get() >= limits.maxRequests()) {
                 IllegalStateException ex = new IllegalStateException(
                         "Execution limit exceeded: max requests " + limits.maxRequests());
@@ -834,23 +902,44 @@ public class GoldenResponseAdapterLiveCollector {
                 throw ex;
             }
 
-            BigDecimal currentCost = costRates.estimate(globalInputTokens.get(), globalOutputTokens.get());
+            long proposedInput = (long) globalInputTokens.get() + request.promptContext().inputTokenCount();
+            long proposedOutput = (long) globalOutputTokens.get() + request.promptContext().reservedOutputTokens();
+            if (proposedInput + proposedOutput > limits.maxTokens()) {
+                IllegalStateException ex = new IllegalStateException(
+                        "Execution limit exceeded: pre-request token allowance " + limits.maxTokens());
+                limitViolation = ex;
+                throw ex;
+            }
+            BigDecimal currentCost = costRates.estimate(proposedInput, proposedOutput);
             if (currentCost.compareTo(limits.maxCostUsd()) > 0) {
                 IllegalStateException ex = new IllegalStateException(
-                        "Execution limit exceeded: max cost USD " + limits.maxCostUsd());
+                        "Execution limit exceeded: pre-request estimated cost USD " + limits.maxCostUsd());
                 limitViolation = ex;
                 throw ex;
             }
 
             pacer.beforeRequest();
-            requests.add(request);
             globalRequests.incrementAndGet();
+            ProviderExecutionResult result;
+            try {
+                result = delegate.execute(request);
+            } catch (RuntimeException | Error ex) {
+                attempts.add(new RequestAttempt(request, Optional.empty(), Optional.of(ex)));
+                usageUnknown = true;
+                limitViolation = new IllegalStateException(
+                        "Execution limit exceeded: provider usage unavailable after failed request");
+                throw ex;
+            }
+            attempts.add(new RequestAttempt(request, Optional.of(result), Optional.empty()));
 
-            ProviderExecutionResult result = delegate.execute(request);
-            results.add(result);
-
-            long inTokens = result.usage().inputTokens().orElse(0);
-            long outTokens = result.usage().outputTokens().orElse(0);
+            if (result.usage().inputTokens().isEmpty() || result.usage().outputTokens().isEmpty()) {
+                IllegalStateException ex = new IllegalStateException("Execution limit exceeded: provider usage unavailable");
+                usageUnknown = true;
+                limitViolation = ex;
+                throw ex;
+            }
+            long inTokens = result.usage().inputTokens().get();
+            long outTokens = result.usage().outputTokens().get();
             long newTotalTokens = globalInputTokens.addAndGet(inTokens) + globalOutputTokens.addAndGet(outTokens);
 
             if (newTotalTokens > limits.maxTokens()) {
@@ -873,29 +962,29 @@ public class GoldenResponseAdapterLiveCollector {
 
         @Override
         public ProviderEventStream stream(ProviderExecutionRequest request) {
-            return delegate.stream(request);
+            throw new UnsupportedOperationException(
+                    "Streaming is not supported by the Golden collector");
         }
 
         public List<ProviderExecutionRequest> requests() {
-            return Collections.unmodifiableList(requests);
+            return attempts.stream().map(RequestAttempt::request).toList();
         }
 
         public List<ProviderExecutionResult> results() {
-            return Collections.unmodifiableList(results);
+            return attempts.stream().flatMap(a -> a.result().stream()).toList();
         }
+
+        public List<RequestAttempt> attempts() { return List.copyOf(attempts); }
 
         public boolean structuredRepairUsed() {
-            return requests.stream()
-                    .anyMatch(r -> r.taskType() == AiTaskType.STRUCTURED_OUTPUT_REPAIR);
+            return attempts.stream()
+                    .anyMatch(a -> a.request().taskType() == AiTaskType.STRUCTURED_OUTPUT_REPAIR);
         }
 
-        public Optional<ProviderExecutionResult> findResult(PromptId promptId) {
-            for (int i = 0; i < requests.size() && i < results.size(); i++) {
-                if (requests.get(i).promptContext().taskPromptId() == promptId) {
-                    return Optional.of(results.get(i));
-                }
-            }
-            return Optional.empty();
+        public Optional<RequestAttempt> findAttempt(PromptId promptId) {
+            return attempts.stream()
+                    .filter(a -> a.request().promptContext().taskPromptId() == promptId)
+                    .findFirst();
         }
     }
 
@@ -930,31 +1019,45 @@ public class GoldenResponseAdapterLiveCollector {
         }
     }
 
-    private static final class GoldenSourceReferenceRepository implements SourceReferenceRepository {
+    static final class GoldenSourceReferenceRepository implements SourceReferenceRepository {
         private final GoldenAiDataset.ResponseEvaluationCase golden;
 
-        private GoldenSourceReferenceRepository(GoldenAiDataset.ResponseEvaluationCase golden) {
+        GoldenSourceReferenceRepository(GoldenAiDataset.ResponseEvaluationCase golden) {
             this.golden = golden;
         }
 
         @Override
         public Optional<SourceReferenceSeed> findAuthorizedTarget(UUID userId, SourceReferenceTarget target) {
-            if (!QUALIFICATION_USER_ID.equals(userId) || !(target instanceof ChunkSourceTarget chunkTarget)) {
+            if (!QUALIFICATION_USER_ID.equals(userId) || !(target instanceof ChunkSourceTarget chunkTarget)
+                    || !MATERIAL_ID.equals(chunkTarget.materialId())
+                    || !MATERIAL_VERSION_ID.equals(chunkTarget.materialVersionId())) {
                 return Optional.empty();
             }
+            int sourceIndex = -1;
+            for (int i = 0; i < golden.sourceEvidence().size(); i++) {
+                if (UUID.fromString(golden.sourceEvidence().get(i).sourceId()).equals(chunkTarget.chunkId())) {
+                    sourceIndex = i;
+                    break;
+                }
+            }
+            if (sourceIndex < 0) return Optional.empty();
             return Optional.of(new SourceReferenceSeed(
-                    chunkTarget.materialId(),
-                    chunkTarget.materialVersionId(),
+                    MATERIAL_ID,
+                    MATERIAL_VERSION_ID,
                     null,
                     chunkTarget.chunkId(),
                     null,
-                    1,
+                    sourceIndex + 1,
                     "Synthetic Golden Evidence",
                     "Synthetic Golden Evidence"));
         }
 
         @Override
         public SourceReference upsert(SourceReferenceSeed seed, String displayLabel) {
+            if (findAuthorizedTarget(QUALIFICATION_USER_ID,
+                    new ChunkSourceTarget(seed.materialId(), seed.materialVersionId(), seed.chunkId())).isEmpty()) {
+                throw new IllegalArgumentException("unauthorized synthetic Golden source");
+            }
             return new SourceReference(
                     UUID.randomUUID(), seed.materialId(), seed.materialVersionId(),
                     seed.documentNodeId(), seed.chunkId(), seed.visualAssetId(),

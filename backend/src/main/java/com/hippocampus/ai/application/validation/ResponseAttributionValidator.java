@@ -25,6 +25,9 @@ public final class ResponseAttributionValidator {
             "as", "this", "that", "these", "those", "my", "your", "their", "its",
             "and", "but", "or", "however", "although", "though", "yet", "whereas",
             "because", "since", "so", "therefore", "thus", "while");
+    private static final Pattern WORD = Pattern.compile("[\\p{L}\\p{N}]+");
+    private static final Pattern REFERENTIAL_REFERENCE = Pattern.compile(
+            "(?iu)(?<![\\p{L}\\p{N}])(?:it|this|that|they|he|she|these|those|the nerve|the injury|the lesion)(?![\\p{L}\\p{N}])");
     private static final Pattern CLAUSE_BOUNDARY = Pattern.compile(
             "(?iu)(?<![\\p{L}\\p{N}])(?:and|but|or|however|although|though|yet|whereas|because|since|so|therefore|thus|while)(?![\\p{L}\\p{N}])");
     private final Limits limits;
@@ -50,6 +53,7 @@ public final class ResponseAttributionValidator {
         }
         requireCompleteIndexes(discovery.coveredExpectedConceptIndexes(),
                 input.expectedConcepts().size());
+        Set<String> contextTerms = contextTerms(input, evidence);
         Map<String, ResponseAttributionDiscovery.Assertion> assertions = new HashMap<>();
         for (var assertion : discovery.assertions()) {
             requireText(assertion.id());
@@ -60,6 +64,10 @@ public final class ResponseAttributionValidator {
             }
             requireSpan(input.studentResponse(), assertion.studentStart(),
                     assertion.studentEnd(), assertion.studentText());
+            if (resolvesUnstatedReferent(assertion.proposition(),
+                    assertion.studentText(), contextTerms)) {
+                throw invalid("assertion imports context not independently stated by student");
+            }
             if (assertion.relatedExpectedConceptIndexes().isEmpty()) {
                 throw invalid("assertion has no concept relation");
             }
@@ -96,6 +104,18 @@ public final class ResponseAttributionValidator {
                                 .contains(candidate.expectedConceptIndex())) {
                     throw invalid("candidate has an invalid student assertion link");
                 }
+            }
+            String linkedStudentText = candidate.assertionIds().stream()
+                    .map(id -> assertions.get(id).studentText())
+                    .collect(java.util.stream.Collectors.joining(" "));
+            if ("COMPLETE".equals(candidate.relationToExpectedConcept())
+                    && candidate.assertionIds().stream().allMatch(id ->
+                            REFERENTIAL_REFERENCE.matcher(assertions.get(id).studentText()).find())) {
+                throw invalid("complete relation depends on a referential student assertion");
+            }
+            if (resolvesUnstatedReferent(candidate.constituentMeaning(),
+                    linkedStudentText, contextTerms)) {
+                throw invalid("candidate imports context not independently stated by student");
             }
             for (var span : candidate.sourceEvidence()) {
                 UUID referenceId = canonicalUuid(span.sourceReferenceId());
@@ -335,6 +355,38 @@ public final class ResponseAttributionValidator {
     private static boolean referentialOnly(String studentText) {
         return studentText.strip().matches(
                 "(?iu)(?:it|this|that|they|the nerve|the injury|the lesion)[\\p{Punct}]*");
+    }
+
+    private static Set<String> contextTerms(ResponseEvaluationInput input,
+            AuthorizedResponseEvidence evidence) {
+        Set<String> terms = new HashSet<>();
+        addTerms(terms, input.question());
+        addTerms(terms, input.expectedAnswer());
+        input.expectedConcepts().forEach(concept -> addTerms(terms, concept));
+        evidence.sources().forEach(source -> addTerms(terms, source.content()));
+        return terms;
+    }
+
+    private static boolean resolvesUnstatedReferent(String modelMeaning,
+            String studentText, Set<String> contextTerms) {
+        if (!REFERENTIAL_REFERENCE.matcher(studentText).find()) return false;
+        Set<String> studentWords = new HashSet<>(contentWords(studentText));
+        return contentWords(modelMeaning).stream().anyMatch(word ->
+                contextTerms.contains(word) && !studentWords.contains(word));
+    }
+
+    private static void addTerms(Set<String> terms, String text) {
+        terms.addAll(contentWords(text));
+    }
+
+    private static List<String> contentWords(String text) {
+        List<String> words = new ArrayList<>();
+        var matcher = WORD.matcher(text.toLowerCase(Locale.ROOT));
+        while (matcher.find()) {
+            String word = matcher.group();
+            if (!INCIDENTAL_WORDS.contains(word)) words.add(word);
+        }
+        return words;
     }
 
     private static UUID canonicalUuid(String value) {

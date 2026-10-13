@@ -1,0 +1,57 @@
+{
+  "discovery": {
+    "assertions": [{
+      "id": "assertion_0", "studentStart": 0, "studentEnd": 34,
+      "studentText": "It denervates the wrist extensors.",
+      "proposition": "The radial nerve denervates the wrist extensors",
+      "polarity": "AFFIRMED", "qualifiers": [], "relatedExpectedConceptIndexes": [0, 1]
+    }],
+    "candidates": [
+      {
+        "id": "candidate_0", "assertionIds": ["assertion_0"], "expectedConceptIndex": 0,
+        "constituentMeaning": "The radial nerve supplies/denervates the wrist extensors",
+        "relationToExpectedConcept": "COMPLETE",
+        "sourceEvidence": [{
+          "sourceReferenceId": "00000000-0000-0000-0000-000000000303",
+          "sourceVersion": "00000000-0000-0000-0000-000000000709",
+          "sourceStart": 1, "sourceEnd": 43,
+          "sourceText": "The radial nerve supplies wrist extensors."
+        }]
+      },
+      {
+        "id": "candidate_1", "assertionIds": ["assertion_0"], "expectedConceptIndex": 1,
+        "constituentMeaning": "Wrist extensors are denervated",
+        "relationToExpectedConcept": "CONSTITUENT",
+        "sourceEvidence": [{
+          "sourceReferenceId": "00000000-0000-0000-0000-000000000303",
+          "sourceVersion": "00000000-0000-0000-0000-000000000709",
+          "sourceStart": 44, "sourceEnd": 93,
+          "sourceText": "Radial nerve injury can eliminate wrist extension"
+        }]
+      }
+    ],
+    "coveredExpectedConceptIndexes": [0, 1], "complete": true, "limitations": []
+  },
+  "verification": {
+    "assertions": [{
+      "assertionId": "assertion_0", "disposition": "SUPPORTED",
+      "reason": "The assertion correctly captures the student's statement that injury denervates the wrist extensors.",
+      "fidelity": "FAITHFUL"
+    }],
+    "candidates": [
+      {"candidateId": "candidate_0", "disposition": "SUPPORTED", "reason": "The student states 'It denervates the wrist extensors', referring to the radial nerve injury, which is supported."},
+      {"candidateId": "candidate_1", "disposition": "SUPPORTED", "reason": "The student states the extensors are denervated, which is a constituent of concept 1, but does not state that wrist extension is lost."}
+    ],
+    "expectedConceptCoverage": [
+      {"expectedConceptIndex": 0, "coverage": "COMPLETE", "reason": "The student successfully stated the radial nerve denervates wrist extensors, covering concept 0."},
+      {"expectedConceptIndex": 1, "coverage": "MISSING", "reason": "The student mentioned denervating wrist extensors, but did not explicitly connect this to the loss of wrist extension and wrist drop as requested by concept 1."}
+    ],
+    "misconceptions": [], "complete": true, "limitations": [],
+    "mechanismEvidence": {
+      "sourceReferenceId": "00000000-0000-0000-0000-000000000303",
+      "sourceVersion": "00000000-0000-0000-0000-000000000709",
+      "sourceStart": 43, "sourceEnd": 116,
+      "sourceText": "Radial nerve injury can eliminate wrist extension and produce wrist drop."
+    }
+  }
+}

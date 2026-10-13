@@ -455,25 +455,9 @@ class ResponseAttributionValidatorTests {
                         "denervate")));
         var discovery = new ResponseAttributionDiscovery(
                 List.of(assertion), List.of(candidate), List.of(0, 1), true, List.of());
-        var verification = new ResponseAttributionVerification(
-                List.of(new ResponseAttributionVerification.AssertionDisposition(
-                        "a", ResponseAttributionVerification.Disposition.SUPPORTED, "Stated", ResponseAttributionVerification.Fidelity.FAITHFUL)),
-                List.of(new ResponseAttributionVerification.CandidateDisposition(
-                        "c", ResponseAttributionVerification.Disposition.SUPPORTED, "Supported")),
-                List.of(new ResponseAttributionVerification.ConceptCoverage(
-                                0, ResponseAttributionVerification.Coverage.MISSING, "Not stated"),
-                        new ResponseAttributionVerification.ConceptCoverage(
-                                1, ResponseAttributionVerification.Coverage.COMPLETE, "Stated")),
-                List.of(), true, List.of(), mechanismEvidence());
-        validator.validateDiscovery(input, evidence(), discovery);
-        validator.validateVerification(input, evidence(), discovery, verification);
-        var result = aggregator.aggregate(input, discovery, verification);
-        assertThat(result.outcome()).isEqualTo(ResponseEvaluationPort.Outcome.PARTIAL);
-        assertThat(result.correctConcepts()).containsExactly("denervation");
-        assertThat(result.missingConcepts()).containsExactly("Radial nerve injury");
-        assertThat(result.feedback()).contains("denervation")
-                .contains("Radial nerve injury")
-                .contains(SOURCE);
+        assertThatThrownBy(() -> validator.validateDiscovery(input, evidence(), discovery))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("complete relation depends on a referential student assertion");
     }
 
     @Test
@@ -491,20 +475,39 @@ class ResponseAttributionValidatorTests {
                 "radial nerve injury", "COMPLETE", List.of(mechanismEvidence()));
         var discovery = new ResponseAttributionDiscovery(List.of(assertion, remainder),
                 List.of(candidate), List.of(0), true, List.of());
+        assertThatThrownBy(() -> validator.validateDiscovery(input, evidence(), discovery))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("assertion imports context not independently stated by student");
+    }
+
+    @Test
+    void explicitlyNegatedRelationRemainsUncredited() {
+        String response = "Radial nerve injury does not denervate wrist extensors.";
+        var input = input(response);
+        var discovery = new ResponseAttributionDiscovery(
+                List.of(new ResponseAttributionDiscovery.Assertion("a", 0,
+                        response.length(), response,
+                        "radial nerve injury does not denervate wrist extensors",
+                        "NEGATED", List.of(), List.of(0))),
+                List.of(), List.of(0), true, List.of());
         var verification = new ResponseAttributionVerification(
                 List.of(new ResponseAttributionVerification.AssertionDisposition("a",
-                        ResponseAttributionVerification.Disposition.SUPPORTED,
-                        "incorrectly borrowed from question", ResponseAttributionVerification.Fidelity.FAITHFUL)),
-                List.of(new ResponseAttributionVerification.CandidateDisposition("c",
-                        ResponseAttributionVerification.Disposition.SUPPORTED,
-                        "incorrectly borrowed from question")),
+                        ResponseAttributionVerification.Disposition.UNSUPPORTED,
+                        "negated denervation is incorrect",
+                        ResponseAttributionVerification.Fidelity.FAITHFUL)),
+                List.of(),
                 List.of(new ResponseAttributionVerification.ConceptCoverage(0,
-                        ResponseAttributionVerification.Coverage.COMPLETE, "claimed")),
-                List.of(), true, List.of(), mechanismEvidence());
+                        ResponseAttributionVerification.Coverage.MISSING,
+                        "correct denervation relation is absent")),
+                List.of(new ResponseAttributionVerification.Misconception("a",
+                        "denervation negation")), true, List.of(), mechanismEvidence());
 
         validator.validateDiscovery(input, evidence(), discovery);
-        assertThatThrownBy(() -> validator.validateVerification(input, evidence(),
-                discovery, verification)).isInstanceOf(IllegalArgumentException.class);
+        validator.validateVerification(input, evidence(), discovery, verification);
+        var result = aggregator.aggregate(input, discovery, verification);
+        assertThat(result.outcome()).isEqualTo(ResponseEvaluationPort.Outcome.INCORRECT);
+        assertThat(result.correctConcepts()).isEmpty();
+        assertThat(result.misconceptions()).containsExactly("denervation negation");
     }
 
     @Test
