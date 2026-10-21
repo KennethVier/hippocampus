@@ -1,0 +1,18 @@
+{
+  "namespace": "p7-09-observation-v1",
+  "sourceResource": "ai/golden/v2/response-evaluation-cases.json",
+  "sourceSha256": "6cff07eae524b5bd319d74a8def825ec449e820a0ddfffe641227967a0760137",
+  "caseIds": [
+    "P7-09-CORRECT-001",
+    "P7-09-PARAPHRASE-001",
+    "P7-09-PARTIAL-001",
+    "P7-09-WRONG-REASONING-001",
+    "P7-09-INCORRECT-001",
+    "P7-09-OFFTOPIC-001",
+    "P7-09-UNCERTAIN-001",
+    "P7-09-EMPTY-001",
+    "P7-09-INJECTION-001"
+  ],
+  "rubricStatus": "PENDING",
+  "historicalOverridesApplied": false
+}

@@ -18,9 +18,13 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import com.hippocampus.identity.domain.AuthenticatedUser;
 import com.hippocampus.learning.domain.LearningActionType;
@@ -65,13 +69,58 @@ class SubmitActivityResponseUseCaseTests {
         attempts = new InMemoryAttempts();
         contracts = new StubContracts();
         evaluation = new StubEvaluation();
-        var persistence = new PersistActivityResponse(missions, attempts);
+        var persistence = Sec004TestSupport.persistence(missions,attempts,contracts,engine(),null);
         useCase = new SubmitActivityResponseUseCase(
                 () -> new AuthenticatedUser(USER_ID), missions, attempts, contracts, evaluation,
                 (userId, missionId, activityId, mode, materials, references) ->
                         new AuthorizedResponseEvidence(mode, List.of()),
-                engine(), new StudyMissionLearningStateAssembler(), persistence,
+                engine(), Sec004TestSupport.assembler(contracts), persistence,
                 Clock.fixed(NOW, ZoneOffset.UTC));
+    }
+
+    @Test
+    void gradedSubmissionCreatesOneDurableIntentAndHistoricalReceiptReplayCreatesNone() {
+        var original=missions.current;
+        var a=original.activities().getFirst();
+        var scoped=new LearningActivity(a.id(),a.learningObjectiveId(),a.activityType(),a.representedActionType(),
+                a.questionIntent(),a.templateSignature(),a.status(),a.difficulty(),a.sequenceNumber(),a.generatedArtifactId(),
+                true,a.startedAt(),a.completedAt(),a.createdAt(),Set.of(UUID.randomUUID()));
+        missions.current=new StudyMission(original.id(),original.userId(),original.topicId(),original.subtopicId(),
+                original.status(),original.learningState(),original.groundingMode(),original.availableTimeMinutes(),
+                original.startedAt(),original.completedAt(),original.stoppedAt(),original.currentActivityId(),
+                original.materials(),original.objectives(),List.of(scoped),original.createdAt(),original.updatedAt());
+        var intents = new FollowUpIntentLifecycleTests.MemoryIntents();
+        var sourceAuthorization = org.mockito.Mockito.mock(com.hippocampus.learning.port.ActivitySourceReferenceAuthorization.class);
+        org.mockito.Mockito.when(sourceAuthorization.allFrozenSourcesAvailable(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyList())).thenReturn(true);
+        org.mockito.Mockito.when(sourceAuthorization.allOwnedAndWithinMissionScope(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyList(),org.mockito.ArgumentMatchers.anySet())).thenReturn(true);
+        var lifecycle = new FollowUpIntentLifecycle(intents,missions,attempts,sourceAuthorization,engine(),Sec004TestSupport.assembler(contracts));
+        useCase = new SubmitActivityResponseUseCase(() -> new AuthenticatedUser(USER_ID),missions,attempts,contracts,evaluation,
+                (u,m,activityId,mode,materials,references) -> new AuthorizedResponseEvidence(mode,List.of()),
+                engine(),Sec004TestSupport.assembler(contracts),Sec004TestSupport.persistence(missions,attempts,contracts,engine(),lifecycle),Clock.fixed(NOW,ZoneOffset.UTC));
+        contracts.contract=deterministicContract();
+        var command=new SubmitActivityResponseUseCase.Command(MISSION_ID,ACTIVITY_ID,null,null,"B",UUID.randomUUID());
+        var first=useCase.execute(command);
+        var replay=useCase.execute(command);
+        assertThat(replay.receipt()).isEqualTo(first.receipt());
+        assertThat(attempts.appended).hasSize(1);
+        assertThat(intents.rows).hasSize(1);
+        assertThat(intents.rows.getFirst().attemptId()).isEqualTo(first.attemptId());
+    }
+
+    @Test
+    void finalWriterDependencyContentionReturnsStaleWithoutAnyAttemptOrMissionWrite() {
+        contracts.contract = deterministicContract();
+        var persistence = org.mockito.Mockito.mock(PersistActivityResponse.class);
+        org.mockito.Mockito.when(persistence.persist(org.mockito.ArgumentMatchers.any()))
+                .thenThrow(new com.hippocampus.learning.port.SourceDependencyBusyException(null));
+        useCase = new SubmitActivityResponseUseCase(() -> new AuthenticatedUser(USER_ID), missions, attempts,
+                contracts, evaluation, (u,m,a,mode,materials,refs) -> new AuthorizedResponseEvidence(mode,List.of()),
+                engine(), Sec004TestSupport.assembler(contracts), persistence, Clock.fixed(NOW,ZoneOffset.UTC));
+        var original = missions.current;
+        assertReason(() -> execute(null,"B"), ActivityResponseException.Reason.STALE_SUBMISSION);
+        assertThat(attempts.appended).isEmpty();
+        assertThat(missions.current).isEqualTo(original);
+        assertThat(evaluation.calls).isZero();
     }
 
     @Test
@@ -112,17 +161,104 @@ class SubmitActivityResponseUseCaseTests {
     }
 
     @Test
-    void partialAiResponseReturnsValidatedFeedbackAndAppendsAttempt() {
+    void partialAiResponseIsContainedAsNeutralUngradedAttempt() {
         contracts.contract = aiContract();
         evaluation.result = aiResult(ResponseEvaluationPort.Outcome.PARTIAL);
 
         var result = execute("Some correct physiology", null);
 
-        assertThat(result.evaluation().outcome().name()).isEqualTo("PARTIAL");
-        assertThat(result.evaluation().feedback()).isEqualTo("Target preload more precisely.");
-        assertThat(result.attempt().evaluationStatus()).isEqualTo("PARTIAL");
+        assertThat(result.evaluation().outcome().name()).isEqualTo("UNGRADED");
+        assertThat(result.evaluation().feedback()).doesNotContain("preload").contains("could not be graded reliably");
+        assertThat(result.attempt().evaluationStatus()).isEqualTo("UNGRADED");
+        assertThat(result.correctConcepts()).isEmpty();
+        assertThat(result.missingConcepts()).isEmpty();
+        assertThat(result.misconceptions()).isEmpty();
         assertThat(result.attempt().deterministicResult()).isNull();
         assertThat(evaluation.calls).isOne();
+    }
+
+    @ParameterizedTest
+    @MethodSource("unverifiedGradesAndResponses")
+    void alternateEvaluatorCannotCreateFullConstituentOrFailureEvidence(
+            ResponseEvaluationPort.Outcome modelGrade, String response) {
+        contracts.contract = new ActivityResponseContractRepository.ResponseContract(
+                "Why can radial nerve injury cause wrist drop?",
+                List.of("Radial nerve supplies wrist extensors", "Extension loss causes wrist drop"),
+                "Radial nerve injury denervates wrist extensors.", null, "Reference mechanism");
+        evaluation.result = new ResponseEvaluationPort.Result(modelGrade,
+                List.of("COMPLETE: radial nerve supplies wrist extensors", "CONSTITUENT: denervation"),
+                List.of("invented missing relationship"), List.of("invented misconception"),
+                "Model claims correctness and mastery.", ResponseEvaluationPort.Certainty.SUFFICIENT,
+                ResponseEvaluationPort.RecommendedAction.CONTINUE, true);
+        var command = new SubmitActivityResponseUseCase.Command(MISSION_ID, ACTIVITY_ID,
+                response, "{\"synthetic\":true}", null, UUID.randomUUID());
+
+        var saved = useCase.execute(command);
+
+        assertThat(saved.outcome()).isEqualTo("UNGRADED");
+        assertThat(saved.correctConcepts()).isEmpty();
+        assertThat(saved.missingConcepts()).isEmpty();
+        assertThat(saved.misconceptions()).isEmpty();
+        assertThat(saved.feedback()).contains("could not be graded reliably")
+                .doesNotContain("Model", "mastery", "COMPLETE", "denervation");
+        assertThat(saved.attempt().responseText()).isEqualTo(response);
+        assertThat(saved.attempt().responsePayload()).isEqualTo(command.responsePayload());
+        assertThat(saved.attempt().evaluationStatus()).isEqualTo("UNGRADED");
+        assertThat(saved.attempt().deterministicResult()).isNull();
+        assertThat(saved.activity().status()).isEqualTo("COMPLETED");
+        var state = Sec004TestSupport.assembler(contracts).assembleFromPersistedAttempts(
+                saved.mission(), saved.activity(), Map.of(ACTIVITY_ID, List.of(saved.attempt())), NOW);
+        assertThat(state.evidence().dimensions()).isEmpty();
+        assertThat(state.recentActivityHistory()).singleElement().satisfies(history ->
+                assertThat(history.attemptOutcome().name()).isEqualTo("UNGRADED"));
+        // A new use-case instance must recover the original receipt without another evaluation.
+        var replay = useCase(evaluation).execute(command);
+        assertThat(replay.receipt()).isEqualTo(saved.receipt());
+        assertThat(replay.attemptId()).isEqualTo(saved.attemptId());
+        assertThat(attempts.appended).hasSize(1);
+        assertThat(evaluation.calls).isOne();
+    }
+
+    private static Stream<Arguments> unverifiedGradesAndResponses() {
+        return java.util.Arrays.stream(ResponseEvaluationPort.Outcome.values()).flatMap(grade -> Stream.of(
+                "Wrist extensors are denervated.",
+                "It denervates the wrist extensors.",
+                "Radial nerve. Wrist extensors.",
+                "Wrist extensors supply the radial nerve.",
+                "The radial nerve does not supply wrist extensors.",
+                "The radial nerve supplies wrist extensors. It does not.",
+                "Median nerve injury paralyzes the wrist extensors.",
+                "An unfamiliar paraphrase we cannot independently verify.")
+                .map(response -> Arguments.of(grade, response)));
+    }
+
+    @Test
+    void wrongMcqStillPersistsDeterministicIncorrectWithoutAiEvaluation() {
+        contracts.contract = deterministicContract();
+        var saved = execute(null, "A");
+        assertThat(saved.outcome()).isEqualTo("INCORRECT");
+        assertThat(saved.attempt().deterministicResult()).isEqualTo("INCORRECT");
+        assertThat(saved.missingConcepts()).containsExactly("preload");
+        assertThat(evaluation.calls).isZero();
+    }
+
+    @Test
+    void sourceResolutionFailureIsNotConvertedIntoAnUngradedSubmission() {
+        var failing = new SubmitActivityResponseUseCase(
+                () -> new AuthenticatedUser(USER_ID), missions, attempts, contracts, evaluation,
+                (userId, missionId, activityId, mode, materials, references) -> {
+                    throw new IllegalStateException("private source authorization failure");
+                }, engine(), Sec004TestSupport.assembler(contracts),
+                Sec004TestSupport.persistence(missions,attempts,contracts,engine(),null), Clock.fixed(NOW, ZoneOffset.UTC));
+        assertThatThrownBy(() -> failing.execute(new SubmitActivityResponseUseCase.Command(
+                MISSION_ID, ACTIVITY_ID, "It denervates wrist extensors.", null, null, UUID.randomUUID())))
+                .isInstanceOf(ActivityResponseException.class)
+                .hasMessage("The response could not be evaluated. Please try again.")
+                .extracting(error -> ((ActivityResponseException) error).reason())
+                .isEqualTo(ActivityResponseException.Reason.EXTERNAL_EVALUATION_FAILED);
+        assertThat(attempts.appended).isEmpty();
+        assertThat(missions.saveCalls).isZero();
+        assertThat(evaluation.calls).isZero();
     }
 
     @Test
@@ -158,6 +294,40 @@ class SubmitActivityResponseUseCaseTests {
         assertThat(attempts.appended).hasSize(1);
     }
 
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = ResponseEvaluationPort.Outcome.class,
+            names = {"CORRECT", "PARTIAL", "INCORRECT"})
+    void historicalGradedReceiptReplaysWithoutReevaluationOrRelabeling(
+            ResponseEvaluationPort.Outcome historicalGrade) {
+        UUID requestId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        var receipt = new SubmissionReceipt(MISSION_ID, ACTIVITY_ID, attemptId, historicalGrade.name(),
+                List.of("Historical credit"), List.of("Historical gap"), List.of("Historical misconception"),
+                "Historical feedback", null, "ACTIVE", "RETRIEVAL", NOW.minusSeconds(20).toString(), true);
+        String savedJson = receipt.toJson();
+        var historical = new StudentAttempt(attemptId, USER_ID, ACTIVITY_ID, 1,
+                "Historical free-text response", "{\"historical\":true}", NOW.minusSeconds(20),
+                historicalGrade.name(), null, null, NOW.minusSeconds(20), requestId, null, savedJson);
+        attempts.appended.add(historical);
+        missions.current = mission(StudyMissionStatus.ACTIVE, "COMPLETED", ACTIVITY_ID);
+        var originalMission = missions.current;
+        contracts.contract = null;
+        evaluation.failure = new IllegalStateException("Historical replay must not evaluate");
+
+        var replay = useCase(evaluation).execute(new SubmitActivityResponseUseCase.Command(
+                MISSION_ID, ACTIVITY_ID, historical.responseText(), historical.responsePayload(), null, requestId));
+
+        assertThat(replay.receipt()).isEqualTo(receipt);
+        assertThat(replay.outcome()).isEqualTo(historicalGrade.name());
+        assertThat(replay.attempt()).isSameAs(historical);
+        assertThat(replay.attempt().submissionReceipt()).isEqualTo(savedJson);
+        assertThat(replay.evaluation()).isNull();
+        assertThat(attempts.appended).containsExactly(historical);
+        assertThat(evaluation.calls).isZero();
+        assertThat(missions.saveCalls).isZero();
+        assertThat(missions.current).isEqualTo(originalMission);
+    }
+
     @Test
     void writtenResponseWithoutRequestIdIsRejectedBeforeEvaluation() {
         contracts.contract = aiContract();
@@ -167,6 +337,47 @@ class SubmitActivityResponseUseCaseTests {
                 ActivityResponseException.Reason.INVALID_RESPONSE);
         assertThat(evaluation.calls).isZero();
         assertThat(attempts.appended).isEmpty();
+    }
+
+    @ParameterizedTest
+    @MethodSource("corruptStoredOutcomes")
+    void corruptStoredOutcomesCannotReplayOrTriggerEvaluation(String status, String receiptOutcome) {
+        UUID requestId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        var validReceipt = new SubmissionReceipt(MISSION_ID, ACTIVITY_ID, attemptId, "CORRECT",
+                List.of("Historical credit"), List.of(), List.of(), "Historical feedback", null,
+                "ACTIVE", "RETRIEVAL", NOW.toString(), true);
+        String storedJson = validReceipt.toJson().replace("\"outcome\":\"CORRECT\"",
+                "\"outcome\":\"" + receiptOutcome + "\"");
+        var historical = new StudentAttempt(attemptId, USER_ID, ACTIVITY_ID, 1,
+                "Saved response", null, NOW, status, null, null, NOW, requestId,
+                "UNGRADED".equals(status) ? "EVALUATION_UNRESOLVED" : null, storedJson);
+        attempts.appended.add(historical);
+        var originalMission = missions.current;
+        contracts.contract = null;
+        evaluation.failure = new IllegalStateException("Corrupt replay must not evaluate");
+        var command = new SubmitActivityResponseUseCase.Command(
+                MISSION_ID, ACTIVITY_ID, "Saved response", null, null, requestId);
+
+        assertReason(() -> useCase.execute(command), ActivityResponseException.Reason.STALE_SUBMISSION);
+        assertReason(() -> useCase(evaluation).execute(command), ActivityResponseException.Reason.STALE_SUBMISSION);
+
+        assertThat(evaluation.calls).isZero();
+        assertThat(attempts.appended).containsExactly(historical);
+        assertThat(historical.submissionReceipt()).isEqualTo(storedJson);
+        assertThat(missions.saveCalls).isZero();
+        assertThat(missions.current).isEqualTo(originalMission);
+    }
+
+    private static Stream<Arguments> corruptStoredOutcomes() {
+        var unknown = Stream.of(Arguments.of("UNKNOWN", "CORRECT"),
+                Arguments.of("CORRECT", "UNKNOWN"), Arguments.of("UNKNOWN", "UNKNOWN"),
+                Arguments.of("correct", "CORRECT"), Arguments.of("CORRECT", " CORRECT "));
+        var mismatched = java.util.Arrays.stream(com.hippocampus.learning.domain.AttemptOutcome.values())
+                .flatMap(status -> java.util.Arrays.stream(com.hippocampus.learning.domain.AttemptOutcome.values())
+                        .filter(outcome -> outcome != status)
+                        .map(outcome -> Arguments.of(status.name(), outcome.name())));
+        return Stream.concat(unknown, mismatched);
     }
 
     @Test
@@ -413,8 +624,8 @@ class SubmitActivityResponseUseCaseTests {
                 () -> new AuthenticatedUser(owner.get()), repository, attempts, contracts, port,
                 (userId, missionId, activityId, mode, materials, references) ->
                         new AuthorizedResponseEvidence(mode, List.of()),
-                engine(), new StudyMissionLearningStateAssembler(),
-                new PersistActivityResponse(repository, attempts), Clock.fixed(NOW, ZoneOffset.UTC));
+                engine(), Sec004TestSupport.assembler(contracts),
+                Sec004TestSupport.persistence(repository,attempts,contracts,engine(),null), Clock.fixed(NOW, ZoneOffset.UTC));
         var first = CompletableFuture.supplyAsync(() -> {
             owner.set(USER_ID);
             try {
@@ -460,8 +671,8 @@ class SubmitActivityResponseUseCaseTests {
                 () -> new AuthenticatedUser(USER_ID), missions, attempts, contracts, port,
                 (userId, missionId, activityId, mode, materials, references) ->
                         new AuthorizedResponseEvidence(mode, List.of()),
-                engine(), new StudyMissionLearningStateAssembler(),
-                new PersistActivityResponse(missions, attempts), Clock.fixed(NOW, ZoneOffset.UTC));
+                engine(), Sec004TestSupport.assembler(contracts),
+                Sec004TestSupport.persistence(missions,attempts,contracts,engine(),null), Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private SubmitActivityResponseUseCase.Result execute(String response, String selectedOption) {
@@ -523,7 +734,7 @@ class SubmitActivityResponseUseCaseTests {
                 actionType, "recall", "retrieval-v1", activityStatus,
                 LearningDifficulty.FOUNDATIONAL, 1, ARTIFACT_ID, true,
                 NOW.minusSeconds(60), "COMPLETED".equals(activityStatus) ? NOW.minusSeconds(1) : null,
-                NOW.minusSeconds(120), Set.of());
+                NOW.minusSeconds(120), Set.of(UUID.fromString("a20a805a-76a2-413d-ae24-a247b8810e1f")));
         return new StudyMission(
                 MISSION_ID, USER_ID, UUID.randomUUID(), null, status,
                 stage, StudyMissionGroundingMode.STRICT_SOURCE, 30,
@@ -598,6 +809,15 @@ class SubmitActivityResponseUseCaseTests {
     }
 
     private static final class StubContracts implements ActivityResponseContractRepository {
+        @Override public ActivityContractKind classify(LearningActivity activity,UUID owner,String mode) {
+            return contract == null ? ActivityContractKind.UNKNOWN : ActivityContractKind.RESPONSE_BEARING;
+        }
+        @Override public Optional<DeterministicContract> findDeterministicForActivity(
+                LearningActivity activity, UUID ownerId, String groundingMode) {
+            return contract != null && contract.supportsDeterministicEvaluation()
+                    ? Optional.of(new DeterministicContract(contract,Set.of("A","B","C","D"))) : Optional.empty();
+        }
+
         private ResponseContract contract = aiContract();
 
         @Override

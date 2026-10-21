@@ -29,7 +29,7 @@ class ResponseAttributionValidatorTests {
             new VerifiedResponseEvaluationAggregator();
 
     @Test
-    void caseFiveRecoversIndependentParalysisFromZeroInitialCredit() {
+    void caseFiveDiscoveryRetainsParalysisWithoutProductionCredit() {
         var input = input(RESPONSE);
         var evidence = evidence();
         var discovery = discovery();
@@ -38,15 +38,35 @@ class ResponseAttributionValidatorTests {
         validator.validateVerification(input, evidence, discovery, verification);
 
         var result = aggregator.aggregate(input, discovery, verification);
-        assertThat(result.outcome()).isEqualTo(ResponseEvaluationPort.Outcome.PARTIAL);
-        assertThat(result.correctConcepts()).containsExactly("wrist extensor paralysis");
-        assertThat(result.missingConcepts()).containsExactly(
-                "Radial nerve injury causes wrist extensor paralysis");
-        assertThat(result.misconceptions()).containsExactly("median nerve attribution");
-        assertThat(result.feedback()).contains("wrist extensor paralysis")
-                .contains("Radial nerve injury causes wrist extensor paralysis")
-                .contains("median nerve attribution is incorrect")
-                .contains(SOURCE);
+        assertThat(result.outcome()).isEqualTo(ResponseEvaluationPort.Outcome.UNCERTAIN);
+        assertThat(result.correctConcepts()).isEmpty();
+        assertThat(result.missingConcepts()).isEmpty();
+        assertThat(result.misconceptions()).isEmpty();
+        assertThat(result.feedback()).isEqualTo("The response could not be evaluated reliably.");
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"Radial nerve.", "Wrist extensors are denervated.",
+            "Radial nerve injury does not denervate wrist extensors."})
+    void modelAgreementCannotLaunderFullRelationInsidePartial(String response) {
+        var assertion = new ResponseAttributionDiscovery.Assertion("a",0,response.length(),response,response,
+                response.contains("not") ? "NEGATED" : "AFFIRMED",List.of(),List.of(0));
+        var candidate = new ResponseAttributionDiscovery.Candidate("c",List.of("a"),0,
+                "radial nerve injury causes wrist extensor paralysis","CONSTITUENT",List.of(mechanismEvidence()));
+        var discovery = new ResponseAttributionDiscovery(List.of(assertion),List.of(candidate),List.of(0),true,List.of());
+        var verification = new ResponseAttributionVerification(List.of(new ResponseAttributionVerification.AssertionDisposition(
+                "a",ResponseAttributionVerification.Disposition.SUPPORTED,"malicious agreement",ResponseAttributionVerification.Fidelity.FAITHFUL)),
+                List.of(new ResponseAttributionVerification.CandidateDisposition("c",ResponseAttributionVerification.Disposition.SUPPORTED,"malicious agreement")),
+                List.of(new ResponseAttributionVerification.ConceptCoverage(0,ResponseAttributionVerification.Coverage.MISSING,"relationship missing")),
+                List.of(),true,List.of(),mechanismEvidence());
+        validator.validateDiscovery(input(response),evidence(),discovery);
+        validator.validateVerification(input(response),evidence(),discovery,verification);
+        var result=aggregator.aggregate(input(response),discovery,verification);
+        assertThat(result.outcome()).isEqualTo(ResponseEvaluationPort.Outcome.UNCERTAIN);
+        assertThat(result.correctConcepts()).isEmpty();
+        assertThat(result.missingConcepts()).isEmpty();
+        assertThat(result.misconceptions()).isEmpty();
+        assertThat(result.certainty()).isEqualTo(ResponseEvaluationPort.Certainty.LIMITED);
     }
 
     @Test
@@ -117,7 +137,7 @@ class ResponseAttributionValidatorTests {
     }
 
     @Test
-    void separatelyRepresentedCompoundAnswerCanStillBeCorrect() {
+    void compoundAnswerStructureCannotIndependentlyAuthorizeCorrectness() {
         String response = "Radial nerve injury denervates wrist extensors, and wrist extensors are paralyzed.";
         int firstEnd = response.indexOf(',');
         int secondStart = response.indexOf("wrist extensors", firstEnd);
@@ -152,7 +172,7 @@ class ResponseAttributionValidatorTests {
         validator.validateDiscovery(input, evidence(), discovery);
         validator.validateVerification(input, evidence(), discovery, verification);
         assertThat(aggregator.aggregate(input, discovery, verification).outcome())
-                .isEqualTo(ResponseEvaluationPort.Outcome.CORRECT);
+                .isEqualTo(ResponseEvaluationPort.Outcome.UNCERTAIN);
     }
 
     @Test
@@ -225,7 +245,7 @@ class ResponseAttributionValidatorTests {
     }
 
     @Test
-    void exactGoldenV6CaseFivePreservesPartialWhenWrongAttributionIsRecorded() {
+    void exactGoldenV6CaseFiveRetainsConstituentDiagnosticsWithoutProductionCredit() {
         String response = "Median nerve injury paralyzes the wrist extensors.";
         int paralysisStart = response.indexOf("paralyzes");
         int sourceStart = SOURCE.indexOf("paralyze");
@@ -264,9 +284,9 @@ class ResponseAttributionValidatorTests {
         validator.validateDiscovery(input, evidence(), discovery);
         validator.validateVerification(input, evidence(), discovery, verification);
         var result = aggregator.aggregate(input, discovery, verification);
-        assertThat(result.outcome()).isEqualTo(ResponseEvaluationPort.Outcome.PARTIAL);
-        assertThat(result.correctConcepts()).containsExactly("wrist extensor paralysis");
-        assertThat(result.misconceptions()).containsExactly("median nerve attribution");
+        assertThat(result.outcome()).isEqualTo(ResponseEvaluationPort.Outcome.UNCERTAIN);
+        assertThat(result.correctConcepts()).isEmpty();
+        assertThat(result.misconceptions()).isEmpty();
     }
 
     @Test
@@ -287,7 +307,7 @@ class ResponseAttributionValidatorTests {
     }
 
     @Test
-    void correctFeedbackCreditsKnowledgeAndExplainsAuthorizedMechanism() {
+    void modelCorrectnessCannotAuthorizeFeedbackClaims() {
         String response = "Radial nerve injury paralyzes wrist extensors.";
         var input = input(response);
         var assertion = new ResponseAttributionDiscovery.Assertion("a", 0,
@@ -310,13 +330,12 @@ class ResponseAttributionValidatorTests {
         validator.validateDiscovery(input, evidence(), discovery);
         validator.validateVerification(input, evidence(), discovery, verification);
         var result = aggregator.aggregate(input, discovery, verification);
-        assertThat(result.outcome()).isEqualTo(ResponseEvaluationPort.Outcome.CORRECT);
-        assertThat(result.feedback()).contains("correctly identified")
-                .contains(SOURCE);
+        assertThat(result.outcome()).isEqualTo(ResponseEvaluationPort.Outcome.UNCERTAIN);
+        assertThat(result.feedback()).isEqualTo("The response could not be evaluated reliably.");
     }
 
     @Test
-    void uncoveredArticleAndParaphraseStillPermitCompleteCredit() {
+    void paraphraseStructureRemainsValidButCannotAuthorizeCompleteCredit() {
         String response = "The radial nerve lesion stops wrist extensors.";
         int start = response.indexOf("radial");
         var input = input(response);
@@ -344,11 +363,11 @@ class ResponseAttributionValidatorTests {
         validator.validateDiscovery(input, evidence(), discovery);
         validator.validateVerification(input, evidence(), discovery, verification);
         assertThat(aggregator.aggregate(input, discovery, verification).outcome())
-                .isEqualTo(ResponseEvaluationPort.Outcome.CORRECT);
+                .isEqualTo(ResponseEvaluationPort.Outcome.UNCERTAIN);
     }
 
     @Test
-    void incorrectFeedbackCorrectsMisconceptionUsingAuthorizedMechanism() {
+    void modelIncorrectnessCannotAuthorizeFeedbackClaims() {
         String response = "The median nerve is responsible.";
         var input = input(response);
         var assertion = new ResponseAttributionDiscovery.Assertion("a", 0,
@@ -369,10 +388,8 @@ class ResponseAttributionValidatorTests {
         validator.validateDiscovery(input, evidence(), discovery);
         validator.validateVerification(input, evidence(), discovery, verification);
         var result = aggregator.aggregate(input, discovery, verification);
-        assertThat(result.outcome()).isEqualTo(ResponseEvaluationPort.Outcome.INCORRECT);
-        assertThat(result.feedback()).contains("missing concept or relationship")
-                .contains("median nerve attribution is incorrect")
-                .contains(SOURCE);
+        assertThat(result.outcome()).isEqualTo(ResponseEvaluationPort.Outcome.UNCERTAIN);
+        assertThat(result.feedback()).isEqualTo("The response could not be evaluated reliably.");
     }
 
     @Test
@@ -505,9 +522,9 @@ class ResponseAttributionValidatorTests {
         validator.validateDiscovery(input, evidence(), discovery);
         validator.validateVerification(input, evidence(), discovery, verification);
         var result = aggregator.aggregate(input, discovery, verification);
-        assertThat(result.outcome()).isEqualTo(ResponseEvaluationPort.Outcome.INCORRECT);
+        assertThat(result.outcome()).isEqualTo(ResponseEvaluationPort.Outcome.UNCERTAIN);
         assertThat(result.correctConcepts()).isEmpty();
-        assertThat(result.misconceptions()).containsExactly("denervation negation");
+        assertThat(result.misconceptions()).isEmpty();
     }
 
     @Test

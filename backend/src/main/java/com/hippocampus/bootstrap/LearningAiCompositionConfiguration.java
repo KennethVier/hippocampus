@@ -60,7 +60,10 @@ public class LearningAiCompositionConfiguration {
             ObjectProvider<EmbeddingPort> embeddingPort,
             BuildEvidencePackage buildEvidencePackage,
             MaterializeEvidenceSourceReferences materializeSourceReferences,
-            ActivityEvidenceRetrievalOptions options) {
+            ActivityEvidenceRetrievalOptions options,com.hippocampus.identity.port.CurrentUser currentUser,
+            com.hippocampus.learning.port.StudyMissionRepository missions,
+            com.hippocampus.learning.port.StudyMissionStartReceiptRepository receipts,
+            com.hippocampus.learning.port.InitialStudyMissionSourceAuthority sources) {
         return new LearningActivityEvidenceAdapter(
                 buildScope,
                 lexicalSearch,
@@ -69,7 +72,42 @@ public class LearningAiCompositionConfiguration {
                 java.util.Optional.ofNullable(embeddingPort.getIfAvailable()),
                 buildEvidencePackage,
                 materializeSourceReferences,
-                options);
+                options,currentUser,missions,receipts,sources);
+    }
+
+    @Bean
+    @org.springframework.context.annotation.Lazy
+    @ConditionalOnMissingBean
+    com.hippocampus.learning.application.StartStudyMissionExperienceUseCase startStudyMissionExperienceUseCase(
+            com.hippocampus.identity.port.CurrentUser currentUser,
+            com.hippocampus.learning.application.StudyMissionStartTransactions transactions,
+            com.hippocampus.learning.application.MaterializeLearningActivityUseCase materialize,
+            com.hippocampus.ai.infrastructure.config.AiRequestManagerProperties manager) {
+        return new com.hippocampus.learning.application.StartStudyMissionExperienceUseCase(
+                currentUser,transactions,materialize,()->withinInitialEnvelope(manager));
+    }
+
+    private static boolean withinInitialEnvelope(
+            com.hippocampus.ai.infrastructure.config.AiRequestManagerProperties manager) {
+        return manager.maximumOutstandingRequestsPerUser()>=1
+                && manager.maximumOutstandingRequestsPerUser()<=4
+                && withinInitialEnvelope(manager.gemini()) && withinInitialEnvelope(manager.ollamaCloud());
+    }
+
+    private static boolean withinInitialEnvelope(
+            com.hippocampus.ai.infrastructure.config.AiRequestManagerProperties.ProviderPolicy policy) {
+        if(policy==null || policy.requestTimeout()==null || policy.initialRetryDelay()==null
+                || policy.maximumRetryDelay()==null) return false;
+        java.time.Duration zero=java.time.Duration.ZERO;
+        java.time.Duration maximumDelay=java.time.Duration.ofSeconds(2);
+        return policy.maximumConcurrency()>=1 && policy.maximumConcurrency()<=2
+                && policy.maximumQueuedRequests()>=0 && policy.maximumQueuedRequests()<=32
+                && policy.requestTimeout().compareTo(zero)>0
+                && policy.requestTimeout().compareTo(java.time.Duration.ofSeconds(45))<=0
+                && policy.maximumAttempts()>=1 && policy.maximumAttempts()<=3
+                && policy.initialRetryDelay().compareTo(zero)>=0
+                && policy.initialRetryDelay().compareTo(policy.maximumRetryDelay())<=0
+                && policy.maximumRetryDelay().compareTo(maximumDelay)<=0;
     }
 
     @Bean

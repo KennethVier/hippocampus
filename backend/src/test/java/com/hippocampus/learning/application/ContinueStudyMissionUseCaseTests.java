@@ -40,6 +40,7 @@ import com.hippocampus.learning.domain.StudyMissionGroundingMode;
 import com.hippocampus.learning.domain.StudyMissionStatus;
 import com.hippocampus.learning.port.StudyMissionRepository;
 import com.hippocampus.learning.port.ActivityResponseContractRepository;
+import com.hippocampus.learning.port.StudyMissionSourcePresentationRepository;
 import com.hippocampus.progress.domain.StudentAttempt;
 import com.hippocampus.progress.port.StudentAttemptRepository;
 import com.hippocampus.shared.application.error.ApplicationNotFoundException;
@@ -51,6 +52,9 @@ class ContinueStudyMissionUseCaseTests {
     private static final UUID MISSION_ID = UUID.randomUUID();
     private static final UUID ACTIVITY_ID = UUID.randomUUID();
     private static final UUID OBJECTIVE_ID = UUID.randomUUID();
+    private static final UUID SOURCE_ID = UUID.fromString("11111111-1111-4111-8111-111111111111");
+    private static final UUID MATERIAL_ID = UUID.randomUUID();
+    private static final UUID VERSION_ID = UUID.randomUUID();
 
     private InMemoryMissions missions;
     private InMemoryAttempts attempts;
@@ -78,6 +82,38 @@ class ContinueStudyMissionUseCaseTests {
     // --- Scenario 1: already-completed non-UNDERSTAND activity forwards to engine normally ---
 
     @Test
+    void duplicateContinueReturnsTheExistingLinkedCurrentActivityWithoutGeneration() {
+        UUID linkedId=UUID.randomUUID();
+        var linked=pendingActivity(linkedId,2,LearningActionType.RETRIEVE);
+        missions.current=missionWithNextActivity(linked);
+        var m=missions.current;
+        var followUps=mock(FollowUpIntentLifecycle.class);
+        var f=new com.hippocampus.learning.domain.policy.GradedResponseFollowUpPolicy().create(
+                UUID.randomUUID(),USER_ID,MISSION_ID,UUID.randomUUID(),ACTIVITY_ID,m.objectives().getFirst(),
+                com.hippocampus.learning.domain.AttemptOutcome.INCORRECT,
+                new com.hippocampus.learning.domain.FollowUpIntent.Basis("DETERMINISTIC_MCQ",List.of()),
+                new com.hippocampus.learning.domain.FollowUpIntent.Scope(m.materials(),Set.of(),m.groundingMode()),NOW).orElseThrow()
+                .transition(com.hippocampus.learning.domain.FollowUpIntent.State.MATERIALIZED,linkedId,null,NOW);
+        when(followUps.prepare(MISSION_ID,USER_ID,NOW)).thenReturn(f);
+        when(followUps.peek(any(),org.mockito.ArgumentMatchers.eq(NOW))).thenReturn(f);
+        useCase=buildUseCase(followUps);
+        assertThat(execute(ACTIVITY_ID).materializedActivityId()).isEqualTo(linkedId);
+        assertThat(execute(ACTIVITY_ID).materializedActivityId()).isEqualTo(linkedId);
+        org.mockito.Mockito.verifyNoInteractions(materializer);
+    }
+
+    @Test
+    void reflectionAlternativeCompletesWithoutCreatingAnAttempt() {
+        var reflection = new LearningActivity(ACTIVITY_ID,OBJECTIVE_ID,LearningActivityType.REFLECT,LearningActionType.REFLECT,
+                null,null,"PENDING",null,1,null,false,null,null,NOW,Set.of());
+        missions = new InMemoryMissions(mission(StudyMissionStatus.ACTIVE,reflection,ACTIVITY_ID));
+        useCase = buildUseCase();
+        execute(ACTIVITY_ID);
+        assertThat(missions.current.activities().getFirst().status()).isEqualTo("COMPLETED");
+        assertThat(missions.current.learningState()).isEqualTo(LearningStage.EVIDENCE_UPDATE);
+    }
+
+    @Test
     void completedRetrieveActivityMaterializesUsingPersistedAttempts() {
         var result = execute(ACTIVITY_ID);
 
@@ -90,7 +126,24 @@ class ContinueStudyMissionUseCaseTests {
                 MISSION_ID, retrieveAction(), ACTIVITY_ID));
     }
 
-    // --- Scenario 2: presentation-only UNDERSTAND activity — Continue marks COMPLETED, no StudentAttempt ---
+    @Test
+    void missingOrUnauthorizedRequiredSourcesFailBeforeEngineOrMaterialization() {
+        for (Set<UUID> references : List.of(Set.<UUID>of(), Set.of(UUID.randomUUID()))) {
+            var valid = completedActivity(ACTIVITY_ID);
+            var unavailable = new LearningActivity(valid.id(), valid.learningObjectiveId(), valid.activityType(),
+                    valid.representedActionType(), valid.questionIntent(), valid.templateSignature(), valid.status(),
+                    valid.difficulty(), valid.sequenceNumber(), valid.generatedArtifactId(), true,
+                    valid.startedAt(), valid.completedAt(), valid.createdAt(), references);
+            missions.current = mission(StudyMissionStatus.ACTIVE, unavailable, ACTIVITY_ID);
+            var before = missions.current;
+            assertReason(() -> execute(ACTIVITY_ID), ActivityMaterializationException.Reason.INVALID_SOURCE_REFERENCES);
+            assertThat(missions.current).isSameAs(before);
+            assertThat(attempts.persisted).hasSize(1);
+        }
+        org.mockito.Mockito.verifyNoInteractions(learningEngine, materializer);
+    }
+
+    // --- Scenario 2: presentation-only UNDERSTAND activity â€” Continue marks COMPLETED, no StudentAttempt ---
 
     @Test
     void presentationOnlyUnderstandPersistsCompletionWithoutStudentAttempt() {
@@ -108,7 +161,7 @@ class ContinueStudyMissionUseCaseTests {
         var result = execute(ACTIVITY_ID);
 
         assertThat(result.materializedActivityId()).isNotNull();
-        // No StudentAttempt was created — the InMemoryAttempts persisted list is still empty
+        // No StudentAttempt was created â€” the InMemoryAttempts persisted list is still empty
         assertThat(attempts.persisted).isEmpty();
         // Mission activity should now be COMPLETED in the in-memory store
         LearningActivity completed = missions.current.activities().stream()
@@ -291,7 +344,7 @@ class ContinueStudyMissionUseCaseTests {
                 ACTIVITY_ID, OBJECTIVE_ID, LearningActivityType.UNDERSTAND, LearningActionType.UNDERSTAND,
                 null, null, "COMPLETED", LearningDifficulty.FOUNDATIONAL,
                 1, UUID.randomUUID(), false, NOW.minusSeconds(120), NOW.minusSeconds(60),
-                NOW.minusSeconds(180), Set.of());
+                NOW.minusSeconds(180), Set.of(SOURCE_ID));
         missions.current = mission(StudyMissionStatus.ACTIVE, completedUnderstand, ACTIVITY_ID);
         // One prior attempt (e.g., understanding check was answered)
         attempts = new InMemoryAttempts(List.of(attempt()));
@@ -335,7 +388,7 @@ class ContinueStudyMissionUseCaseTests {
         verify(materializer, times(1)).execute(any());
     }
 
-    // --- Scenario 12: engine decision after presentation — UNDERSTANDING_CHECK action materializes ---
+    // --- Scenario 12: engine decision after presentation â€” UNDERSTANDING_CHECK action materializes ---
 
     @Test
     void secondContinueForCompletedActivityCannotMaterializeAgain() {
@@ -410,16 +463,45 @@ class ContinueStudyMissionUseCaseTests {
     }
 
     private ContinueStudyMissionUseCase.Result execute(UUID activityId) {
-        return useCase.execute(new ContinueStudyMissionUseCase.Command(MISSION_ID, activityId));
+        return useCase.execute(new ContinueStudyMissionUseCase.Command(MISSION_ID, activityId, true));
     }
 
-    private ContinueStudyMissionUseCase buildUseCase() {
+    private ContinueStudyMissionUseCase buildUseCase() { return buildUseCase(null); }
+
+    private ContinueStudyMissionUseCase buildUseCase(FollowUpIntentLifecycle followUps) {
+        var artifacts = mock(com.hippocampus.learning.port.GeneratedArtifactRepository.class);
+        when(artifacts.findOwnedByIdForUpdate(any(), any())).thenAnswer(call -> Optional.of(
+                new com.hippocampus.learning.port.GeneratedArtifactRepository.GeneratedArtifact(
+                        call.getArgument(0), USER_ID, "EXPLANATION", "EXPLANATION", "Synthetic", "{}",
+                        "STRICT_SOURCE", "SOURCE_GROUNDED_GENERATED", "EXPLANATION_V2", "2",
+                        "test", "test", "test", "VALIDATED", true, NOW)));
+        when(artifacts.findSourceReferenceIdsForShare(any())).thenReturn(Set.of(SOURCE_ID));
+        var sourceLocks = new com.hippocampus.learning.port.ActivitySourceReferenceAuthorization() {
+            @Override public boolean allOwnedAndWithinMissionScope(UUID owner, List<MissionMaterial> scopes, Set<UUID> ids) {
+                return USER_ID.equals(owner) && Set.of(SOURCE_ID).containsAll(ids);
+            }
+            @Override public boolean lockAndValidateForCompletion(UUID owner, List<MissionMaterial> scopes,
+                    Set<UUID> ids, boolean required) {
+                return (!required || !ids.isEmpty()) && allOwnedAndWithinMissionScope(owner, scopes, ids);
+            }
+        };
         PersistPresentationCompletion presentationCompletion =
-                new PersistPresentationCompletion(missions);
+                new PersistPresentationCompletion(missions, contracts, sourceLocks, artifacts);
+        StudyMissionSourcePresentationRepository authorizedSources = (owner, scopes, ids) -> {
+            if (!USER_ID.equals(owner) || scopes.stream().noneMatch(scope ->
+                    MATERIAL_ID.equals(scope.materialId()) && VERSION_ID.equals(scope.materialVersionId()))
+                    || !Set.of(SOURCE_ID).containsAll(ids)) return Optional.empty();
+            return Optional.of(ids.stream().map(id ->
+                    new StudyMissionSourcePresentationRepository.SourcePresentation(
+                            id, "Synthetic source", 1, "Synthetic section")).toList());
+        };
         return new ContinueStudyMissionUseCase(
-                () -> new AuthenticatedUser(USER_ID), missions, attempts, contracts, learningEngine,
-                new StudyMissionLearningStateAssembler(), materializer,
-                presentationCompletion, Clock.fixed(NOW, ZoneOffset.UTC));
+                () -> new AuthenticatedUser(USER_ID), missions, contracts,
+                new StudyMissionContinuationDecision(new AssessmentAvailabilityResolver(contracts, attempts,
+                        authorizedSources, mock(com.hippocampus.learning.port.GeneratedArtifactRepository.class)),
+                        learningEngine, new StudyMissionLearningStateAssembler(),
+                         authorizedSources), materializer,
+                presentationCompletion, mock(ChangeStudyMissionStatusUseCase.class), Clock.fixed(NOW, ZoneOffset.UTC), followUps);
     }
 
     private static void assertReason(
@@ -466,7 +548,7 @@ class ContinueStudyMissionUseCaseTests {
                 id, OBJECTIVE_ID, LearningActivityType.RETRIEVE, LearningActionType.RETRIEVE,
                 "recall", "retrieval-v1", "COMPLETED", LearningDifficulty.FOUNDATIONAL,
                 1, UUID.randomUUID(), true, NOW.minusSeconds(120), NOW.minusSeconds(60),
-                NOW.minusSeconds(180), Set.of());
+                NOW.minusSeconds(180), Set.of(SOURCE_ID));
     }
 
     private static LearningActivity pendingActivity(
@@ -480,7 +562,7 @@ class ContinueStudyMissionUseCaseTests {
         return new LearningActivity(
                 id, OBJECTIVE_ID, type, represented,
                 null, null, "PENDING", LearningDifficulty.FOUNDATIONAL,
-                sequence, null, false, null, null, NOW, Set.of());
+                sequence, UUID.randomUUID(), true, null, null, NOW, Set.of(SOURCE_ID));
     }
 
     private static LearningActivity pendingResponseActivity(
@@ -497,7 +579,7 @@ class ContinueStudyMissionUseCaseTests {
                 MISSION_ID, USER_ID, UUID.randomUUID(), null, status,
                 LearningStage.UNDERSTANDING, StudyMissionGroundingMode.STRICT_SOURCE, 30,
                 NOW.minusSeconds(300), null, null, currentActivityId,
-                List.of(new MissionMaterial(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), null)),
+                List.of(new MissionMaterial(UUID.randomUUID(), MATERIAL_ID, VERSION_ID, null)),
                 List.of(new LearningObjective(
                         OBJECTIVE_ID, "Explain cardiac output", "cardiac-output", "Cardiac output",
                         1, LearningObjectiveStatus.ACTIVE, NOW.minusSeconds(300))),
@@ -568,6 +650,15 @@ class ContinueStudyMissionUseCaseTests {
         private final Set<UUID> responseBearingActivities = new java.util.HashSet<>();
         private final Set<UUID> presentationOnlyActivities = new java.util.HashSet<>();
         private UUID lastOwnerId;
+
+        @Override
+        public ActivityContractKind classify(LearningActivity activity, UUID ownerId, String groundingMode) {
+            lastOwnerId = ownerId;
+            if (responseBearingActivities.contains(activity.id())) return ActivityContractKind.RESPONSE_BEARING;
+            if (presentationOnlyActivities.contains(activity.id()) || activity.activityType() == LearningActivityType.UNDERSTAND)
+                return ActivityContractKind.PRESENTATION;
+            return ActivityContractKind.RESPONSE_BEARING;
+        }
 
         @Override
         public Optional<ResponseContract> findValidatedForActivity(

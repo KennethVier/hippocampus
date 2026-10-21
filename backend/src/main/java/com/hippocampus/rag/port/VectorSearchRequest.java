@@ -9,7 +9,11 @@ public record VectorSearchRequest(
         RetrievalScope scope,
         UUID indexGenerationId,
         EmbeddingVector queryEmbedding,
-        int limit) {
+        int limit,FrozenMissionSourceBinding frozenMission) {
+
+    public VectorSearchRequest(RetrievalScope scope,UUID indexGenerationId,EmbeddingVector queryEmbedding,int limit) {
+        this(scope,indexGenerationId,queryEmbedding,limit,null);
+    }
 
     public VectorSearchRequest {
         Objects.requireNonNull(scope, "scope must not be null");

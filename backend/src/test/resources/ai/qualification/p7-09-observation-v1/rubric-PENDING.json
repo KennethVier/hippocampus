@@ -1,0 +1,14 @@
+{
+  "status": "PENDING",
+  "medicalApproval": false,
+  "qualification": "PENDING",
+  "casesRequiringAdjudication": [
+    3,
+    5
+  ],
+  "historicalDisagreements": [
+    4,
+    7
+  ],
+  "warning": "Historical labels are provenance only, not prospective acceptance criteria. Model agreement and exact spans do not prove medical meaning."
+}

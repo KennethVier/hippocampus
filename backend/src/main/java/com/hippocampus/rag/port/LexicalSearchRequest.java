@@ -4,7 +4,11 @@ import java.util.Objects;
 
 import com.hippocampus.rag.domain.RetrievalScope;
 
-public record LexicalSearchRequest(RetrievalScope scope, String query, int limit) {
+public record LexicalSearchRequest(RetrievalScope scope, String query, int limit,
+                                   FrozenMissionSourceBinding frozenMission) {
+    public LexicalSearchRequest(RetrievalScope scope,String query,int limit) {
+        this(scope,query,limit,null);
+    }
     public LexicalSearchRequest {
         Objects.requireNonNull(scope, "scope must not be null");
         Objects.requireNonNull(query, "query must not be null");

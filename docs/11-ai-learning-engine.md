@@ -1,12 +1,12 @@
 ---
 Document ID: 11
 Title: AI Learning Engine
-Version: 1.0.5
+Version: 1.0.9
 Status: Final
 Owner: Project Hippocampus Team
 Authors: Project Hippocampus Team
 Created: 2026-08-23
-Last Updated: 2026-10-11
+Last Updated: 2026-10-20
 Purpose: Define how Hippocampus decides the next educational action using deterministic learning rules, learner context, Study Mission state, learning evidence, source readiness, time constraints, and bounded AI assistance.
 Scope: Learning-state evaluation, mission-state transitions, next-action policy, rule precedence, AI task invocation, retries, adaptation, evidence updates, anti-repetition behavior, time-aware decisions, review decisions, failure paths, and explainability.
 Audience: Product, AI, backend, architecture, QA, UX, and medical-education contributors.
@@ -172,6 +172,8 @@ May include:
 
 ## 4.2 Mission Context
 
+ADR-0016 adds explicit application-owned facts for a real saved UNGRADED attempt and known assessment unavailability of the relevant response-bearing target. Unknown eligibility is distinct. Resolve current/reused/generated target contracts and authorized frozen scope below transport; client/model/artifact labels do not establish assessability. Domain policy consumes typed facts, not repositories or provider output.
+
 May include:
 
 - Subject
@@ -255,6 +257,17 @@ Each action should have a reason.
 
 # 6. Next-Action Decision Hierarchy
 
+## Assessment-unavailable target guard (ADR-0016)
+
+Apply the existing hierarchy/precedence first. After saved UNGRADED, if explicit
+application-owned facts establish that the otherwise selected response-bearing
+target remains unassessable, prevent its reuse or regeneration. When no higher-
+priority policy already selects a safe alternative or terminal action, select
+existing COMMUNICATE_LIMITATION with ASSESSMENT_UNAVAILABLE. Do not substitute
+a late RETRY for lifecycle/source/safety/time/anti-repetition decisions. Existing
+legitimate presentation support/reflection remains possible; no new sequence.
+
+
 The Learning Engine should evaluate decisions in a consistent order.
 
 Recommended precedence:
@@ -281,6 +294,11 @@ If a source image is unreadable, the system should not generate an image-identif
 ---
 
 # 7. Rule Precedence
+
+ADR-0016's assessment guard cannot override higher-priority policy or convert
+uncertainty into misunderstanding, failure or objective success. A new question,
+artifact UUID, model label or validated artifact does not restore assessability.
+
 
 ## Priority 1 — Safety
 
@@ -799,6 +817,16 @@ and the mission's frozen MaterialVersion/DocumentNode scope before creating a
 new activity. Reuse is deterministic and does not call AI merely to regenerate
 already validated compatible content.
 
+Under accepted ADR-0017, artifact reuse for `RETRY`, `REDUCE_DIFFICULTY`, or
+`REUSE_VALIDATED_CONTENT` also requires an immutable server-owned origin binding.
+The selected prior activity, requested action, and artifact origin must have
+the same LearningObjective ID and originating StudyMission ID; owner IDs must
+agree. Cross-mission reuse and unbound legacy artifacts are ineligible. The
+Engine still owns pedagogical selection; the application checks origin and
+authorization, including at the final write boundary. Missing or conflicting
+origin is unknown, never evidence of assessability or a reason to invent a
+different objective.
+
 The new reused LearningActivity inherits `representedActionType` from the exact
 prior activity selected by `reuseLearningActivityId`. It does not store
 `REUSE_VALIDATED_CONTENT` as its represented action because that value describes
@@ -1100,6 +1128,17 @@ The LLM does not choose its own task type.
 
 # 25. AI Response Integration
 
+## Assessment-unavailable disposition (ADR-0016)
+
+The retry options below remain subject to the accepted no-repeat guard: saved
+UNGRADED plus independently established target unavailability prohibits another
+response-bearing activity known to remain unassessable. Generic UNGRADED,
+response-specific uncertainty, source limitations and infrastructure failures
+are separate facts. No evidence strength, failure count or mastery update is
+created by the limitation. Keep ADR-0012 grading/attribution requirements intact;
+ADR-0013/P7-15 continues to govern graded follow-up only.
+
+
 Validated AI output should be interpreted through application rules.
 
 Example:
@@ -1288,6 +1327,11 @@ The reason should come from stored learning evidence, not invented explanation.
 
 # 33. Mission Completion Policy
 
+## Initial selection versus completion admission (ADR-0019)
+
+Engine COMPLETE remains an existing selection; it is not unconditional authority to persist a terminal lifecycle. When initial preparation concerns an ACTIVE mission with no genuine completed LearningActivity, deny completion with non-scoring NO_ACTIVITY/INITIAL_COMPLETION_NOT_ADMISSIBLE, preserve the actual COMPLETE/rationale and lifecycle, and retain explicit learner Pause/Stop. Do not alter Engine actions, time policy or evidence to make completion admissible. No initial Finish or synthetic completion proof is introduced. Repeated unchanged blocking facts cause no further generation; re-evaluation requires explicit authorized action plus relevant state change. Existing authorized completion after a real completed activity is unchanged.
+
+
 A mission may complete when:
 
 - The bounded objective has been sufficiently addressed
@@ -1302,6 +1346,12 @@ Completion must not imply mastery.
 ---
 
 # 34. Stop / Resume Policy
+
+Under ADR-0016, Pause is learner-controlled and resume revalidates current
+availability and source authorization without rewriting the original receipt.
+A limitation is not an automatic Pause/Stop/completion. Existing Engine COMPLETE
+may be persisted only through explicit Continue/Finish and current authorization.
+
 
 When a student stops:
 
@@ -1325,6 +1375,13 @@ On resume:
 ---
 
 # 35. Safe Fallback Rules
+
+For known assessment unavailability after a saved attempt, ADR-0016's specific
+no-repeat guard applies before reusing or regenerating an unassessable response
+target. It does not add MCQ substitution, formative-only activities or a new
+Engine action. Infrastructure/provider errors remain errors, not validated
+assessment limitation or fabricated submitted evidence.
+
 
 When AI fails:
 
@@ -1583,6 +1640,13 @@ The UI does not need to expose internal rules or technical details.
 
 # 45. Testing Strategy for the Learning Engine
 
+ADR-0016 tests must distinguish known target unavailability from generic
+UNGRADED; protect all existing precedence; block reuse and generation; preserve
+legitimate support; and prove stable no-evidence limitation, replay and resume.
+Real PostgreSQL concurrency evidence is required for completion/source ordering
+as defined in Document 19 and the accepted ADR, separately from domain tests.
+
+
 The Learning Engine should be highly testable without requiring live LLM inference for every test.
 
 ## Deterministic Unit Tests
@@ -1796,6 +1860,13 @@ The prompt layer must implement decisions from the Learning Engine rather than i
 
 # 53. Revision History
 
+- **1.0.9 — 2026-10-20 — Proposed for final owner approval:** ADR-0019 initial-completion admission; no fabricated work, terminal mutation or repeated generation.
+
+- **1.0.7 - 2026-10-17 - Project Hippocampus Team:** Aligned objective-compatible artifact reuse and fail-closed origin qualification with accepted ADR-0017; preserved Learning Engine selection authority and ADR-0016 continuation precedence.
+
+- **1.0.6 - 2026-10-16 - Project Hippocampus Team:** ADR-0016 governance alignment. Aligned explicit availability facts, protected Engine precedence, no-repeat UNGRADED continuation and qualification with accepted ADR-0016.
+
+
 | Version | Date | Author | Changes |
 |---|---|---|---|
 | 1.0.0 | 2026-08-23 | Project Hippocampus Team | Initial finalized AI Learning Engine defining deterministic educational decision logic, mission-state transitions, learner-state adaptation, AI invocation rules, evidence updates, review behavior, and explainability |
@@ -1814,3 +1885,15 @@ The prompt layer must implement decisions from the Learning Engine rather than i
 **Reviewed By:** Project Hippocampus Team
 
 **Approved By:** Project Hippocampus Team
+
+
+## ADR-0018: effective evidence eligibility (accepted 2026-10-19)
+
+Before any attempt affects understanding, recall, connection/application, failure counts, difficulty, prerequisite restoration, follow-up or progression, application-owned eligibility must corroborate its evaluation basis. Raw grade strings, artifact VALIDATED status, source spans and model consensus are insufficient. Current free-text evaluations, including historical CORRECT/PARTIAL/INCORRECT and ambiguous provenance, contribute neither competence nor failure evidence. Preserve chronological response facts and immutable saved outcomes; do not convert an excluded response into a presentation or expose an older favorable grade as latest performance.
+
+Continue positively verified deterministic MCQ under the existing owned trusted contract; require a permitted stored option, consistent deterministic/outcome markers and recomputation. Unknown/corrupt data remain distinct: unknown provenance is non-scoring; invalid status, binding or receipt is an error. Bare pending outcome enums cannot authorize grades. The same decision governs all direct prerequisite/origin checks and final writes.
+
+A real saved UNGRADED response and an ineligible historical graded evaluation are separate typed facts. Both may invoke non-scoring safe continuation, with existing safety/source/time/stop/terminal precedence and no known-unassessable target loop. Never falsify savedUngraded or rewrite receipt history. GET is nonmutating. Authoritative writes cancel nonterminal ineligible grade-origin intents as CANCELED/SAFETY with EVIDENCE_INELIGIBLE diagnostics, preserving their immutable provenance; no false satisfaction or graded replacement. No automatic terminal-mission reopening or mastery claim. ADR-0018 changes eligibility, not Learning Engine ownership or medical grading availability.
+
+
+Revision 1.0.8 ? 2026-10-19: ADR-0018 owner-approved eligibility/containment alignment; no runtime test, security closure or medical qualification claim.

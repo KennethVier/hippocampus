@@ -27,6 +27,16 @@ public final class MaterializeEvidenceSourceReferences {
         return createSourceReferences.execute(new CreateSourceReferences.Command(targets));
     }
 
+    public List<SourceReference> execute(EvidencePackage evidencePackage,
+            com.hippocampus.rag.port.FrozenMissionSourceBinding binding) {
+        Objects.requireNonNull(evidencePackage);Objects.requireNonNull(binding);
+        List<SourceReferenceTarget> targets=evidencePackage.sourceReferences().stream()
+                .map(MaterializeEvidenceSourceReferences::target).toList();
+        return createSourceReferences.executeForInitialMission(new CreateSourceReferences.Command(targets),
+                new com.hippocampus.materials.port.SourceReferenceRepository.FrozenMissionBinding(
+                    binding.missionId(),binding.generation(),binding.claimToken()));
+    }
+
     private static SourceReferenceTarget target(EvidenceSourceReference reference) {
         if (reference.kind() == EvidenceReferenceKind.CHUNK) {
             return new ChunkSourceTarget(

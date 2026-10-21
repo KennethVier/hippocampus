@@ -43,23 +43,44 @@ public final class LearningEngine {
     }
 
     public NextLearningAction decide(LearningState state) {
+        return decide(state, null);
+    }
+
+    public NextLearningAction decide(LearningState state, FollowUpIntent intent) {
         Objects.requireNonNull(state, "state must not be null");
         NextLearningAction lifecycleAction = lifecycleAction(state);
         if (lifecycleAction != null) {
             return lifecycleAction;
         }
 
-        NextLearningAction candidate = ungradedRetry(state);
+        NextLearningAction candidate = intent == null ? ungradedRetry(state) : null;
         if (candidate == null) {
-            candidate = progressionAction(state);
+            candidate = intent != null && !intent.terminal()
+                    && intent.state() != FollowUpIntent.State.MATERIALIZED
+                    && state.currentStage() == LearningStage.EVIDENCE_UPDATE
+                    ? understandRetrievePolicy.select(state) : progressionAction(state);
         }
-        if (candidate.actionType() == LearningActionType.APPLY
-                || state.currentStage() != LearningStage.APPLICATION) {
-            candidate = scaffoldingPolicy.select(state).orElse(candidate);
+        if (candidate.actionType() != LearningActionType.UNDERSTANDING_CHECK
+                && candidate.actionType() != LearningActionType.COMPLETE
+                && (candidate.actionType() == LearningActionType.APPLY
+                    || state.currentStage() != LearningStage.APPLICATION)) {
+            NextLearningAction scaffold = scaffoldingPolicy.select(state).orElse(candidate);
+            boolean unmetPrerequisite = intent != null && !intent.terminal()
+                    && intent.state() != FollowUpIntent.State.MATERIALIZED
+                    && !state.evidence().isAtLeast(EvidenceDimension.UNDERSTANDING, EvidenceStrength.DEVELOPING);
+            if (!unmetPrerequisite || java.util.Set.of(LearningActionType.UNDERSTAND,
+                    LearningActionType.HINT, LearningActionType.PREREQUISITE_SUPPORT).contains(scaffold.actionType())) {
+                candidate = scaffold;
+            }
         }
+        candidate = new com.hippocampus.learning.domain.policy.GradedResponseFollowUpPolicy()
+                .select(state, candidate, intent);
         NextLearningAction sourceSafe = sourceCapabilityPolicy.adjust(state, candidate);
         NextLearningAction timeSafe = timeAwareMissionPolicy.adjust(state, sourceSafe);
-        return antiRepetitionPolicy.adjust(state, timeSafe);
+        NextLearningAction selected = antiRepetitionPolicy.adjust(state, timeSafe);
+        new com.hippocampus.learning.domain.policy.GradedResponseFollowUpPolicy()
+                .verifyProgress(state, intent, selected);
+        return state.assessmentAvailability().constrain(selected);
     }
 
     private static NextLearningAction ungradedRetry(LearningState state) {
@@ -82,7 +103,8 @@ public final class LearningEngine {
         if (lifecycleAction != null) {
             return lifecycleAction;
         }
-        return sourceCapabilityPolicy.adjust(state, aiRagFailurePolicy.handle(state, failure, failedAction));
+        return state.assessmentAvailability().constrain(
+                sourceCapabilityPolicy.adjust(state, aiRagFailurePolicy.handle(state, failure, failedAction)));
     }
 
     private NextLearningAction progressionAction(LearningState state) {

@@ -36,54 +36,6 @@ public final class ProviderStructuredOutputSchema {
             "required", EXPLANATION_REQUIRED_PROPERTIES,
             "additionalProperties", false);
     private static final String GEMINI_EXPLANATION_SCHEMA = geminiExplanationSchema();
-    private static final Map<String, Object> RESPONSE_EVALUATION_JUDGMENT_SCHEMA = Map.of(
-            "type", "object",
-            "properties", Map.of(
-                    "expectedConceptIndex", Map.of("type", "integer"),
-                    "expectedConcept", STRING_SCHEMA,
-                    "studentClaims", STRING_ARRAY_SCHEMA,
-                    "status", enumSchema("SUPPORTED", "PARTIAL", "MISSING", "CONTRADICTED"),
-                    "supportedComponents", STRING_ARRAY_SCHEMA,
-                    "missingComponents", STRING_ARRAY_SCHEMA,
-                    "demonstratedMisconceptions", STRING_ARRAY_SCHEMA),
-            "required", List.of(
-                    "expectedConceptIndex",
-                    "expectedConcept",
-                    "studentClaims",
-                    "status",
-                    "supportedComponents",
-                    "missingComponents",
-                    "demonstratedMisconceptions"));
-    private static final Map<String, Object> RESPONSE_EVALUATION_ATOMIC_SCHEMA = Map.of(
-            "type", "object",
-            "properties", Map.of(
-                    "judgments", Map.of(
-                            "type", "array",
-                            "items", RESPONSE_EVALUATION_JUDGMENT_SCHEMA),
-                    "assessability", enumSchema(
-                            "EVALUABLE",
-                            "AMBIGUOUS_RESPONSE",
-                            "INSUFFICIENT_EXPECTED_EVIDENCE"),
-                    "feedback", STRING_SCHEMA,
-                    "recommendedAction", enumSchema(
-                            "CONTINUE",
-                            "RETRY",
-                            "TARGETED_EXPLANATION",
-                            "PREREQUISITE_SUPPORT",
-                            "CONNECTION_SUPPORT",
-                            "GUIDED_REASONING",
-                            "MANUAL_REVIEW"),
-                    "sourceReferences", STRING_ARRAY_SCHEMA,
-                    "limitations", STRING_ARRAY_SCHEMA),
-            "required", List.of(
-                    "judgments",
-                    "assessability",
-                    "feedback",
-                    "recommendedAction",
-                    "sourceReferences",
-                    "limitations"));
-    private static final String GEMINI_RESPONSE_EVALUATION_ATOMIC_SCHEMA =
-            toJson(RESPONSE_EVALUATION_ATOMIC_SCHEMA);
     private static final Map<String, Object> INTEGER_SCHEMA = Map.of("type", "integer");
     private static final Map<String, Object> INTEGER_ARRAY_SCHEMA = Map.of(
             "type", "array", "items", INTEGER_SCHEMA);
@@ -153,15 +105,6 @@ public final class ProviderStructuredOutputSchema {
         if (outputContract == AiOutputContract.RESPONSE_EVALUATION
                 && promptId == PromptId.RESPONSE_EVALUATION_VERIFICATION_V1) {
             return GEMINI_VERIFICATION_SCHEMA;
-        }
-        if (outputContract == AiOutputContract.RESPONSE_EVALUATION
-                && (promptId == PromptId.RESPONSE_EVALUATION_V4
-                        || promptId == PromptId.RESPONSE_EVALUATION_V5
-                        || promptId == PromptId.RESPONSE_EVALUATION_V6
-                        || promptId == PromptId.RESPONSE_EVALUATION_V7
-                        || promptId == PromptId.RESPONSE_EVALUATION_V8
-                        || promptId == PromptId.RESPONSE_EVALUATION_V9)) {
-            return GEMINI_RESPONSE_EVALUATION_ATOMIC_SCHEMA;
         }
         return null;
     }

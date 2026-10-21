@@ -146,6 +146,70 @@ export type VisualActivity = z.infer<typeof visualActivitySchema>
 export type FeedbackActivity = z.infer<typeof feedbackActivitySchema>
 export type ReflectionActivity = z.infer<typeof reflectionActivitySchema>
 export type StudyMissionActivity = z.infer<typeof studyMissionActivitySchema>
-export type StudyMission = z.infer<typeof studyMissionSchema>
+export const continuationSchema = z.strictObject({
+  actionType: z.enum(['UNDERSTAND', 'RETRIEVE', 'CONNECT', 'APPLY', 'FEEDBACK', 'REFLECT', 'HINT',
+    'PREREQUISITE_SUPPORT', 'UNDERSTANDING_CHECK', 'RETRY', 'REDUCE_DIFFICULTY', 'REUSE_VALIDATED_CONTENT',
+    'COMMUNICATE_LIMITATION', 'SOURCE_ONLY', 'RETRY_DEPENDENCY', 'PAUSE', 'COMPLETE']),
+  rationaleCode: nonEmpty,
+  canMaterialize: z.boolean(),
+}).refine((view) => view.canMaterialize === ![
+  'COMMUNICATE_LIMITATION', 'SOURCE_ONLY', 'RETRY_DEPENDENCY', 'PAUSE', 'COMPLETE',
+].includes(view.actionType), { message: 'Inconsistent continuation action' })
+export const studyMissionWithContinuationSchema = studyMissionSchema.extend({
+  continuation: continuationSchema.nullable(),
+})
+export const continuationResultSchema = z.discriminatedUnion('outcome', [
+  z.strictObject({ outcome: z.literal('ACTIVITY_CREATED'), activityId: z.uuid() }),
+  z.strictObject({ outcome: z.literal('NO_ACTIVITY'),
+    actionType: z.enum(['COMMUNICATE_LIMITATION', 'SOURCE_ONLY', 'RETRY_DEPENDENCY', 'PAUSE', 'COMPLETE']),
+    rationaleCode: nonEmpty }),
+])
+export type MissionContinuation = z.infer<typeof continuationSchema>
+export type StudyMission = z.infer<typeof studyMissionWithContinuationSchema> & { initialActivity?: InitialActivity | null }
 export type ActivitySubmission = z.infer<typeof activitySubmissionSchema>
 export type StudyMissionLifecycle = z.infer<typeof studyMissionLifecycleSchema>
+
+const startUuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+  .refine((id) => id !== '00000000-0000-0000-0000-000000000000')
+const startReason = z.enum(['DEPENDENCY_UNAVAILABLE', 'PREPARATION_TIMEOUT', 'INVALID_GENERATED_CONTENT',
+  'SOURCE_UNAVAILABLE', 'SOURCE_BUSY', 'STATE_CHANGED', 'MISSION_PAUSED', 'MISSION_TERMINAL',
+  'RETRY_LIMIT_REACHED', 'POLICY_DECISION_REQUIRED'])
+const admissionReason = z.union([startReason, z.literal('INITIAL_COMPLETION_NOT_ADMISSIBLE')])
+const initialControl = z.enum(['SOURCE_ONLY', 'COMMUNICATE_LIMITATION', 'RETRY_DEPENDENCY', 'PAUSE',
+  'COMPLETE', 'STOP', 'START', 'RESUME'])
+const retrySeconds = z.number().int().min(1).max(180).nullable()
+export const initialActivitySchema = z.strictObject({
+  startRequestId: startUuid,
+  state: z.enum(['READY', 'CLAIMED', 'RETRYABLE', 'NO_ACTIVITY', 'ACTIVITY_CREATED', 'EXHAUSTED']),
+  attemptsUsed: z.number().int().min(0).max(3), maximumAttempts: z.literal(3),
+  canRetry: z.boolean(), retryAfterSeconds: retrySeconds, reasonCode: admissionReason.nullable(),
+  decision: z.strictObject({ actionType: initialControl, rationaleCode: nonEmpty }).nullable(),
+})
+export const studyMissionWithInitialSchema = studyMissionWithContinuationSchema.extend({
+  initialActivity: initialActivitySchema.nullable(),
+})
+export const startMissionRequestSchema = z.strictObject({
+  startRequestId: startUuid, topicId: startUuid, learningObjectiveText: z.string().min(1).max(2000),
+  availableTimeMinutes: z.number().int().min(1).max(240), groundingMode: z.literal('STRICT_SOURCE'),
+  sourceScopes: z.array(z.strictObject({ materialId: startUuid })).min(1).max(8)
+    .refine((scopes) => new Set(scopes.map((s) => s.materialId)).size === scopes.length),
+})
+const startResultBase = { missionId: startUuid, startRequestId: startUuid,
+  missionStatus: z.enum(['ACTIVE', 'PAUSED', 'COMPLETED', 'STOPPED', 'FAILED', 'PLANNED']), replayed: z.boolean() }
+export const startMissionResultSchema = z.discriminatedUnion('outcome', [
+  z.strictObject({ ...startResultBase, outcome: z.literal('ACTIVITY_CREATED'), activityId: startUuid }),
+  z.strictObject({ ...startResultBase, outcome: z.literal('PREPARING'), retryAfterSeconds: z.number().int().min(1).max(180) }),
+  z.strictObject({ ...startResultBase, outcome: z.literal('RECOVERY_REQUIRED'), reasonCode: startReason,
+    canRetry: z.boolean(), retryAfterSeconds: retrySeconds }),
+  z.strictObject({ ...startResultBase, outcome: z.literal('NO_ACTIVITY'), actionType: initialControl,
+    rationaleCode: nonEmpty, reasonCode: admissionReason.nullable(), canRetry: z.boolean(), retryAfterSeconds: retrySeconds }),
+])
+export const missionSourceSelectorSchema = z.strictObject({
+  topic: z.strictObject({ id: startUuid, name: nonEmpty }),
+  items: z.array(z.strictObject({ materialId: startUuid, title: nonEmpty, activeVersionId: startUuid,
+    processingStatus: z.enum(['READY', 'PARTIALLY_READY']), readiness: z.enum(['READY', 'LIMITED']) })).max(50),
+  nextAfterMaterialId: startUuid.nullable(),
+})
+export type InitialActivity = z.infer<typeof initialActivitySchema>
+export type StartMissionRequest = z.infer<typeof startMissionRequestSchema>
+export type StartMissionResult = z.infer<typeof startMissionResultSchema>

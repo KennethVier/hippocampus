@@ -76,6 +76,6 @@ public final class AntiRepetitionPolicy {
                 && PolicyHistory.represents(activity, candidate.actionType())
                 && activity.difficulty() == candidate.difficulty()
                 && sameIntent;
-        return sameTemplate || sameShape;
+        return sameTemplate || sameIntent || sameShape;
     }
 }

@@ -8,4 +8,9 @@ import com.hippocampus.rag.domain.RetrievalScope;
 
 public interface EvidenceVisualRepository {
     List<EvidenceVisualSource> findLinkedVisuals(RetrievalScope scope, Set<UUID> selectedChunkIds);
+
+    default List<EvidenceVisualSource> findLinkedVisuals(RetrievalScope scope,Set<UUID> selectedChunkIds,
+                                                       FrozenMissionSourceBinding frozenMission) {
+        throw new IllegalStateException("Initial frozen visual retrieval is not configured");
+    }
 }

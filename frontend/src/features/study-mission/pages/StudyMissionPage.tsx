@@ -37,6 +37,7 @@ export function StudyMissionPage() {
           </dl>
           <MissionTimer availableTimeMinutes={current.availableTimeMinutes} status={current.status} />
           {current.status === 'ACTIVE' ? <Button disabled={studyMission.isPausing || studyMission.conflictStale} onClick={studyMission.pause} variant="secondary">{studyMission.isPausing ? 'Pausing…' : 'Pause'}</Button> : null}
+          {['ACTIVE', 'PAUSED'].includes(current.status) ? <Button disabled={studyMission.isStopping || studyMission.conflictStale} onClick={studyMission.stop} variant="secondary">{studyMission.isStopping ? 'Stopping…' : 'Stop mission'}</Button> : null}
           {current.status === 'PAUSED' ? <Button disabled={studyMission.isResuming || studyMission.conflictStale} onClick={studyMission.resume}>{studyMission.isResuming ? 'Resuming…' : 'Resume'}</Button> : null}
         </div>
       </header>
@@ -49,7 +50,16 @@ export function StudyMissionPage() {
         <section className="mission-empty" aria-labelledby="mission-empty-heading">
           <p className="mission-eyebrow">Current learning activity</p>
           <h2 id="mission-empty-heading">No activity is available right now</h2>
-          <p>This mission has no current activity to present.</p>
+          <p>{current.initialActivity?.reasonCode === 'INITIAL_COMPLETION_NOT_ADMISSIBLE'
+            ? 'No learning activity was completed. This mission remains active. You can pause or stop it.'
+            : current.initialActivity?.state === 'EXHAUSTED' ? 'Initial preparation has reached its retry limit. You can still pause or stop this mission.'
+            : current.initialActivity?.state === 'CLAIMED' ? 'Initial preparation may still be in progress. Refresh to check its saved state.'
+            : 'This mission has no current activity to present.'}</p>
+          {current.initialActivity?.retryAfterSeconds ? <p>Wait {current.initialActivity.retryAfterSeconds} seconds, then refresh the mission state.</p> : null}
+          {current.initialActivity?.canRetry ? <Button disabled={studyMission.isRetryingInitial || current.initialActivity.retryAfterSeconds !== null || mission.isFetching || studyMission.conflictStale}
+            onClick={studyMission.retryInitial}>{studyMission.isRetryingInitial ? 'Preparing…' : 'Retry initial activity'}</Button> : null}
+          {current.initialActivity ? <Button variant="secondary" disabled={mission.isFetching} onClick={() => void mission.refetch()}>Refresh mission state</Button> : null}
+          {studyMission.interactionError ? <p role="alert">{studyMission.interactionError}</p> : null}
         </section>
       ) : (
         <div className="mission-learning-layout">
@@ -57,12 +67,13 @@ export function StudyMissionPage() {
             <ActivityRenderer activity={current.currentActivity} />
             <MissionInteraction
               activity={current.currentActivity}
+              continuation={current.continuation}
               confirmedContinue={studyMission.confirmedContinueId === current.currentActivity.id}
               confirmedSubmission={studyMission.confirmedSubmissionId === current.currentActivity.id}
               error={studyMission.interactionError}
               isContinuing={studyMission.isContinuing}
               isSubmitting={studyMission.isSubmitting}
-              interactionBlocked={studyMission.conflictStale}
+              interactionBlocked={studyMission.conflictStale || mission.isError || mission.isFetching}
               key={current.currentActivity.id}
               missionStatus={current.status}
               onContinue={() => studyMission.continueMission(current.currentActivity!.id)}

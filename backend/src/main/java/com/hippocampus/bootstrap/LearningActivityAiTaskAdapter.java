@@ -60,17 +60,42 @@ public final class LearningActivityAiTaskAdapter implements ActivityAiTaskPort {
 
     @Override
     public ValidatedContent execute(Request request) {
+        return executeInternal(request,null);
+    }
+
+    @Override
+    public ValidatedContent execute(Request request,PreparationDeadline deadline) {
+        Objects.requireNonNull(deadline).check();
+        return executeInternal(request,deadline);
+    }
+
+    private ValidatedContent executeInternal(Request request,PreparationDeadline deadline) {
         Objects.requireNonNull(request, "request must not be null");
         EvidencePackage evidencePackage = evidencePackage(request.evidence());
         AiTaskRequest<?> aiRequest = aiRequest(request, evidencePackage);
         AiTaskExecutionOptions executionOptions = executionPolicy.optionsFor(aiRequest.taskType());
-        ValidatedAiResult<?> validated = orchestrator.execute(
+        var pending = orchestrator.execute(
                         aiRequest,
                         priority(aiRequest.taskType()),
                         executionOptions.tokenBudget(),
                         executionOptions.routingCandidates(),
-                        executionOptions.routingPreference())
-                .join();
+                        executionOptions.routingPreference());
+        ValidatedAiResult<?> validated;
+        if (deadline==null) validated=pending.join();
+        else {
+            try {
+                validated=pending.get(deadline.remainingNanos(),java.util.concurrent.TimeUnit.NANOSECONDS);
+                deadline.check();
+            } catch (InterruptedException interrupted) {
+                pending.cancel(true); Thread.currentThread().interrupt();
+                throw new java.util.concurrent.CancellationException("Initial preparation interrupted");
+            } catch (java.util.concurrent.TimeoutException timeout) {
+                pending.cancel(true);
+                throw new java.util.concurrent.CancellationException("Initial preparation deadline reached");
+            } catch (java.util.concurrent.ExecutionException failure) {
+                throw new java.util.concurrent.CompletionException(failure.getCause());
+            }
+        }
         ValidatedAiResult.ExecutionMetadata metadata = Objects.requireNonNull(
                 validated.executionMetadata(), "validated AI result has no execution metadata");
 
@@ -92,6 +117,14 @@ public final class LearningActivityAiTaskAdapter implements ActivityAiTaskPort {
                 if (question.activityType() != requestedType) {
                     throw new IllegalArgumentException(
                             "generated retrieval activity type does not match the requested type");
+                }
+                if (request.constraints().questionIntent() != null
+                        && request.constraints().questionIntent().startsWith("assessment-target-v1:")
+                        && (!question.concept().equals(request.targetDisplayName())
+                            || !question.learningObjective().equals(request.objective())
+                            || question.difficulty() != map(request.difficulty()))) {
+                    throw new AiSchemaValidationException(AiOutputContract.QUESTION_GENERATION,
+                            AiSchemaValidationException.Reason.BUSINESS_RULE_VIOLATION);
                 }
                 yield content(
                         "QUESTION", AiTaskType.QUESTION_GENERATION, question.question(),

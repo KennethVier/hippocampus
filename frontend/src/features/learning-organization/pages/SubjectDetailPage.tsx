@@ -97,7 +97,7 @@ export function SubjectDetailPage() {
           {topics.isPending ? <div className="organization-grid" aria-label="Loading Topics"><Skeleton label="Loading Topics" /><Skeleton /></div> : null}
           {topics.isError ? <ErrorState title="Topics could not be loaded" description="Try again when you are ready." action={<Button onClick={() => void topics.refetch()}>Try again</Button>} /> : null}
           {topics.data?.items.length === 0 ? <EmptyState title="No Topics yet" description="Create a Topic to organize what you want to study." action={<Button onClick={() => { createTopicMutation.reset(); setTopicForm('create') }}>Create Topic</Button>} /> : null}
-          {topics.data?.items.length ? <div className="organization-grid">{topics.data.items.map((topic) => <OrganizationCard key={topic.id} kind="Topic" name={topic.name} description={topic.description} headingLevel={3} onEdit={() => { updateTopicMutation.reset(); setTopicForm(topic) }} onArchive={() => { archiveTopicMutation.reset(); setTopicArchive(topic) }} />)}</div> : null}
+          {topics.data?.items.length ? <div className="organization-grid">{topics.data.items.map((topic) => <div key={topic.id}><Link to={'/topics/' + topic.id}>Start mission for {topic.name}</Link><OrganizationCard kind="Topic" name={topic.name} description={topic.description} headingLevel={3} onEdit={() => { updateTopicMutation.reset(); setTopicForm(topic) }} onArchive={() => { archiveTopicMutation.reset(); setTopicArchive(topic) }} /></div>)}</div> : null}
           {topics.data ? <OrganizationPagination page={page} totalPages={topics.data.totalPages} onPage={(next) => setParams({ topicsPage: String(next) })} /> : null}
         </section>
       )}

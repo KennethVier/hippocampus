@@ -14,6 +14,23 @@ public interface SpringDataTopicRepository extends JpaRepository<TopicEntity,UUI
     Optional<TopicEntity> findByIdAndSubjectUserIdAndStatusAndSubjectStatus(UUID id,UUID userId,
             LearningOrganizationStatus status,LearningOrganizationStatus subjectStatus);
 
+    @Query(value="SELECT t.subject_id FROM topics t JOIN subjects s ON s.id=t.subject_id WHERE t.id=:id AND s.user_id=:owner",nativeQuery=true)
+    Optional<UUID> findOwnedParentId(@Param("id") UUID id,@Param("owner") UUID owner);
+
+    @Query(value="""
+        SELECT t.id AS id,t.subject_id AS subjectId,t.name AS name,t.description AS description,
+               t.status AS status,t.created_at AS createdAt,t.updated_at AS updatedAt
+        FROM topics t WHERE t.id=:id AND t.subject_id=:subject AND t.status='ACTIVE'
+          AND EXISTS(SELECT 1 FROM subjects s WHERE s.id=t.subject_id AND s.user_id=:owner AND s.status='ACTIVE')
+        FOR SHARE OF t NOWAIT
+        """,nativeQuery=true)
+    Optional<LockedTopic> lockActiveForMissionStart(@Param("id") UUID id,@Param("subject") UUID subject,
+                                                   @Param("owner") UUID owner);
+    interface LockedTopic {
+        UUID getId(); UUID getSubjectId(); String getName(); String getDescription(); String getStatus();
+        java.time.Instant getCreatedAt(); java.time.Instant getUpdatedAt();
+    }
+
     @Query(value="""
             SELECT t.* FROM topics t JOIN subjects s ON s.id=t.subject_id
             WHERE t.subject_id=:subjectId AND s.user_id=:ownerId AND s.status='ACTIVE' AND t.status='ACTIVE'

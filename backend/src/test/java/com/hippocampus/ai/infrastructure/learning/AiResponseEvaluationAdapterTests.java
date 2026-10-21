@@ -57,12 +57,6 @@ class AiResponseEvaluationAdapterTests {
 
     @Test
     void emptyEvidenceRemainsUngradedWithoutCallingProvider() {
-        assertThat(new com.hippocampus.ai.application.prompt.PromptTemplateRegistry()
-                .resolveTask(AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V8.name()).promptId())
-                .isEqualTo(PromptId.RESPONSE_EVALUATION_V8);
-        assertThat(new com.hippocampus.ai.application.prompt.PromptTemplateRegistry()
-                .resolveTask(AiTaskType.RESPONSE_EVALUATION, PromptId.RESPONSE_EVALUATION_V9.name()).promptId())
-                .isEqualTo(PromptId.RESPONSE_EVALUATION_V9);
         ResponseEvaluationPort.Request request = new ResponseEvaluationPort.Request(
                 "Why is AV node delay beneficial?",
                 List.of("Allows ventricular filling"),
@@ -94,7 +88,7 @@ class AiResponseEvaluationAdapterTests {
     }
 
     @Test
-    void zeroCreditInitialPassCanRecoverVerifiedIndependentConstituent() {
+    void modelVerifiedConstituentRemainsContainedWithoutIndependentRuntimeBasis() {
         UUID reference = UUID.randomUUID();
         UUID version = UUID.randomUUID();
         String source = "Radial nerve injury can paralyze wrist extensors.";
@@ -142,14 +136,12 @@ class AiResponseEvaluationAdapterTests {
                 "Explain wrist drop", List.of("Radial nerve injury causes wrist extensor paralysis"),
                 "Radial nerve injury causes wrist extensor paralysis", response, evidence));
 
-        assertThat(result.outcome()).isEqualTo(ResponseEvaluationPort.Outcome.PARTIAL);
-        assertThat(result.correctConcepts()).containsExactly("wrist extensor paralysis");
-        assertThat(result.missingConcepts())
-                .containsExactly("Radial nerve injury causes wrist extensor paralysis");
-        assertThat(result.feedback()).contains("wrist extensor paralysis")
-                .contains("Radial nerve injury causes wrist extensor paralysis")
-                .contains("median nerve attribution is incorrect")
-                .contains(source);
+        assertThat(result.outcome()).isEqualTo(ResponseEvaluationPort.Outcome.UNCERTAIN);
+        assertThat(result.validated()).isTrue();
+        assertThat(result.correctConcepts()).isEmpty();
+        assertThat(result.missingConcepts()).isEmpty();
+        assertThat(result.misconceptions()).isEmpty();
+        assertThat(result.feedback()).isEqualTo("The response could not be evaluated reliably.");
         org.mockito.Mockito.verify(orchestrator, org.mockito.Mockito.times(2))
                 .execute(any(), any(), any(), anyList(), any());
     }

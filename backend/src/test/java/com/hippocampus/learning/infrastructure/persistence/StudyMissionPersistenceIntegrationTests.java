@@ -195,7 +195,32 @@ class StudyMissionPersistenceIntegrationTests extends PostgresIntegrationTestSup
             Fixture fixture = insertFixture();
             StudyMissionRepository missions = context.getBean(StudyMissionRepository.class);
             StudentAttemptRepository attempts = context.getBean(StudentAttemptRepository.class);
-            StudyMission mission = missions.save(representativeMission(fixture));
+            StudyMission base = representativeMission(fixture);
+            var prior = base.activities().getLast();
+            var responseActivity = new LearningActivity(prior.id(),prior.learningObjectiveId(),
+                    LearningActivityType.RETRIEVE,LearningActionType.RETRIEVE,null,null,"ACTIVE",
+                    LearningDifficulty.FOUNDATIONAL,prior.sequenceNumber(),prior.generatedArtifactId(),true,
+                    prior.startedAt(),null,prior.createdAt(),Set.of(fixture.sourceReferenceId()));
+            StudyMission mission = missions.save(new StudyMission(base.id(),base.userId(),base.topicId(),base.subtopicId(),
+                    base.status(),base.learningState(),base.groundingMode(),base.availableTimeMinutes(),base.startedAt(),
+                    base.completedAt(),base.stoppedAt(),base.currentActivityId(),base.materials(),base.objectives(),
+                    List.of(base.activities().getFirst(),responseActivity),base.createdAt(),base.updatedAt()));
+            // Install an actual owned response-bearing contract, not the former permissive contract lambda.
+            String payload="""
+                    {"activityType":"SHORT_ANSWER","concept":"concept-2","learningObjective":"Apply the concept",
+                     "question":"Explain the concept","options":[],"correctOption":null,"expectedAnswer":"Expected answer",
+                     "explanation":"Reference answer","difficulty":"FOUNDATIONAL","sourceReferences":[],"limitations":[]}
+                    """;
+            try(var connection=openPostgresConnection();var statement=connection.prepareStatement("""
+                    UPDATE generated_artifacts SET artifact_type='QUESTION',task_type='QUESTION_GENERATION',
+                    prompt_id='QUESTION_GENERATION_V2',prompt_version='2',validation_status='VALIDATED',
+                    content_payload=CAST(? AS jsonb) WHERE id=? AND user_id=?
+                    """)) {
+                statement.setString(1,payload);statement.setObject(2,fixture.generatedArtifactId());
+                statement.setObject(3,fixture.ownerId());assertThat(statement.executeUpdate()).isOne();
+            }
+            context.getBean(com.hippocampus.learning.port.GeneratedArtifactRepository.class)
+                    .addSources(fixture.generatedArtifactId(),Set.of(fixture.sourceReferenceId()));
             UUID activityId = mission.currentActivityId();
             var entered = new CountDownLatch(1);
             var release = new CountDownLatch(1);
@@ -216,10 +241,7 @@ class StudyMissionPersistenceIntegrationTests extends PostgresIntegrationTestSup
                         "Unable to grade", ResponseEvaluationPort.Certainty.LIMITED,
                         ResponseEvaluationPort.RecommendedAction.RETRY, true);
             };
-            ActivityResponseContractRepository contracts = (id, artifactId, ownerId) ->
-                    java.util.Optional.of(new ActivityResponseContractRepository.ResponseContract(
-                            "Explain the concept", List.of("concept"), "Expected answer", null,
-                            "Reference answer"));
+            ActivityResponseContractRepository contracts = context.getBean(ActivityResponseContractRepository.class);
             var submit = new SubmitActivityResponseUseCase(
                     () -> new AuthenticatedUser(fixture.ownerId()), missions, attempts, contracts,
                     evaluator, (ownerId, missionId, id, mode, materials, references) ->
@@ -246,15 +268,100 @@ class StudyMissionPersistenceIntegrationTests extends PostgresIntegrationTestSup
                         .isEqualTo(ActivityResponseException.Reason.STALE_SUBMISSION);
                 assertThat(calls).hasValue(1);
                 assertThat(attempts.findOwnedByActivity(activityId, fixture.ownerId())).isEmpty();
+                try(var connection=openPostgresConnection();var statement=connection.prepareStatement(
+                        "SELECT id FROM study_missions WHERE id=? FOR UPDATE NOWAIT")) {
+                    connection.setAutoCommit(false);
+                    statement.setObject(1,mission.id());
+                    try(var rows=statement.executeQuery()) { assertThat(rows.next()).isTrue(); }
+                    connection.rollback();
+                }
             } finally {
                 release.countDown();
             }
             var saved = first.get(10, TimeUnit.SECONDS);
             assertThat(saved.outcome()).isEqualTo("UNGRADED");
             assertThat(submit.execute(original).attemptId()).isEqualTo(saved.attemptId());
+            assertThat(submit.execute(original).receipt()).isEqualTo(saved.receipt());
             assertThat(attempts.findOwnedByActivity(activityId, fixture.ownerId())).hasSize(1);
+            assertThat(saved.evaluation().correctConcepts()).isEmpty();
+            assertThat(missions.findOwnedById(mission.id(),fixture.ownerId()).orElseThrow().activities())
+                    .extracting(LearningActivity::id).containsExactlyElementsOf(mission.activities().stream().map(LearningActivity::id).toList());
+            try(var connection=openPostgresConnection();var statement=connection.prepareStatement(
+                    "SELECT count(*) FROM learning_follow_up_intents WHERE mission_id=?")) {
+                statement.setObject(1,mission.id());
+                try(var rows=statement.executeQuery()) { assertThat(rows.next()).isTrue();assertThat(rows.getLong(1)).isZero(); }
+            }
             assertThat(calls).hasValue(1);
             assertThat(transactionDuringEvaluation).isFalse();
+        }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+            "CORRUPT,CORRECT,false", "CORRECT,CORRUPT,false", "CORRUPT,CORRUPT,false",
+            "CORRECT,INCORRECT,false", "CORRECT,CORRECT,true", "PARTIAL,PARTIAL,true",
+            "INCORRECT,INCORRECT,true", "UNGRADED,UNGRADED,true"})
+    void storedReceiptIntegritySurvivesJdbcRoundTrip(
+            String status, String outcome, boolean accepted) throws Exception {
+        try (var context = startApplicationWithFlyway()) {
+            Fixture fixture = insertFixture();
+            var missions = context.getBean(StudyMissionRepository.class);
+            var attempts = context.getBean(StudentAttemptRepository.class);
+            var mission = missions.save(representativeMission(fixture));
+            UUID activityId = mission.activities().getFirst().id();
+            context.getBean(org.springframework.jdbc.core.simple.JdbcClient.class)
+                    .sql("UPDATE study_missions SET current_activity_id = ? WHERE id = ?")
+                    .params(activityId, mission.id()).update();
+            var beforeMission = missions.findOwnedById(mission.id(), fixture.ownerId()).orElseThrow();
+            Instant now = Instant.parse("2026-09-29T12:00:00Z");
+            UUID requestId = UUID.randomUUID();
+            UUID attemptId = UUID.randomUUID();
+            var receipt = new com.hippocampus.learning.application.SubmissionReceipt(
+                    mission.id(), activityId, attemptId, "CORRECT", List.of(), List.of(), List.of(),
+                    "Historical feedback", null, "ACTIVE", "RETRIEVAL", now.toString(), true);
+            var stored = attempts.append(new com.hippocampus.progress.domain.StudentAttempt(
+                    attemptId, fixture.ownerId(), activityId, 1, "Saved response", null,
+                    now, status, null, null, now, requestId,
+                    "UNGRADED".equals(status) ? "EVALUATION_UNRESOLVED" : null,
+                    receipt.toJson().replace("\"outcome\":\"CORRECT\"", "\"outcome\":\"" + outcome + "\"")));
+            var beforeAttempts = attempts.findOwnedByActivity(activityId, fixture.ownerId());
+            var evaluations = new AtomicInteger();
+            var submit = new SubmitActivityResponseUseCase(
+                    () -> new AuthenticatedUser(fixture.ownerId()), missions, attempts,
+                    (id, artifactId, ownerId) -> { throw new AssertionError("Replay must not load a contract"); },
+                    request -> { evaluations.incrementAndGet(); throw new AssertionError("Replay must not evaluate"); },
+                    (ownerId, missionId, id, mode, materials, references) -> {
+                        throw new AssertionError("Replay must not resolve evaluation evidence");
+                    }, context.getBean(LearningEngine.class),
+                    context.getBean(StudyMissionLearningStateAssembler.class),
+                    context.getBean(PersistActivityResponse.class), Clock.fixed(now, ZoneOffset.UTC));
+            var refresh = new com.hippocampus.learning.application.GetStudyMissionUseCase(
+                    () -> new AuthenticatedUser(fixture.ownerId()), missions,
+                    context.getBean(com.hippocampus.learning.port.GeneratedArtifactRepository.class),
+                    new com.hippocampus.bootstrap.JacksonGeneratedActivityContentDecoder(
+                            new tools.jackson.databind.ObjectMapper()),
+                    context.getBean(com.hippocampus.learning.port.StudyMissionSourcePresentationRepository.class),
+                    attempts);
+            var command = new SubmitActivityResponseUseCase.Command(
+                    mission.id(), activityId, "Saved response", null, null, requestId);
+
+            if (accepted) {
+                var expected = com.hippocampus.learning.application.SubmissionReceipt.fromJson(stored.submissionReceipt());
+                assertThat(submit.execute(command).receipt()).isEqualTo(expected);
+                assertThat(refresh.execute(mission.id()).latestSubmission()).isEqualTo(expected);
+            } else {
+                assertThatThrownBy(() -> submit.execute(command))
+                        .isInstanceOf(ActivityResponseException.class)
+                        .extracting(error -> ((ActivityResponseException) error).reason())
+                        .isEqualTo(ActivityResponseException.Reason.STALE_SUBMISSION);
+                assertThatThrownBy(() -> refresh.execute(mission.id()))
+                        .isInstanceOf(ActivityResponseException.class)
+                        .extracting(error -> ((ActivityResponseException) error).reason())
+                        .isEqualTo(ActivityResponseException.Reason.STALE_SUBMISSION);
+            }
+            assertThat(evaluations).hasValue(0);
+            assertThat(attempts.findOwnedByActivity(activityId, fixture.ownerId())).isEqualTo(beforeAttempts);
+            assertThat(missions.findOwnedById(mission.id(), fixture.ownerId())).contains(beforeMission);
         }
     }
 

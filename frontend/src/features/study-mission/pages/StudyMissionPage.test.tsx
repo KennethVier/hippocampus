@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../../api/apiClient'
@@ -11,6 +11,7 @@ import { StudyMissionPage } from './StudyMissionPage'
 
 const missionId = '3f2504e0-4f89-41d3-9a0c-0305e82c3301'
 const mission: StudyMission = {
+  continuation: null,
   id: missionId,
   status: 'ACTIVE',
   stage: 'EXPLAIN',
@@ -160,7 +161,7 @@ describe('StudyMissionPage', () => {
     }
     vi.spyOn(api, 'getStudyMission').mockResolvedValue({
       ...retrievalMission,
-      currentActivity: { ...retrievalMission.currentActivity!, status: 'COMPLETED' },
+      currentActivity: { ...retrievalMission.currentActivity!, status: 'COMPLETED' }, continuation: { actionType: 'RETRIEVE', rationaleCode: 'READY_FOR_RETRIEVAL', canMaterialize: true },
       latestSubmission: ungraded,
     })
     renderMission()
@@ -169,6 +170,50 @@ describe('StudyMissionPage', () => {
     expect(screen.queryByText('Correct concepts')).not.toBeInTheDocument()
     expect(screen.queryByText('Concepts to revisit')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+  })
+
+  it.each([false, true])('keeps saved work and Pause after a blocked read, conflict recovery=%s', async (conflictRecovery) => {
+    const ungraded: ActivitySubmission = { ...submission, outcome: 'UNGRADED',
+      correctConcepts: [], missingConcepts: [], misconceptions: [],
+      feedback: 'Your response is saved without a grade.',
+      attemptId: '11111111-1111-4111-8111-111111111111', limitationCode: 'EVALUATION_UNRESOLVED' }
+    const blocked: StudyMission = { ...retrievalMission,
+      currentActivity: { ...retrievalMission.currentActivity!, status: 'COMPLETED' },
+      continuation: null, latestSubmission: ungraded }
+    const reads = vi.spyOn(api, 'getStudyMission')
+    if (conflictRecovery) reads.mockResolvedValueOnce({ ...blocked,
+      continuation: { actionType: 'RETRIEVE', rationaleCode: 'READY_FOR_RETRIEVAL', canMaterialize: true } })
+    reads.mockResolvedValue(blocked)
+    const next = vi.spyOn(api, 'continueStudyMission').mockRejectedValue(new ApiError({
+      kind: 'http', status: 409, code: 'FOLLOW_UP_NO_PROGRESS', message: 'No eligible transition.' }))
+    const pause = vi.spyOn(api, 'pauseStudyMission').mockImplementation(async () => {
+      reads.mockResolvedValue({ ...blocked, status: 'PAUSED' })
+      return lifecycle('PAUSED')
+    })
+    const resume = vi.spyOn(api, 'resumeStudyMission').mockImplementation(async () => {
+      reads.mockResolvedValue(blocked)
+      return lifecycle('ACTIVE')
+    })
+    renderMission()
+    expect(await screen.findByText(ungraded.feedback)).toBeInTheDocument()
+    if (conflictRecovery) {
+      fireEvent.click(screen.getByRole('button', { name: /^Continue$/ }))
+      await waitFor(() => expect(next).toHaveBeenCalledTimes(1))
+      await waitFor(() => expect(screen.queryByRole('button', { name: /^Continue$/ })).not.toBeInTheDocument())
+    }
+    expect(screen.queryByRole('button', { name: /^Continue$/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Submit response' })).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Pause$/ })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: /^Pause$/ }))
+    const resumeButton = await screen.findByRole('button', { name: /^Resume$/ })
+    expect(pause).toHaveBeenCalledTimes(1)
+    fireEvent.click(resumeButton)
+    await waitFor(() => expect(resume).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Pause$/ })).toBeEnabled())
+    expect(screen.getByText(ungraded.feedback)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Continue$/ })).not.toBeInTheDocument()
+    expect(next).toHaveBeenCalledTimes(conflictRecovery ? 1 : 0)
+    expect(screen.queryByText('Correct concepts')).not.toBeInTheDocument()
   })
 
   it('submits a short-answer retrieval response as responseText', async () => {
@@ -277,7 +322,7 @@ describe('StudyMissionPage', () => {
   })
 
   it.each([
-    ['completed retrieval', { ...retrievalMission, currentActivity: { ...retrievalMission.currentActivity!, status: 'COMPLETED' } }],
+    ['completed retrieval', { ...retrievalMission, currentActivity: { ...retrievalMission.currentActivity!, status: 'COMPLETED' }, continuation: { actionType: 'RETRIEVE', rationaleCode: 'READY_FOR_RETRIEVAL', canMaterialize: true } }],
     ['presentation explanation', mission],
   ])('offers Continue for %s without requiring submission', async (_, value) => {
     vi.spyOn(api, 'getStudyMission').mockResolvedValue(value as StudyMission)
@@ -288,7 +333,7 @@ describe('StudyMissionPage', () => {
 
   it('continues authoritatively, refetches, and does not resend after a failed refresh', async () => {
     vi.spyOn(api, 'getStudyMission').mockResolvedValueOnce(mission).mockRejectedValueOnce(new ApiError({ kind: 'network', status: null, code: 'NETWORK_ERROR', message: 'private' }))
-    const continueRequest = vi.spyOn(api, 'continueStudyMission').mockResolvedValue()
+    const continueRequest = vi.spyOn(api, 'continueStudyMission').mockResolvedValue({ outcome: 'ACTIVITY_CREATED', activityId: mission.currentActivity!.id })
     renderMission()
     fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
     expect(await screen.findByRole('button', { name: 'Reload mission state' })).toBeInTheDocument()
@@ -369,5 +414,247 @@ describe('StudyMissionPage', () => {
     expect(screen.getByRole('button', { name: 'Hide sources' })).toHaveAttribute('aria-expanded', 'true')
     expect(pause).not.toHaveBeenCalled()
     expect(submit).not.toHaveBeenCalled()
+  })
+})
+
+
+describe('P7-15 follow-up compatibility', () => {
+  it('accepts an answer only through the newly current response-bearing activity', async () => {
+    const previous: StudyMission = { ...retrievalMission, currentActivity: { ...retrievalMission.currentActivity!, status: 'COMPLETED' }, continuation: { actionType: 'RETRIEVE', rationaleCode: 'GRADED_RESPONSE_FOLLOW_UP', canMaterialize: true } }
+    const followUpId = 'a1715015-1111-4111-8111-111111111111'
+    const followUp = { ...retrievalMission, currentActivity: { ...retrievalMission.currentActivity!, id: followUpId } } as StudyMission
+    vi.spyOn(api, 'getStudyMission').mockResolvedValueOnce(previous).mockResolvedValue(followUp)
+    const next = vi.spyOn(api, 'continueStudyMission').mockResolvedValue({ outcome: 'ACTIVITY_CREATED', activityId: followUpId })
+    const submit = vi.spyOn(api, 'submitActivityResponse').mockResolvedValue({ ...submission, activityId: followUpId })
+    renderMission()
+    expect(await screen.findByRole('button', { name: 'Continue' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Submit response' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.click(await screen.findByRole('radio', { name: 'Increased stroke volume' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit response' }))
+    await waitFor(() => expect(submit).toHaveBeenCalledTimes(1))
+    expect(next).toHaveBeenCalledWith(missionId, previous.currentActivity!.id)
+    expect(submit.mock.calls[0]?.[1]).toBe(followUpId)
+  })
+
+  it('allows the existing reflection alternative to continue without fabricating a response', async () => {
+    const reflection = { ...mission, currentActivity: { ...mission.currentActivity!, type: 'REFLECTION', content: null } } as StudyMission
+    vi.spyOn(api, 'getStudyMission').mockResolvedValue(reflection)
+    const submit = vi.spyOn(api, 'submitActivityResponse')
+    renderMission()
+    expect(await screen.findByRole('button', { name: 'Continue' })).toBeEnabled()
+    expect(screen.queryByRole('textbox', { name: 'Response' })).not.toBeInTheDocument()
+    expect(submit).not.toHaveBeenCalled()
+  })
+})
+
+
+describe('P7-16 assessment limitation', () => {
+  it.each(['conflict', 'ambiguous'] as const)('updates failed-reload messaging when a new recovery follows %s', async (firstReason) => {
+    const conflict = new ApiError({ kind: 'http', status: 409, code: 'MISSION_CONFLICT', message: 'private conflict' })
+    const ambiguous = new ApiError({ kind: 'network', status: null, code: 'NETWORK_ERROR', message: 'private network' })
+    const conflictNotice = 'This mission changed in another tab. The latest state has been loaded.'
+    const recoveryNotice = 'The latest mission state has been loaded. Check it before continuing.'
+    const conflictError = 'This mission changed in another tab, but the latest state could not be loaded.'
+    const recoveryError = 'The action result could not be confirmed, and the latest mission state could not be loaded. Reload the mission state before trying again.'
+    vi.spyOn(api, 'getStudyMission').mockResolvedValueOnce(mission).mockResolvedValueOnce(mission)
+      .mockRejectedValueOnce(ambiguous).mockResolvedValue(mission)
+    const request = vi.spyOn(api, 'continueStudyMission')
+      .mockRejectedValueOnce(firstReason === 'conflict' ? conflict : ambiguous)
+      .mockRejectedValueOnce(firstReason === 'conflict' ? ambiguous : conflict)
+    renderMission()
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    expect(await screen.findByText(firstReason === 'conflict' ? conflictNotice : recoveryNotice)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(await screen.findByText(firstReason === 'conflict' ? recoveryError : conflictError)).toBeInTheDocument()
+    expect(screen.queryByText(firstReason === 'conflict' ? conflictError : recoveryError)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeDisabled()
+    expect(request).toHaveBeenCalledTimes(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Reload mission state' }))
+    expect(await screen.findByText(firstReason === 'conflict' ? recoveryNotice : conflictNotice)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Reload mission state' })).not.toBeInTheDocument()
+    expect(request).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([null, 502, 504])('ignores stale recovery after mission navigation for HTTP %s', async (status) => {
+    const nextId = '55555555-5555-4555-8555-555555555555'
+    let finishReload: (value: StudyMission) => void = () => { throw new Error('Reload has not started') }
+    const pendingReload = new Promise<StudyMission>((resolve) => { finishReload = resolve })
+    const networkError = new ApiError({ kind: status === null ? 'network' : 'http', status, code: 'UNKNOWN_RESULT', message: 'private' })
+    const get = vi.spyOn(api, 'getStudyMission').mockResolvedValueOnce(mission)
+      .mockRejectedValueOnce(networkError).mockReturnValueOnce(pendingReload)
+      .mockResolvedValue({ ...mission, id: nextId })
+    const request = vi.spyOn(api, 'continueStudyMission').mockRejectedValue(networkError)
+    const client = createAppQueryClient()
+    const router = createMemoryRouter([{ path: '/missions/:missionId', element: <StudyMissionPage /> }],
+      { initialEntries: [`/missions/${missionId}`] })
+    render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    expect(await screen.findByRole('button', { name: 'Reload mission state' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Reload mission state' }))
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(3))
+    await act(async () => { await router.navigate(`/missions/${nextId}`) })
+    expect(await screen.findByRole('button', { name: 'Continue' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Reload mission state' })).not.toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent('could not be confirmed')
+    await act(async () => { finishReload(mission); await pendingReload })
+    expect(document.body).not.toHaveTextContent('The latest mission state has been loaded.')
+    expect(document.body).not.toHaveTextContent('changed in another tab')
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+    expect(request).toHaveBeenCalledTimes(1)
+  })
+
+  it('finishes only through explicit Continue and refreshes the unchanged saved receipt', async () => {
+    const saved: ActivitySubmission = { ...submission, outcome: 'UNGRADED', correctConcepts: [],
+      feedback: 'Saved without a grade.', limitationCode: 'EVALUATION_UNRESOLVED' }
+    const ready: StudyMission = { ...retrievalMission,
+      currentActivity: { ...retrievalMission.currentActivity, status: 'COMPLETED' }, latestSubmission: saved,
+      continuation: { actionType: 'COMPLETE', rationaleCode: 'TIME_EXHAUSTED', canMaterialize: false } }
+    vi.spyOn(api, 'getStudyMission').mockResolvedValueOnce(ready).mockResolvedValue({
+      ...ready, status: 'COMPLETED', completedAt: '2026-10-16T10:00:00Z', continuation: null,
+    })
+    const continueRequest = vi.spyOn(api, 'continueStudyMission').mockResolvedValue({
+      outcome: 'NO_ACTIVITY', actionType: 'COMPLETE', rationaleCode: 'TIME_EXHAUSTED',
+    })
+    renderMission()
+    const finish = await screen.findByRole('button', { name: 'Finish session' })
+    expect(continueRequest).not.toHaveBeenCalled()
+    fireEvent.click(finish)
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Finish session' })).not.toBeInTheDocument())
+    expect(continueRequest).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Saved without a grade.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Submit response' })).not.toBeInTheDocument()
+  })
+
+  it.each(['network', 'invalid-response', 500, 502, 503, 504, 599] as const)('refetches an ambiguous %s Continue result without retrying the mutation', async (kind) => {
+    vi.spyOn(api, 'getStudyMission').mockResolvedValueOnce(mission).mockResolvedValue({
+      ...retrievalMission, currentActivity: { ...retrievalMission.currentActivity, status: 'COMPLETED' },
+      continuation: { actionType: 'COMMUNICATE_LIMITATION', rationaleCode: 'ASSESSMENT_UNAVAILABLE', canMaterialize: false },
+    })
+    const continueRequest = vi.spyOn(api, 'continueStudyMission').mockRejectedValue(new ApiError({
+      kind: typeof kind === 'number' ? 'http' : kind, status: typeof kind === 'number' ? kind : null, code: 'UNKNOWN_RESULT', message: 'Private network details',
+    }))
+    renderMission()
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    expect(await screen.findByText(/Automatic assessment is unavailable/)).toBeInTheDocument()
+    expect(continueRequest).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent('Private network details')
+    expect(screen.getByText('The latest mission state has been loaded. Check it before continuing.')).toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent('changed in another tab')
+  })
+
+  it.each(['network', 'invalid-response', 500, 502, 503, 504, 599] as const)('blocks writes after ambiguous %s recovery fails until manual reload succeeds', async (kind) => {
+    const get = vi.spyOn(api, 'getStudyMission').mockResolvedValueOnce(mission)
+      .mockRejectedValueOnce(new ApiError({ kind: 'network', status: null, code: 'NETWORK_ERROR', message: 'private read' }))
+      .mockResolvedValue(connectionMission)
+    const request = vi.spyOn(api, 'continueStudyMission').mockRejectedValue(new ApiError({
+      kind: typeof kind === 'number' ? 'http' : kind, status: typeof kind === 'number' ? kind : null, code: 'UNKNOWN_RESULT', message: 'private write',
+    }))
+    const submit = vi.spyOn(api, 'submitActivityResponse')
+    const pause = vi.spyOn(api, 'pauseStudyMission')
+    renderMission()
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    expect(await screen.findByText('The action result could not be confirmed, and the latest mission state could not be loaded. Reload the mission state before trying again.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(pause).not.toHaveBeenCalled()
+    expect(submit).not.toHaveBeenCalled()
+    expect(document.body).not.toHaveTextContent('changed in another tab')
+    fireEvent.click(screen.getByRole('button', { name: 'Reload mission state' }))
+    expect(await screen.findByRole('textbox', { name: 'Response' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeEnabled()
+    expect(screen.getByText('The latest mission state has been loaded. Check it before continuing.')).toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent('changed in another tab')
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(get).toHaveBeenCalledTimes(3)
+    expect(document.body).not.toHaveTextContent('private')
+  })
+
+  it('requires explicit recovery before a new user Continue after an indeterminate server error', async () => {
+    const next = { ...mission, currentActivity: { ...mission.currentActivity!, id: '66666666-6666-4666-8666-666666666666' } }
+    const get = vi.spyOn(api, 'getStudyMission').mockResolvedValueOnce(mission)
+      .mockRejectedValueOnce(new ApiError({ kind: 'http', status: 503, code: 'UNAVAILABLE', message: 'private read' }))
+      .mockResolvedValue(next)
+    const request = vi.spyOn(api, 'continueStudyMission')
+      .mockRejectedValueOnce(new ApiError({ kind: 'http', status: 502, code: 'BAD_GATEWAY', message: 'private write' }))
+      .mockResolvedValue({ outcome: 'NO_ACTIVITY', actionType: 'RETRY_DEPENDENCY', rationaleCode: 'DEPENDENCY_UNAVAILABLE' })
+    renderMission()
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    await screen.findByRole('button', { name: 'Reload mission state' })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(request).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Reload mission state' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled())
+    expect(get).toHaveBeenCalledTimes(3)
+    expect(request).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2))
+    expect(request).toHaveBeenLastCalledWith(missionId, next.currentActivity.id)
+  })
+
+  it.each([400, 403, 404, 422])('keeps deterministic HTTP %s errors outside ambiguous recovery', async (status) => {
+    const get = vi.spyOn(api, 'getStudyMission').mockResolvedValue(mission)
+    const request = vi.spyOn(api, 'continueStudyMission').mockRejectedValue(new ApiError({
+      kind: 'http', status, code: 'REJECTED', message: 'private',
+    }))
+    renderMission()
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    await screen.findByRole('alert')
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: 'Reload mission state' })).not.toBeInTheDocument()
+  })
+
+  it('keeps saved ungraded work and Pause without offering another unassessable response', async () => {
+    const saved = { ...submission, outcome: 'UNGRADED', correctConcepts: [], missingConcepts: [], misconceptions: [],
+      feedback: 'Response saved.', limitationCode: 'EVALUATION_UNRESOLVED' }
+    const unavailable: StudyMission = { ...retrievalMission,
+      currentActivity: { ...retrievalMission.currentActivity!, status: 'COMPLETED' },
+      latestSubmission: saved,
+      continuation: { actionType: 'COMMUNICATE_LIMITATION', rationaleCode: 'ASSESSMENT_UNAVAILABLE', canMaterialize: false } }
+    vi.spyOn(api, 'getStudyMission').mockResolvedValue(unavailable)
+    const continueRequest = vi.spyOn(api, 'continueStudyMission')
+    renderMission()
+    expect(await screen.findByText(/Automatic assessment is unavailable/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument()
+    expect(screen.getByText('Response saved.')).toBeInTheDocument()
+    expect(continueRequest).not.toHaveBeenCalled()
+  })
+})
+
+describe('empty initial mission recovery', () => {
+  it('keeps initial COMPLETE nonterminal and offers Pause/Stop without Finish or generation', async () => {
+    const retry = vi.spyOn(api, 'retryInitialActivity')
+    vi.spyOn(api, 'getStudyMission').mockResolvedValue({ ...mission, currentActivity: null,
+      initialActivity: { startRequestId: missionId, state: 'NO_ACTIVITY', attemptsUsed: 0, maximumAttempts: 3,
+        canRetry: false, retryAfterSeconds: null, reasonCode: 'INITIAL_COMPLETION_NOT_ADMISSIBLE',
+        decision: { actionType: 'COMPLETE', rationaleCode: 'TIME_LIMIT' } } })
+    renderMission()
+    expect(await screen.findByText('No learning activity was completed. This mission remains active. You can pause or stop it.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop mission' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Finish|Retry initial/ })).not.toBeInTheDocument()
+    expect(retry).not.toHaveBeenCalled()
+  })
+  it('makes one explicit initial retry and never turns refresh into a POST', async () => {
+    const initial = { startRequestId: missionId, state: 'RETRYABLE' as const, attemptsUsed: 1,
+      maximumAttempts: 3 as const, canRetry: true, retryAfterSeconds: null, reasonCode: 'DEPENDENCY_UNAVAILABLE' as const, decision: null }
+    vi.spyOn(api, 'getStudyMission').mockResolvedValue({ ...mission, currentActivity: null, initialActivity: initial })
+    const retry = vi.spyOn(api, 'retryInitialActivity').mockResolvedValue({ missionId, startRequestId: missionId,
+      missionStatus: 'ACTIVE', replayed: true, outcome: 'PREPARING', retryAfterSeconds: 5 })
+    renderMission()
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry initial activity' }))
+    await waitFor(() => expect(retry).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh mission state' })).not.toBeDisabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh mission state' }))
+    await waitFor(() => expect(retry).toHaveBeenCalledTimes(1))
   })
 })

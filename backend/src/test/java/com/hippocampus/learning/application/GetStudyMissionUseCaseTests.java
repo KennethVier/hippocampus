@@ -28,6 +28,8 @@ import com.hippocampus.learning.domain.StudyMissionStatus;
 import com.hippocampus.learning.port.GeneratedArtifactRepository;
 import com.hippocampus.learning.port.StudyMissionRepository;
 import com.hippocampus.learning.port.StudyMissionSourcePresentationRepository;
+import com.hippocampus.progress.domain.StudentAttempt;
+import com.hippocampus.progress.port.StudentAttemptRepository;
 import com.hippocampus.shared.application.error.ApplicationNotFoundException;
 
 import tools.jackson.databind.ObjectMapper;
@@ -57,6 +59,138 @@ class GetStudyMissionUseCaseTests {
                 () -> new AuthenticatedUser(OWNER_ID), missions, artifacts,
                 new JacksonGeneratedActivityContentDecoder(new ObjectMapper()), sources);
     }
+
+    @Test
+    void initialRecoveryProjectsExpiredClaimWithoutMutatingReceiptOrMission() {
+        var mission=InitialStudyMissionStateAssemblerTests.mission(20);
+        var repository=org.mockito.Mockito.mock(StudyMissionRepository.class);
+        var receipts=org.mockito.Mockito.mock(com.hippocampus.learning.port.StudyMissionStartReceiptRepository.class);
+        var authority=org.mockito.Mockito.mock(com.hippocampus.learning.port.InitialStudyMissionSourceAuthority.class);
+        var frozen=InitialStudyMissionStateAssembler.frozenFingerprint(mission);
+        var receipt=com.hippocampus.learning.port.StudyMissionStartReceiptRepository.Receipt.ready(mission.userId(),UUID.randomUUID(),"a".repeat(64),
+            mission.id(),mission.objectives().getFirst().id(),frozen,"b".repeat(64),mission.updatedAt()).claim(UUID.randomUUID(),
+            new com.hippocampus.learning.port.StudyMissionStartReceiptRepository.Snapshot(mission.updatedAt(),null,0,0,mission.objectives().getFirst().id(),frozen),
+            new com.hippocampus.learning.domain.NextLearningAction(LearningActionType.UNDERSTAND,mission.objectives().getFirst().id(),"topic:"+mission.topicId(),
+                LearningDifficulty.FOUNDATIONAL,"INITIAL",true,com.hippocampus.learning.domain.LearningActionConstraints.unconstrained()),mission.updatedAt());
+        org.mockito.Mockito.when(repository.findOwnedById(mission.id(),mission.userId())).thenReturn(Optional.of(mission));
+        org.mockito.Mockito.when(receipts.findByMission(mission.userId(),mission.id())).thenReturn(Optional.of(receipt));
+        org.mockito.Mockito.when(receipts.databaseTime()).thenReturn(mission.updatedAt().plusSeconds(181));
+        var query=new GetStudyMissionUseCase(()->new AuthenticatedUser(mission.userId()),repository,artifacts,
+            new JacksonGeneratedActivityContentDecoder(new ObjectMapper()),sources,org.mockito.Mockito.mock(StudentAttemptRepository.class),null,
+            java.time.Clock.systemUTC(),receipts,authority);
+        var first=query.execute(mission.id(),true,true);var second=query.execute(mission.id(),true,true);
+        assertThat(first).isEqualTo(second);assertThat(first.currentActivity()).isNull();assertThat(first.status()).isEqualTo("ACTIVE");
+        assertThat(first.initialActivity().state()).isEqualTo("CLAIMED");assertThat(first.initialActivity().canRetry()).isTrue();
+        org.mockito.Mockito.verify(receipts,org.mockito.Mockito.times(2)).findByMission(mission.userId(),mission.id());
+        org.mockito.Mockito.verify(receipts,org.mockito.Mockito.times(2)).databaseTime();org.mockito.Mockito.verifyNoMoreInteractions(receipts);
+        org.mockito.Mockito.verify(repository,org.mockito.Mockito.times(2)).findOwnedById(mission.id(),mission.userId());
+        org.mockito.Mockito.verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    void refreshRestoresPersistedUngradedReceiptWithoutInventingAResult() {
+        var fixture = savedUngradedFixture();
+        var receipt = fixture.receipt();
+        var originalMission = fixture.mission();
+        var query = new GetStudyMissionUseCase(() -> new AuthenticatedUser(OWNER_ID), missions,
+                artifacts, new JacksonGeneratedActivityContentDecoder(new ObjectMapper()), sources, fixture.attempts());
+        var resumed = query.execute(MISSION_ID);
+        assertThat(resumed.latestSubmission()).isEqualTo(receipt);
+        assertThat(resumed.latestSubmission().outcome()).isEqualTo("UNGRADED");
+        assertThat(resumed.latestSubmission().correctConcepts()).isEmpty();
+        assertThat(resumed.latestSubmission().missingConcepts()).isEmpty();
+        assertThat(resumed.latestSubmission().misconceptions()).isEmpty();
+        assertThat(resumed.latestSubmission().continuationAvailable()).isTrue();
+        assertThat(resumed.currentActivity().status()).isEqualTo("COMPLETED");
+        assertThat(resumed.currentActivity().content().toString()).doesNotContain("PRIVATE_EXPECTED_ANSWER");
+        assertThat(missions.current).isEqualTo(originalMission);
+    }
+
+    @Test
+    void optInContinuationPreservesTheReceiptAndLegacyReadWhileProjectingTheCurrentDecision() {
+        var fixture = savedUngradedFixture();
+        var decision = org.mockito.Mockito.mock(StudyMissionContinuationDecision.class);
+        var limitation = new com.hippocampus.learning.domain.NextLearningAction(
+                LearningActionType.COMMUNICATE_LIMITATION, UUID.randomUUID(), "recall", null,
+                "ASSESSMENT_UNAVAILABLE", false);
+        org.mockito.Mockito.when(decision.decide(fixture.mission(), fixture.activity(), NOW)).thenReturn(
+                new StudyMissionContinuationDecision.Decision(limitation, Map.of()));
+        var query = new GetStudyMissionUseCase(() -> new AuthenticatedUser(OWNER_ID), missions,
+                artifacts, new JacksonGeneratedActivityContentDecoder(new ObjectMapper()), sources, fixture.attempts(),
+                decision, java.time.Clock.fixed(NOW, java.time.ZoneOffset.UTC));
+        var resumed = query.execute(MISSION_ID, true);
+        assertThat(resumed.latestSubmission()).isEqualTo(fixture.receipt());
+        assertThat(resumed.continuation().actionType()).isEqualTo("COMMUNICATE_LIMITATION");
+        assertThat(resumed.continuation().canMaterialize()).isFalse();
+        assertThat(query.execute(MISSION_ID).continuation()).isNull();
+        assertThat(query.execute(MISSION_ID, true).latestSubmission()).isEqualTo(fixture.receipt());
+        assertThat(missions.current).isEqualTo(fixture.mission());
+    }
+
+    @Test
+    void noProgressPreservesSavedReadButOtherPolicyAndInfrastructureFailuresPropagate() {
+        var fixture = savedUngradedFixture();
+        var decision = org.mockito.Mockito.mock(StudyMissionContinuationDecision.class);
+        var blocked = new com.hippocampus.shared.domain.error.DomainConflictException(
+                new com.hippocampus.shared.domain.error.ErrorCode("FOLLOW_UP_NO_PROGRESS"), "Blocked");
+        org.mockito.Mockito.when(decision.decide(fixture.mission(), fixture.activity(), NOW)).thenThrow(blocked);
+        var query = new GetStudyMissionUseCase(() -> new AuthenticatedUser(OWNER_ID), missions,
+                artifacts, new JacksonGeneratedActivityContentDecoder(new ObjectMapper()), sources, fixture.attempts(),
+                decision, java.time.Clock.fixed(NOW, java.time.ZoneOffset.UTC));
+        for (int i = 0; i < 2; i++) {
+            var result = query.execute(MISSION_ID, true);
+            assertThat(result.latestSubmission()).isEqualTo(fixture.receipt());
+            assertThat(result.currentActivity().id()).isEqualTo(ACTIVITY_ID);
+            assertThat(result.continuation()).isNull();
+            assertThat(result.status()).isEqualTo("ACTIVE");
+            assertThat(missions.current).isEqualTo(fixture.mission());
+        }
+        var other = new com.hippocampus.shared.domain.error.DomainConflictException(
+                new com.hippocampus.shared.domain.error.ErrorCode("OTHER_CONFLICT"), "Other");
+        org.mockito.Mockito.doThrow(other).when(decision).decide(fixture.mission(), fixture.activity(), NOW);
+        assertThatThrownBy(() -> query.execute(MISSION_ID, true)).isSameAs(other);
+        var unavailable = new IllegalStateException("Database unavailable");
+        org.mockito.Mockito.doThrow(unavailable).when(decision).decide(fixture.mission(), fixture.activity(), NOW);
+        assertThatThrownBy(() -> query.execute(MISSION_ID, true)).isSameAs(unavailable);
+        missions.visible = false;
+        assertThatThrownBy(() -> query.execute(MISSION_ID, true)).isInstanceOf(ApplicationNotFoundException.class);
+    }
+
+    private SavedUngradedFixture savedUngradedFixture() {
+        var active = activity(LearningActivityType.RETRIEVE);
+        var completed = new LearningActivity(active.id(), active.learningObjectiveId(),
+                active.activityType(), active.representedActionType(), active.questionIntent(),
+                active.templateSignature(), "COMPLETED", active.difficulty(), active.sequenceNumber(),
+                active.generatedArtifactId(), active.sourceRequired(), active.startedAt(), NOW,
+                active.createdAt(), active.sourceReferenceIds());
+        missions.current = mission(completed);
+        var originalMission = missions.current;
+        artifacts.put(artifact("QUESTION", "QUESTION_GENERATION", """
+                {"activityType":"SHORT_ANSWER","concept":"radial nerve","learningObjective":"Recall",
+                 "question":"Why can radial nerve injury cause wrist drop?","options":[],
+                 "correctOption":null,"expectedAnswer":"PRIVATE_EXPECTED_ANSWER",
+                 "explanation":"PRIVATE_MECHANISM","difficulty":"FOUNDATIONAL",
+                 "sourceReferences":[],"limitations":[]}
+                """));
+        artifacts.sources = Set.of(SOURCE_ID);
+        UUID attemptId = UUID.randomUUID();
+        var receipt = new SubmissionReceipt(MISSION_ID, ACTIVITY_ID, attemptId, "UNGRADED",
+                List.of(), List.of(), List.of(), "Your response was saved, but could not be graded reliably.",
+                "EVALUATION_UNRESOLVED", "ACTIVE", "RETRIEVAL", NOW.toString(), true);
+        var attempt = new StudentAttempt(attemptId, OWNER_ID, ACTIVITY_ID, 1,
+                "It denervates the wrist extensors.", null, NOW, "UNGRADED", null, null,
+                NOW, UUID.randomUUID(), "EVALUATION_UNRESOLVED", receipt.toJson());
+        StudentAttemptRepository saved = new StudentAttemptRepository() {
+            @Override public StudentAttempt append(StudentAttempt value) { throw new AssertionError("read only"); }
+            @Override public List<StudentAttempt> findOwnedByActivity(UUID activityId, UUID ownerId) {
+                return ACTIVITY_ID.equals(activityId) && OWNER_ID.equals(ownerId) ? List.of(attempt) : List.of();
+            }
+        };
+        return new SavedUngradedFixture(originalMission, completed, receipt, saved);
+    }
+
+    private record SavedUngradedFixture(StudyMission mission, LearningActivity activity,
+            SubmissionReceipt receipt, StudentAttemptRepository attempts) {}
 
     @Test
     void ownerReadsMissionWithoutCurrentActivityAndAnotherUserFailsClosed() {
@@ -328,12 +462,13 @@ class GetStudyMissionUseCaseTests {
     private static final class InMemoryMissions implements StudyMissionRepository {
         private StudyMission current;
         private boolean visible = true;
+        private int saveCalls;
 
         private InMemoryMissions(StudyMission current) {
             this.current = current;
         }
 
-        @Override public StudyMission save(StudyMission mission) { current = mission; return mission; }
+        @Override public StudyMission save(StudyMission mission) { saveCalls++; current = mission; return mission; }
         @Override public Optional<StudyMission> findOwnedById(UUID missionId, UUID ownerId) {
             return visible && current.id().equals(missionId) && current.userId().equals(ownerId)
                     ? Optional.of(current) : Optional.empty();

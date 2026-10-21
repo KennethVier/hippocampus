@@ -66,7 +66,7 @@ public final class BuildEvidencePackage {
         Map<UUID, SelectedChunk> selectedByChunk = new LinkedHashMap<>();
         selectedCandidates.forEach(candidate -> selectedByChunk.put(
                 candidate.chunkId(), new SelectedChunk(selectedByChunk.size() + 1, candidate)));
-        List<EvidenceVisual> eligibleVisuals = collectVisuals(command.scope(), selectedByChunk, limitationCodes);
+        List<EvidenceVisual> eligibleVisuals = collectVisuals(command.scope(), selectedByChunk, limitationCodes,command.frozenMission());
         if (eligibleVisuals.size() > command.budget().maxVisuals()) {
             limitationCodes.add(EvidenceLimitationCode.VISUAL_BUDGET_APPLIED);
         }
@@ -114,12 +114,13 @@ public final class BuildEvidencePackage {
     private List<EvidenceVisual> collectVisuals(
             RetrievalScope scope,
             Map<UUID, SelectedChunk> selectedByChunk,
-            LinkedHashSet<EvidenceLimitationCode> limitations) {
+            LinkedHashSet<EvidenceLimitationCode> limitations,com.hippocampus.rag.port.FrozenMissionSourceBinding binding) {
         if (selectedByChunk.isEmpty()) {
             return List.of();
         }
         List<EvidenceVisualSource> sources = Objects.requireNonNull(
-                visuals.findLinkedVisuals(scope, Set.copyOf(selectedByChunk.keySet())),
+                binding==null ? visuals.findLinkedVisuals(scope, Set.copyOf(selectedByChunk.keySet()))
+                        : visuals.findLinkedVisuals(scope, Set.copyOf(selectedByChunk.keySet()),binding),
                 "visual repository must not return null");
         Map<UUID, VisualAccumulator> byVisual = new LinkedHashMap<>();
         Map<UUID, EvidenceVisualSource> canonicalSources = new LinkedHashMap<>();
@@ -203,7 +204,9 @@ public final class BuildEvidencePackage {
             RetrievalScope scope,
             List<HybridCandidate> rankedCandidates,
             RetrievalQuality quality,
-            EvidencePackageBudget budget) {
+            EvidencePackageBudget budget,com.hippocampus.rag.port.FrozenMissionSourceBinding frozenMission) {
+        public Command(RetrievalScope scope,List<HybridCandidate> rankedCandidates,RetrievalQuality quality,
+                EvidencePackageBudget budget) { this(scope,rankedCandidates,quality,budget,null); }
         public Command {
             Objects.requireNonNull(scope, "scope must not be null");
             rankedCandidates = List.copyOf(Objects.requireNonNull(

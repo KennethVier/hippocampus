@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -42,6 +43,10 @@ import com.hippocampus.rag.port.VectorSearchRequest;
 
 public final class LearningActivityEvidenceAdapter implements ActivityEvidencePort {
 
+    private final com.hippocampus.identity.port.CurrentUser initialUser;
+    private final com.hippocampus.learning.port.StudyMissionRepository initialMissions;
+    private final com.hippocampus.learning.port.StudyMissionStartReceiptRepository initialReceipts;
+    private final com.hippocampus.learning.port.InitialStudyMissionSourceAuthority initialSources;
     private final BuildRetrievalScope buildScope;
     private final LexicalSearchRepository lexicalSearch;
     private final VectorSearchRepository vectorSearch;
@@ -61,6 +66,19 @@ public final class LearningActivityEvidenceAdapter implements ActivityEvidencePo
             BuildEvidencePackage buildEvidencePackage,
             MaterializeEvidenceSourceReferences materializeSourceReferences,
             ActivityEvidenceRetrievalOptions options) {
+        this(buildScope,lexicalSearch,vectorSearch,generations,embeddingPort,buildEvidencePackage,
+                materializeSourceReferences,options,null,null,null,null);
+    }
+
+    public LearningActivityEvidenceAdapter(BuildRetrievalScope buildScope,LexicalSearchRepository lexicalSearch,
+            VectorSearchRepository vectorSearch,ActiveIndexGenerationRepository generations,Optional<EmbeddingPort> embeddingPort,
+            BuildEvidencePackage buildEvidencePackage,MaterializeEvidenceSourceReferences materializeSourceReferences,
+            ActivityEvidenceRetrievalOptions options,com.hippocampus.identity.port.CurrentUser initialUser,
+            com.hippocampus.learning.port.StudyMissionRepository initialMissions,
+            com.hippocampus.learning.port.StudyMissionStartReceiptRepository initialReceipts,
+            com.hippocampus.learning.port.InitialStudyMissionSourceAuthority initialSources) {
+        this.initialUser=initialUser;this.initialMissions=initialMissions;
+        this.initialReceipts=initialReceipts;this.initialSources=initialSources;
         this.buildScope = Objects.requireNonNull(buildScope, "buildScope must not be null");
         this.lexicalSearch = Objects.requireNonNull(lexicalSearch, "lexicalSearch must not be null");
         this.vectorSearch = Objects.requireNonNull(vectorSearch, "vectorSearch must not be null");
@@ -83,39 +101,98 @@ public final class LearningActivityEvidenceAdapter implements ActivityEvidencePo
             throw new IllegalStateException("authenticated retrieval scope does not match mission owner");
         }
         RetrievalScope frozenScope = frozenMissionScope(authorized, request.materialScopes());
+        return retrieve(request,frozenScope,null,()->{});
+    }
+
+    @Override
+    public Evidence retrieve(Request request,com.hippocampus.learning.port.StudyMissionStartReceiptRepository.InitialContext context) {
+        var mission=authorizeInitial(request,context);
+        var byVersion=new LinkedHashMap<UUID,Set<UUID>>();
+        Set<UUID> whole=new HashSet<>();
+        for(var material:mission.materials()) {
+            if(material.documentNodeId()==null) { whole.add(material.materialVersionId());byVersion.put(material.materialVersionId(),Set.of()); }
+            else if(!whole.contains(material.materialVersionId())) byVersion.computeIfAbsent(material.materialVersionId(),v->new HashSet<>()).add(material.documentNodeId());
+        }
+        var scope=new RetrievalScope(mission.userId(),mission.topicId(),GroundingMode.valueOf(mission.groundingMode().name()),
+                byVersion.entrySet().stream().map(e->new RetrievalScopeTarget(e.getKey(),e.getValue())).toList());
+        var binding=new com.hippocampus.rag.port.FrozenMissionSourceBinding(context.missionId(),context.generation(),context.claimToken());
+        return retrieve(request,scope,binding,()->authorizeInitial(request,context));
+    }
+
+    private com.hippocampus.learning.domain.StudyMission authorizeInitial(Request request,
+            com.hippocampus.learning.port.StudyMissionStartReceiptRepository.InitialContext context) {
+        if(initialUser==null || initialMissions==null || initialReceipts==null || initialSources==null)
+            throw new IllegalStateException("Initial retrieval authorization is not configured");
+        Objects.requireNonNull(request);Objects.requireNonNull(context);
+        UUID owner=initialUser.authenticatedUser().userId();
+        if(!owner.equals(request.userId()) || !owner.equals(context.ownerId()) || !request.missionId().equals(context.missionId()))
+            throw initialUnavailable();
+        var mission=initialMissions.findOwnedById(context.missionId(),owner).orElseThrow(LearningActivityEvidenceAdapter::initialUnavailable);
+        var receipt=initialReceipts.findByMission(owner,mission.id()).orElseThrow(LearningActivityEvidenceAdapter::initialUnavailable);
+        if(!receipt.matches(context,initialReceipts.databaseTime()) || mission.status()!=com.hippocampus.learning.domain.StudyMissionStatus.ACTIVE
+                || mission.currentActivityId()!=null || !mission.activities().isEmpty() || mission.objectives().size()!=1
+                || !mission.topicId().equals(request.topicId()) || mission.groundingMode()!=request.groundingMode()
+                || !mission.updatedAt().equals(context.snapshot().updatedAt())
+                || !mission.objectives().getFirst().equals(request.objective())
+                || !mission.objectives().getFirst().id().equals(context.snapshot().objectiveId())
+                || !com.hippocampus.learning.application.InitialStudyMissionStateAssembler.frozenFingerprint(mission)
+                    .equals(context.snapshot().frozenBindingFingerprint())
+                || request.materialScopes().size()!=mission.materials().size()
+                || !new HashSet<>(request.materialScopes()).equals(new HashSet<>(mission.materials()))
+                || !request.action().equals(context.selectedAction())) throw initialUnavailable();
+        var identity=new com.hippocampus.learning.application.StartStudyMissionExperienceUseCase.Command(receipt.startRequestId(),
+                mission.topicId(),mission.objectives().getFirst().objectiveText(),mission.availableTimeMinutes(),
+                mission.materials().stream().map(MissionMaterial::materialId).toList());
+        if(!receipt.requestFingerprint().equals(identity.fingerprint(owner))) throw initialUnavailable();
+        initialSources.inspect(owner,mission.materials());
+        return mission;
+    }
+
+    private static IllegalStateException initialUnavailable() { return new IllegalStateException("Initial source authorization changed"); }
+
+    private Evidence retrieve(Request request,RetrievalScope frozenScope,
+            com.hippocampus.rag.port.FrozenMissionSourceBinding binding,Runnable authorize) {
+        authorize.run();
         String query = retrievalQuery(request);
         if (query.length() > options.maxQueryLength()) {
             throw new IllegalArgumentException("activity evidence query exceeds configured maximum length");
         }
 
-        List<HybridCandidate> candidates = retrieveCandidates(frozenScope, query);
+        List<HybridCandidate> candidates = retrieveCandidates(frozenScope, query,binding,authorize);
         RetrievalQuality quality = retrievalQuality(candidates);
+        authorize.run();
         EvidencePackage evidencePackage = buildEvidencePackage.execute(new BuildEvidencePackage.Command(
                 frozenScope,
                 candidates,
                 quality,
-                new EvidencePackageBudget(options.maxChunks(), options.maxVisuals())));
-        Set<UUID> sourceReferenceIds = materializeSourceReferences.execute(evidencePackage).stream()
+                new EvidencePackageBudget(options.maxChunks(), options.maxVisuals()),binding));
+        authorize.run();
+        Set<UUID> sourceReferenceIds = (binding==null ? materializeSourceReferences.execute(evidencePackage)
+                : materializeSourceReferences.execute(evidencePackage,binding)).stream()
                 .map(SourceReference::sourceReferenceId)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        authorize.run();
         return new Evidence(sourceReferenceIds, new RagActivityEvidencePayload(evidencePackage));
     }
 
-    private List<HybridCandidate> retrieveCandidates(RetrievalScope scope, String query) {
+    private List<HybridCandidate> retrieveCandidates(RetrievalScope scope,String query,
+            com.hippocampus.rag.port.FrozenMissionSourceBinding binding,Runnable authorize) {
         if (scope.isEmpty()) {
             return List.of();
         }
         List<LexicalSearchHit> lexical = List.copyOf(lexicalSearch.search(
-                new LexicalSearchRequest(scope, query, options.lexicalLimit())));
-        List<VectorSearchHit> vector = vectorHits(scope, query);
+                new LexicalSearchRequest(scope, query, options.lexicalLimit(),binding)));
+        List<VectorSearchHit> vector = vectorHits(scope, query,binding,authorize);
         return merger.merge(lexical, vector, options.hybridLimit());
     }
 
-    private List<VectorSearchHit> vectorHits(RetrievalScope scope, String query) {
+    private List<VectorSearchHit> vectorHits(RetrievalScope scope,String query,
+            com.hippocampus.rag.port.FrozenMissionSourceBinding binding,Runnable authorize) {
         Optional<IndexGeneration> active = generations.findActiveGeneration();
         if (active.isEmpty() || embeddingPort.isEmpty()) {
             return List.of();
         }
+        authorize.run();
         UUID correlationId = UUID.randomUUID();
         EmbeddingBatchResult result;
         try {
@@ -136,7 +213,7 @@ public final class LearningActivityEvidenceAdapter implements ActivityEvidencePo
             return List.of();
         }
         return List.copyOf(vectorSearch.search(new VectorSearchRequest(
-                scope, generation.id(), vector, options.vectorLimit())));
+                scope, generation.id(), vector, options.vectorLimit(),binding)));
     }
 
     private static RetrievalScope frozenMissionScope(

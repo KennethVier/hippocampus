@@ -49,6 +49,19 @@ class StudyMissionReadControllerWebTests {
     private GetStudyMissionUseCase getStudyMissionUseCase;
 
     @Test
+    void exactInitialContractOptInIsIndependentAndRejectsDuplicates() throws Exception {
+        Mockito.when(getStudyMissionUseCase.execute(MISSION_ID,true,true)).thenReturn(result());
+        mvc.perform(get("/api/study-missions/{missionId}",MISSION_ID).param("continuationContract","1").param("initialActivityContract","1").with(user("student")))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.initialActivity").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Cache-Control","no-store"));
+        Mockito.verify(getStudyMissionUseCase).execute(MISSION_ID,true,true);
+        Mockito.clearInvocations(getStudyMissionUseCase);
+        for(String[] values:new String[][]{{"1","1"},{"01"},{""},{"2"}})
+            mvc.perform(get("/api/study-missions/{missionId}",MISSION_ID).param("initialActivityContract",values).with(user("student"))).andExpect(status().isBadRequest());
+        Mockito.verifyNoInteractions(getStudyMissionUseCase);
+    }
+
+    @Test
     void authenticatedGetReturnsTypedLearnerSafePresentation() throws Exception {
         Mockito.doReturn(result())
                 .when(getStudyMissionUseCase)
@@ -65,7 +78,31 @@ class StudyMissionReadControllerWebTests {
                 .andReturn().getResponse().getContentAsString();
 
         assertThat(response).doesNotContain(
-                "provider", "model", "prompt", "chunk", "expectedAnswer", "correctOption");
+                "provider", "model", "prompt", "chunk", "expectedAnswer", "correctOption", "continuation");
+    }
+
+    @Test
+    void optInReadAddsCurrentDecisionWithoutChangingLegacyPresentation() throws Exception {
+        var old = result();
+        var current = new GetStudyMissionUseCase.Result(old.id(), old.status(), old.stage(),
+                old.currentActivity(), old.availableTimeMinutes(), old.startedAt(), old.completedAt(),
+                old.stoppedAt(), old.updatedAt(), null,
+                new GetStudyMissionUseCase.Continuation("COMMUNICATE_LIMITATION", "ASSESSMENT_UNAVAILABLE", false));
+        Mockito.when(getStudyMissionUseCase.execute(MISSION_ID, true)).thenReturn(current);
+        mvc.perform(get("/api/study-missions/{missionId}", MISSION_ID)
+                        .param("continuationContract", "1").with(user("student")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.continuation.actionType").value("COMMUNICATE_LIMITATION"))
+                .andExpect(jsonPath("$.continuation.canMaterialize").value(false));
+        Mockito.verify(getStudyMissionUseCase).execute(MISSION_ID, true);
+    }
+
+    @Test
+    void invalidReadVersionDoesNotCallApplication() throws Exception {
+        mvc.perform(get("/api/study-missions/{missionId}", MISSION_ID)
+                        .param("continuationContract", "1", "1").with(user("student")))
+                .andExpect(status().isBadRequest());
+        Mockito.verifyNoInteractions(getStudyMissionUseCase);
     }
 
     @Test

@@ -4,7 +4,7 @@ Audience: Architecture, backend, frontend, AI/RAG, DevOps, security, QA,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 26
-Last Updated: 2026-10-11
+Last Updated: 2026-10-17
 Owner: Project Hippocampus Team
 Prerequisites:
 - README
@@ -25,7 +25,7 @@ Scope: Documentation freeze, implementation authority, phase sequencing,
   governance.
 Status: Final
 Title: Development Roadmap & Implementation Phases
-Version: 1.0.3
+Version: 1.0.5
 ---
 
 # 26 - Development Roadmap & Implementation Phases
@@ -827,6 +827,22 @@ pedagogical control to an LLM.
 
 # 16. Phase 7 --- Study Missions
 
+## P7-16 boundary (ADR-0016 and ADR-0017)
+
+After saved UNGRADED plus application-owned known unavailability, prevent reuse
+and regeneration of response-bearing targets that remain unassessable. Preserve
+higher-priority Engine policies, existing COMMUNICATE_LIMITATION and explicit
+Pause. Scope is availability facts, continuation dispatch/opt-in API/client,
+snapshot-checked completion in the existing mission-status boundary, approved
+source-lock ordering and focused tests. ADR-0017 adds the narrow forward-only
+immutable artifact-origin binding and same-objective/same-mission reuse guard,
+with unbound legacy artifacts ineligible for reuse. No other schema or
+infrastructure, grading/profile/generation change, new Engine action or Phase 8
+evidence feature is authorized. P7-14
+requires user/CI evidence, independent general/security gates and the full
+continuation journey; design approval is neither implementation nor release.
+
+
 ## Goal
 
 Combine source knowledge, retrieval, AI support, and the Learning Engine
@@ -872,8 +888,12 @@ stop, source, or terminal policy prevents it. An answerable follow-up uses the
 normal authorized Learning Activity lifecycle; prerequisite support or time
 may defer intent. Phase 7 P7-15 implements this separately from P7-09
 response grading and is required before the P7-14 First Hippocampus gate.
-The Phase 7 tracker therefore contains 15 implementation items, including
-its gate. This does not start Phase 8 evidence/review implementation.
+Accepted ADR-0016 adds P7-16 for known assessment-unavailable continuation,
+separate from P7-09 grading containment and P7-15 graded follow-up. P7-14
+explicitly depends on P7-16 as well as all existing P7 work and validated P7-09
+Golden checks. The Phase 7 tracker contains 16 implementation items, including
+its gate. P7-16 remains Not Started pending a separately authorized implementation
+packet; this does not start Phase 8 evidence/review implementation.
 
 ## Product Boundary
 
@@ -1837,6 +1857,11 @@ Hippocampus v1.0 Source of Truth
 ------------------------------------------------------------------------
 
 # 48. Revision History
+
+- **1.0.5 - 2026-10-17 - Project Hippocampus Team:** Aligned P7-16's scoped artifact-origin prerequisite and legacy reuse restriction with accepted ADR-0017; preserved Phase 7 and validation gates.
+
+- **1.0.4 - 2026-10-16 - Project Hippocampus Team:** ADR-0016 governance alignment. Accepted ADR-0016 continuation governance, synchronized 16 Phase 7 items and explicit P7-14 dependency on P7-16; no implementation or Phase 8 authorization.
+
 
   ------------------------------------------------------------------------
   Version           Date              Author            Changes

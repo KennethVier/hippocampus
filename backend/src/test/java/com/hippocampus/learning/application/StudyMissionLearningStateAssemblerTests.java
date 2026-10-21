@@ -36,59 +36,92 @@ class StudyMissionLearningStateAssemblerTests {
             new StudyMissionLearningStateAssembler();
 
     @Test
-    void correctUnderstandingCheckContributesDevelopingUnderstandingAndNoRecall() {
+    void followUpHistoryRecoveryPreservesStableLegacyIdentityAndPolicyOrdering() {
+        var old=activity(LearningActionType.RETRIEVE);
+        var newer=new LearningActivity(UUID.randomUUID(),OBJECTIVE_ID,LearningActivityType.RETRIEVE,LearningActionType.RETRIEVE,
+                null,null,"COMPLETED",LearningDifficulty.FOUNDATIONAL,2,null,false,NOW,NOW,NOW,Set.of());
+        var base=mission(old);
+        var mission=new StudyMission(base.id(),base.userId(),base.topicId(),base.subtopicId(),base.status(),base.learningState(),
+                base.groundingMode(),base.availableTimeMinutes(),base.startedAt(),null,null,newer.id(),base.materials(),base.objectives(),
+                List.of(old,newer),base.createdAt(),NOW);
+        var first=new com.hippocampus.progress.domain.StudentAttempt(UUID.randomUUID(),USER_ID,old.id(),1,"old",null,NOW,"INCORRECT",null,"INCORRECT",NOW);
+        var last=new com.hippocampus.progress.domain.StudentAttempt(UUID.randomUUID(),USER_ID,newer.id(),1,"new",null,NOW,"CORRECT",null,"CORRECT",NOW);
+        var history=Map.of(old.id(),List.of(first),newer.id(),List.of(last));
+        var recovered=assembler.assembleForFollowUp(mission,newer,history,NOW);
+        var restarted=new StudyMissionLearningStateAssembler().assembleForFollowUp(mission,newer,history,NOW);
+        assertThat(recovered.recentActivityHistory()).isEqualTo(restarted.recentActivityHistory());
+        assertThat(recovered.recentActivityHistory()).extracting(com.hippocampus.learning.domain.RecentLearningActivity::learningActivityId)
+                .containsExactly(old.id(),newer.id());
+        assertThat(recovered.recentActivityHistory()).extracting(com.hippocampus.learning.domain.RecentLearningActivity::questionIntent)
+                .containsOnly(com.hippocampus.learning.domain.FollowUpIntent.identity(OBJECTIVE_ID,"cardiac-output"));
+    }
+
+    @Test
+    void bareCorrectUnderstandingEnumContributesNoUnderstandingOrRecall() {
         LearningActivity check = activity(LearningActionType.UNDERSTANDING_CHECK);
 
         var state = assembler.assembleForSubmission(
                 mission(check), check, Map.of(check.id(), List.of()), AttemptOutcome.CORRECT, NOW);
 
         assertThat(state.evidence().strengthOf(EvidenceDimension.UNDERSTANDING))
-                .isEqualTo(EvidenceStrength.DEVELOPING);
+                .isEqualTo(EvidenceStrength.INSUFFICIENT);
         assertThat(state.evidence().strengthOf(EvidenceDimension.RECALL))
                 .isEqualTo(EvidenceStrength.INSUFFICIENT);
         assertThat(new UnderstandRetrievePolicy().select(state).actionType())
-                .isEqualTo(LearningActionType.RETRIEVE);
+                .isEqualTo(LearningActionType.UNDERSTAND);
     }
 
     @Test
-    void partialAndIncorrectUnderstandingChecksDoNotAdvanceToRetrieval() {
+    void unqualifiedPartialAndIncorrectChecksHaveNoGradeEvidence() {
         for (AttemptOutcome outcome : List.of(AttemptOutcome.PARTIAL, AttemptOutcome.INCORRECT)) {
             LearningActivity check = activity(LearningActionType.UNDERSTANDING_CHECK);
             var state = assembler.assembleForSubmission(
                     mission(check), check, Map.of(check.id(), List.of()), outcome, NOW);
 
             assertThat(state.evidence().strengthOf(EvidenceDimension.UNDERSTANDING))
-                    .isEqualTo(outcome == AttemptOutcome.PARTIAL
-                            ? EvidenceStrength.WEAK : EvidenceStrength.INSUFFICIENT);
+                    .isEqualTo(EvidenceStrength.INSUFFICIENT);
             assertThat(new UnderstandRetrievePolicy().select(state).actionType())
                     .isEqualTo(LearningActionType.UNDERSTAND);
         }
     }
 
     @Test
-    void normalRetrieveStillContributesRecallOnly() {
+    void bareCorrectRetrieveEnumContributesNoRecall() {
         LearningActivity retrieve = activity(LearningActionType.RETRIEVE);
 
         var state = assembler.assembleForSubmission(
                 mission(retrieve), retrieve, Map.of(retrieve.id(), List.of()), AttemptOutcome.CORRECT, NOW);
 
         assertThat(state.evidence().strengthOf(EvidenceDimension.RECALL))
-                .isEqualTo(EvidenceStrength.DEVELOPING);
+                .isEqualTo(EvidenceStrength.INSUFFICIENT);
         assertThat(state.evidence().strengthOf(EvidenceDimension.UNDERSTANDING))
                 .isEqualTo(EvidenceStrength.INSUFFICIENT);
     }
 
     @Test
-    void validatedConnectAttemptContributesConnectionEvidenceOnly() {
+    void bareConnectOutcomeDoesNotProveQualification() {
         LearningActivity connect = activity(LearningActionType.CONNECT);
 
         var state = assembler.assembleForSubmission(
                 mission(connect), connect, Map.of(connect.id(), List.of()), AttemptOutcome.CORRECT, NOW);
 
         assertThat(state.evidence().strengthOf(EvidenceDimension.CONNECTION))
-                .isEqualTo(EvidenceStrength.DEVELOPING);
+                .isEqualTo(EvidenceStrength.INSUFFICIENT);
         assertThat(state.evidence().strengthOf(EvidenceDimension.RECALL))
                 .isEqualTo(EvidenceStrength.INSUFFICIENT);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"UNKNOWN", "correct", " CORRECT ", "CORRUPT"})
+    void corruptPersistedEvaluationStatusFailsClosed(String persistedStatus) {
+        LearningActivity retrieve = activity(LearningActionType.RETRIEVE);
+        var attempt = new com.hippocampus.progress.domain.StudentAttempt(
+                UUID.randomUUID(), USER_ID, retrieve.id(), 1, "Saved response", null,
+                NOW.minusSeconds(10), persistedStatus, null, null, NOW.minusSeconds(10));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> assembler.assembleFromPersistedAttempts(
+                mission(retrieve), retrieve, Map.of(retrieve.id(), List.of(attempt)), NOW))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     private static LearningActivity activity(LearningActionType representedAction) {

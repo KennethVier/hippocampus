@@ -44,6 +44,8 @@ class StudyMissionContinuationControllerWebTests {
 
     @Test
     void continueUsesOnlyPathIdentityAndReturnsNoContent() throws Exception {
+        org.mockito.Mockito.when(continueMission.execute(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new ContinueStudyMissionUseCase.Result(UUID.randomUUID()));
         mvc.perform(post(
                             "/api/study-missions/{missionId}/activities/{activityId}/continue",
                             MISSION_ID, ACTIVITY_ID)
@@ -64,6 +66,43 @@ class StudyMissionContinuationControllerWebTests {
                 .andExpect(status().isUnauthorized());
         mvc.perform(post(path, MISSION_ID, ACTIVITY_ID).with(user("student")))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void optInReturnsNoActivityWithoutFabricatedActivityIdentity() throws Exception {
+        org.mockito.Mockito.when(continueMission.execute(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new ContinueStudyMissionUseCase.Result("NO_ACTIVITY", null,
+                        "COMMUNICATE_LIMITATION", "ASSESSMENT_UNAVAILABLE"));
+        mvc.perform(post("/api/study-missions/{missionId}/activities/{activityId}/continue", MISSION_ID, ACTIVITY_ID)
+                        .param("continuationContract", "1").with(user("student")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.outcome").value("NO_ACTIVITY"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.activityId").doesNotExist());
+        verify(continueMission).execute(new ContinueStudyMissionUseCase.Command(MISSION_ID, ACTIVITY_ID, true));
+    }
+
+    @Test
+    void duplicateOrEmptyOptInIsRejectedBeforeApplicationWork() throws Exception {
+        for (String[] values : java.util.List.of(new String[]{"1", "1"}, new String[]{""}, new String[]{"1", "0"})) {
+            mvc.perform(post("/api/study-missions/{missionId}/activities/{activityId}/continue", MISSION_ID, ACTIVITY_ID)
+                            .param("continuationContract", values).with(user("student")).with(csrf()))
+                    .andExpect(status().isBadRequest());
+        }
+        org.mockito.Mockito.verifyNoInteractions(continueMission);
+    }
+
+    @Test
+    void legacyUnsupportedContinuationReturnsSanitizedUpgradeConflict() throws Exception {
+        org.mockito.Mockito.when(continueMission.execute(org.mockito.ArgumentMatchers.any()))
+                .thenThrow(new com.hippocampus.shared.application.error.ApplicationException(
+                        new com.hippocampus.shared.domain.error.ErrorCode(
+                                "ACTIVITY_MATERIALIZATION_CONTINUATION_CONTRACT_UPGRADE_REQUIRED"),
+                        "Reload the application to continue this mission.") {});
+        mvc.perform(post("/api/study-missions/{missionId}/activities/{activityId}/continue", MISSION_ID, ACTIVITY_ID)
+                        .with(user("student")).with(csrf()))
+                .andExpect(status().isConflict())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.code")
+                        .value("CONTINUATION_CONTRACT_UPGRADE_REQUIRED"));
     }
 
     @TestConfiguration(proxyBeanMethods = false)

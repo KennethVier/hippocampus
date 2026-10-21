@@ -1,12 +1,12 @@
 ---
 Document ID: 07
 Title: Feature Specifications
-Version: 1.0.1
+Version: 1.0.3
 Status: Final
 Owner: Project Hippocampus Team
 Authors: Project Hippocampus Team
 Created: 2026-08-23
-Last Updated: 2026-08-24
+Last Updated: 2026-10-20
 Purpose: Translate the approved product requirements and learning journey into explicit student-facing feature behavior and boundaries.
 Scope: Feature definitions, behaviors, rules, inputs, outputs, learning-flow integration, edge cases, and traceability.
 Audience: Product, UX, engineering, AI, QA, research, and medical-education contributors.
@@ -354,6 +354,20 @@ The student can begin meaningful study without manually assembling explanations,
 ---
 
 # 8. F-05 — Guided Learning Player
+
+## Initial completion is not admissible without completed activity (ADR-0019)
+
+For initial preparation, an Engine COMPLETE with no real completed learning activity is an uncommitted selection, not permission to mark the mission complete. Render NO_ACTIVITY with INITIAL_COMPLETION_NOT_ADMISSIBLE, actual action/rationale and lifecycle, no scoring or activity/evidence creation, and existing explicit Pause/Stop. Disable futile initial generation for unchanged blocking facts; no initial Finish, automatic terminal mutation, budget reset or replacement mission. Re-evaluate only for explicit authorized student action and legitimate relevant state change. Existing nonempty continuation remains unchanged.
+
+
+## Assessment limitation (ADR-0016)
+
+The player distinguishes saved response feedback, current continuation decision,
+actual activity creation and infrastructure failure. After saved UNGRADED plus
+server-known assessment unavailability, communicate the limitation without
+repeating a known-unassessable response activity. Retain explicit Pause and
+existing presentation-only completion controls; no automatic lifecycle change.
+
 
 ## Objective
 
@@ -896,6 +910,16 @@ The student can reasonably understand where important educational content came f
 
 # 19. F-16 — Session Continuity & Resume
 
+## Assessment availability on resume (ADR-0016)
+
+Refresh and resume reconstruct current application-owned availability and
+Engine decisions from authorized state, preserving the submitted receipt and
+frozen source scope. Elapsed time alone does not restore a verification basis.
+Repeated Continue under an unchanged assessment limitation creates no new
+activity, attempt, artifact or learning evidence. A real context/time change
+may legitimately change the Engine decision; it never grants grading authority.
+
+
 ## Objective
 
 Allow students to stop and return without losing meaningful learning context.
@@ -1079,6 +1103,12 @@ Presenting uncertain or generated medical educational content as unquestionable 
 ---
 
 # 24. Feature-Level Failure States
+
+Known assessment unavailability is distinct from response-specific uncertainty,
+source insufficiency/authorization loss and infrastructure failure. Generic
+UNGRADED alone is insufficient to classify it. ADR-0016 uses existing limitation
+and learner-controlled Pause, without a new Engine action or mission status.
+
 
 Features should account for:
 
@@ -1271,6 +1301,11 @@ These requirements should define measurable product and system qualities without
 ---
 
 # 32. Revision History
+
+- **1.0.3 — 2026-10-20 — Proposed for final owner approval:** ADR-0019 initial-completion admission; no fabricated work, terminal mutation or repeated generation.
+
+- **1.0.2 - 2026-10-16 - Project Hippocampus Team:** ADR-0016 governance alignment. Aligned mission-player limitation, resume and distinct failure states with accepted ADR-0016.
+
 
 | Version | Date | Author | Changes |
 |---|---|---|---|

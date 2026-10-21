@@ -64,11 +64,11 @@ class StartStudyMissionUseCaseTests {
         sources = mock(StudyMissionSourceCatalog.class);
         missions = mock(StudyMissionRepository.class);
         CurrentUser currentUser = () -> new AuthenticatedUser(OWNER_ID);
-        when(topics.findOwnedByIdWithActiveSubject(TOPIC_ID, OWNER_ID))
+        when(topics.lockOwnedActiveForMissionStart(TOPIC_ID, OWNER_ID))
                 .thenReturn(Optional.of(activeTopic()));
         when(subtopics.findOwnedByIdWithActiveAncestors(SUBTOPIC_ID, OWNER_ID))
                 .thenReturn(Optional.of(activeSubtopic(TOPIC_ID)));
-        when(sources.resolve(any(), any(), any())).thenReturn(Optional.of(readyResolution()));
+        when(sources.resolveLocked(any(), any(), any())).thenReturn(Optional.of(readyResolution()));
         when(missions.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         useCase = new StartStudyMissionUseCase(
                 currentUser,
@@ -78,6 +78,20 @@ class StartStudyMissionUseCaseTests {
                 missions,
                 learningEngine(),
                 Clock.fixed(NOW, ZoneOffset.UTC));
+    }
+
+    @Test
+    void eligibleClientProjectionIsOwnerScopedAndPreservesExactCatalogFields() {
+        when(topics.findOwnedByIdWithActiveSubject(TOPIC_ID,OWNER_ID)).thenReturn(Optional.of(activeTopic()));
+        var item=new StudyMissionSourceCatalog.EligibleSource(MATERIAL_ID,"Synthetic",VERSION_ID,"READY",SourceReadiness.READY);
+        when(sources.eligible(OWNER_ID,TOPIC_ID,20,null)).thenReturn(new StudyMissionSourceCatalog.SourcePage(List.of(item),MATERIAL_ID));
+        var result=useCase.eligibleForClient(TOPIC_ID,20,null);
+        assertThat(result.topic()).isEqualTo(new StartStudyMissionUseCase.SourceTopic(TOPIC_ID,activeTopic().name()));
+        assertThat(result.items()).containsExactly(new StartStudyMissionUseCase.EligibleSourceForClient(MATERIAL_ID,"Synthetic",VERSION_ID,"READY","READY"));
+        assertThat(result.nextAfterMaterialId()).isEqualTo(MATERIAL_ID);
+        org.mockito.Mockito.verify(sources).eligible(OWNER_ID,TOPIC_ID,20,null);
+        org.mockito.Mockito.verifyNoMoreInteractions(sources);
+        org.mockito.Mockito.verifyNoInteractions(missions);
     }
 
     @Test
@@ -110,7 +124,7 @@ class StartStudyMissionUseCaseTests {
 
     @Test
     void limitedSourceCreatesMissionAndReturnsLearningEngineLimitedAction() {
-        when(sources.resolve(any(), any(), any())).thenReturn(Optional.of(new StudyMissionSourceCatalog.Resolution(
+        when(sources.resolveLocked(any(), any(), any())).thenReturn(Optional.of(new StudyMissionSourceCatalog.Resolution(
                 List.of(resolvedSource(SourceReadiness.LIMITED, VERSION_ID)))));
 
         StartStudyMissionUseCase.Result result = useCase.execute(command(30, null));
@@ -125,7 +139,7 @@ class StartStudyMissionUseCaseTests {
 
     @Test
     void noSelectedSourceReturnsStrictSourceLimitationWithoutMaterializingActivity() {
-        when(sources.resolve(any(), any(), any()))
+        when(sources.resolveLocked(any(), any(), any()))
                 .thenReturn(Optional.of(new StudyMissionSourceCatalog.Resolution(List.of())));
 
         StartStudyMissionUseCase.Result result = useCase.execute(new StartStudyMissionUseCase.Command(
@@ -148,7 +162,7 @@ class StartStudyMissionUseCaseTests {
     void resolvedVersionRemainsFrozenWhenCatalogLaterResolvesAnotherActiveVersion() {
         StartStudyMissionUseCase.Result first = useCase.execute(command(30, null));
         UUID laterVersion = UUID.fromString("60000000-0000-0000-0000-000000000002");
-        when(sources.resolve(any(), any(), any())).thenReturn(Optional.of(new StudyMissionSourceCatalog.Resolution(
+        when(sources.resolveLocked(any(), any(), any())).thenReturn(Optional.of(new StudyMissionSourceCatalog.Resolution(
                 List.of(resolvedSource(SourceReadiness.READY, laterVersion)))));
 
         useCase.execute(command(30, null));
@@ -158,12 +172,12 @@ class StartStudyMissionUseCaseTests {
 
     @Test
     void foreignOrInactiveTopicFailsClosed() {
-        when(topics.findOwnedByIdWithActiveSubject(TOPIC_ID, OWNER_ID)).thenReturn(Optional.empty());
+        when(topics.lockOwnedActiveForMissionStart(TOPIC_ID, OWNER_ID)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> useCase.execute(command(30, null)))
                 .isInstanceOf(ApplicationNotFoundException.class)
                 .hasMessage("Topic was not found.");
 
-        when(topics.findOwnedByIdWithActiveSubject(TOPIC_ID, OWNER_ID))
+        when(topics.lockOwnedActiveForMissionStart(TOPIC_ID, OWNER_ID))
                 .thenReturn(Optional.of(new Topic(
                         TOPIC_ID, SUBJECT_ID, "Cardiology", null,
                         TopicStatus.ARCHIVED, NOW, NOW)));
@@ -183,12 +197,42 @@ class StartStudyMissionUseCaseTests {
     }
 
     @Test
+    void sourceChangeDuringFreezePreservesPublicFailureAndDoesNotWrite() {
+        when(sources.resolveLocked(any(), any(), any())).thenThrow(
+                new com.hippocampus.learning.port.InitialStudyMissionSourceAuthority.SourceUnavailableException());
+
+        var failure = org.junit.jupiter.api.Assertions.assertThrows(StudyMissionStartException.class,
+                () -> useCase.execute(command(30, null)));
+
+        assertThat(failure.kind()).isEqualTo(StudyMissionStartException.Kind.STATE_CHANGED);
+        assertThat(failure.reason()).isEqualTo(
+                com.hippocampus.learning.port.StudyMissionStartReceiptRepository.Reason.STATE_CHANGED);
+        assertThat(failure.errorCode().value()).isEqualTo("STUDY_MISSION_INITIAL_STATE_CHANGED");
+        assertThat(failure.clientMessage()).isEqualTo("The mission changed. Reload its current state.");
+        assertThat(failure.getMessage()).isEqualTo(failure.clientMessage());
+        org.mockito.Mockito.verifyNoInteractions(missions);
+    }
+
+    @Test
+    void unrelatedFreezeFailuresPropagateWithoutReclassification() {
+        for (RuntimeException failure : List.of(
+                new org.springframework.dao.CannotAcquireLockException("Synthetic NOWAIT failure"),
+                new com.hippocampus.learning.port.SourceDependencyBusyException(new IllegalStateException()),
+                new IllegalStateException("Source freeze requires READ_COMMITTED write transaction"))) {
+            org.mockito.Mockito.doThrow(failure).when(sources).resolveLocked(any(), any(), any());
+            assertThatThrownBy(() -> useCase.execute(command(30, null))).isSameAs(failure);
+        }
+        org.mockito.Mockito.verifyNoInteractions(missions);
+    }
+
+    @Test
     void rejectedForeignIneligibleUnusableOrMismatchedSourceFailsClosed() {
-        when(sources.resolve(any(), any(), any())).thenReturn(Optional.empty());
+        when(sources.resolveLocked(any(), any(), any())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> useCase.execute(command(30, null)))
                 .isInstanceOf(ApplicationNotFoundException.class)
                 .hasMessage("A selected mission source was not found or is not available.");
+        org.mockito.Mockito.verifyNoInteractions(missions);
     }
 
     @Test

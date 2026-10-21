@@ -11,4 +11,9 @@ public interface StudyMissionRepository {
     Optional<StudyMission> findOwnedById(UUID missionId, UUID ownerId);
 
     Optional<StudyMission> findOwnedByIdForUpdate(UUID missionId, UUID ownerId);
+
+    /** Completion must not reuse values cached by an earlier request read. */
+    default Optional<StudyMission> findFreshOwnedByIdForUpdate(UUID missionId, UUID ownerId) {
+        throw new IllegalStateException("Fresh locked mission reads are not configured");
+    }
 }

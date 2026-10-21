@@ -1,11 +1,11 @@
 ---
 Document ID: IMPLEMENTATION-TRACKER
 Title: Hippocampus v1 Detailed Implementation Tracker
-Version: 1.0.0
+Version: 1.0.1
 Status: Active
 Owner: Project Hippocampus Team
 Created: 2026-08-24
-Last Updated: 2026-10-04
+Last Updated: 2026-10-17
 Purpose: Operational tracker for implementing the frozen Hippocampus v1 Source of Truth phase by phase with concrete build requirements, tests, expected behavior, definition of done, and evidence.
 Authority: Document 26 defines implementation order; Documents 00–25 define product/technical requirements; Document 27 governs deviations.
 ---
@@ -2010,6 +2010,8 @@ responsibilities remain outside P5-06.
 - **Evidence-attribution remediation in progress, 2026-10-11:** The test-only Golden matcher now flags Case 3 credit for radial-nerve identification absent from the student's response and accepts bounded Case 4 feedback expressing loss or elimination of wrist extension while retaining causal, negation, and unsupported-subject guards. The inherited v4 Case 3 `requiredCorrectConceptAlternatives` still names radial-nerve supply; that expectation cannot be met by the exact student's answer without overcredit and needs separate rubric reconciliation before semantic PASS. Golden v6 resources, production V6 selection, and V9 prompt content are unchanged. Initial focused Maven tests could not reach compilation because the Spring Boot 4.1.1 parent POM was absent from the local offline cache. User then reported five of six focused tests passing, with Case 4 failing on a missing structured causal link. After correcting that test fixture and limiting grammatical loss forms to attached injury clauses, agent-run focused Maven passed 7 tests, 0 failures, 0 errors; the complete `GoldenAiSemanticEvaluatorTests` class passed 58 tests, 0 failures, 0 errors; `git diff --check` passed. Proposed [ADR-0012](adr/ADR-0012-verifiable-response-evaluation-component-attribution.md) defines the unresolved runtime attribution contract; proposed [ADR-0013](adr/ADR-0013-graded-response-follow-up-question-policy.md) records the separate Learning Engine follow-up policy. Neither proposal is accepted or implemented. Case 5, complete Golden qualification, general review, and security review remain open; P7-09 stays Ready for Review, not Done.
 - **ADR acceptance and remediation planning, 2026-10-11:** [ADR-0012](adr/ADR-0012-verifiable-response-evaluation-component-attribution.md) and [ADR-0013](adr/ADR-0013-graded-response-follow-up-question-policy.md) are now accepted with controlling adjustments. The earlier note above remains historical. [The bounded P7-09 implementation packet](testing/p7-09-runtime-remediation-packet-2026-10-11.md) covers source-grounded assertion discovery, verification, graded aggregation, and non-scoring `UNGRADED` submission; it authorizes no runtime change by itself. [The prospective Golden v7 rubric proposal](testing/p7-09-golden-v7-case-3-rubric-proposal-2026-10-11.md) corrects the inherited Case 3 alternative in a new dataset identity without modifying Golden v6, historical reports, prompt selection, or V9. P7-15 owns follow-up activity implementation separately. Case 5 remediation, version-bound qualification, independent general/security review, and release acceptance remain open. P7-09 remains Ready for Review, not Done.
 
+- **ADR-0018 owner approval, 2026-10-19:** Explicit conversational owner approval authorizes the bounded no-schema/no-backfill SEC-004 correction in a new isolated candidate: shared grade-evidence eligibility, positively corroborated MCQ, free-text/helper containment and immutable-history protection across P7-09/P7-15/P7-16 consumers. This records no independent identity authentication or implementation/test/review completion. SEC-004 remains High; medical qualification, final Gate 2/P7-14, publication and task statuses remain separate. See accepted ADR-0018 and its versioned remediation packet.
+
 ## P7-10 — Implement concept-connection task
 
 - **Workstream:** AI
@@ -2096,7 +2098,7 @@ Critical 0 / High 0 / Medium 0.
 - **Goal:** Prove full source-grounded Study Mission.
 - **Build:** From topic + processed material: start mission → understand → retrieve → connect → apply → feedback → follow-up intent/authorized activity where safe → complete/pause.
 - **How it works:** Sources visible and provider abstracted.
-- **Dependencies:** All P7 implementation items, explicitly including P7-15; validated P7-09 Golden checks.
+- **Dependencies:** All P7 implementation items, explicitly including P7-15 and owner-registered P7-16; validated P7-09 Golden checks. ADR-0016 and versioned Source-of-Truth alignment are accepted/recorded; P7-16 implementation and validation remain outstanding and no gate is waived.
 - **Tests / validation:** Critical Playwright E2E + source validation + AI golden checks.
 - **Expected result:** M3 First Hippocampus works end-to-end.
 - **Definition of Done:** Milestone evidence recorded.
@@ -2119,6 +2121,30 @@ Critical 0 / High 0 / Medium 0.
 - **Authority:** Documents 11, 12, 15, 26; ADR-0013.
 - **Evidence / link:** _To be recorded during implementation_
 - **Notes / blockers:** Separate from P7-09 runtime grading remediation. No Phase 8 work is authorized.
+
+## P7-16 — Handle known assessment-unavailable mission continuation
+
+- **Workstream:** Learning Engine / Application / API / Frontend
+- **Priority:** Must before any Phase 7 student-facing rollout using containment.
+- **Status:** Not Started
+- **Goal:** After a saved UNGRADED attempt, prevent reuse or regeneration of response-bearing activities that application-owned evidence establishes remain unassessable, without false learning evidence or overriding higher-priority policies.
+- **Build:** Minimal explicit availability facts; existing COMMUNICATE_LIMITATION and learner-controlled Pause; shared current-read/Continue decision; explicit materializable/non-materializable dispatch; `continuationContract=1` compatibility contract; snapshot-checked application-only completion operation within the existing mission-status transaction owner; strict client controls/recovery, including existing presentation completion. Implement ADR-0017's immutable artifact-origin binding with a forward-only Flyway migration, atomic first persistence, same-objective/same-mission reuse restriction, and fail-closed unbound legacy policy. Revalidate full source/contract authorization at the final write boundary and preserve valid visual UNDERSTAND, CONNECT, APPLY and RETRIEVE compatibility.
+- **How it works:** Administrative registration authorized by the product owner on 2026-10-16. Accepted ADR-0016 and its versioned Source-of-Truth amendments govern the design. Explicit product, architecture/API-owner and education-specific approvals are recorded, with independent requirements closure. A subsequent explicit implementation authorization and approved execution packet are still required. Preserve lifecycle/source/safety/time/anti-repetition precedence, saved receipts, idempotency and frozen-source authorization. Generic UNGRADED alone is insufficient.
+- **Dependencies:** Accepted ADR-0016 and ADR-0017 with version-aligned Documents 11, 18, 19, 26 and 27; existing Documents 06, 07, 15 and 20 presentation/continuation rules; recorded independent requirements closure and owner approvals for ADR-0016, plus the project decision owner's ADR-0017 approval; applicable P6-01/02/07/08/09/10/11 contracts; P7-04/05/06/09/13 surfaces and their validation gates. P7-14 depends on P7-16, not vice versa. P7-15 remains a separate sibling.
+- **Tests / validation:** Focused domain/application/API/frontend coverage of known unavailability versus response uncertainty, protected precedence, no-write repeated limitation, refresh/replay/Pause/resume, legacy/opt-in and mixed-client compatibility, malformed/duplicate version values, presentation completion, ownership/source/CSRF negatives and sanitized failures; origin/legacy/cross-objective/cross-mission reuse and valid visual UNDERSTAND, CONNECT, APPLY, RETRIEVE contracts; PostgreSQL integration for origin constraints/immutability/atomicity, final source and contract revalidation, completion atomicity, snapshots, duplicate requests and Pause/Stop/submit/materialization/source-revocation races; SEC-004/submission/MCQ regressions and targeted P7-14 journey. No live provider qualification or unrelated SEC-005 rerun is authorized by registration.
+- **Expected result:** Unavailable assessment is communicated honestly, cannot loop through known-unassessable response activities or fabricate success/failure/mastery, and preserves learner control and saved work.
+- **Definition of Done:** Decision/SOT prerequisites resolved; approved implementation packet executed; required user/CI results and actual behavior evidence recorded; blocker-free external general review followed by independent security review; P7-14 can exercise continuation/recovery end-to-end. Registration and documentation are not implementation or completion evidence.
+- **Authority:** Product-owner registration instruction, 2026-10-16; project decision owner's explicit ADR-0017 approval, 2026-10-17; Documents 26/27 governance; accepted ADR-0016 and ADR-0017 with scoped Source-of-Truth alignment. ADR-0012 remains unchanged; ADR-0014/0015 remain PROPOSED.
+- **Evidence / link:** [ADR-0016](adr/ADR-0016-assessment-unavailable-mission-continuation.md); [ADR-0017](adr/ADR-0017-generated-artifact-objective-origin-binding.md); [governance packet](testing/p7-16-assessment-unavailable-continuation-proposal-2026-10-16.md); [independently approved source-ordering resolution](testing/p7-16-source-revocation-ordering-resolution-2026-10-16.md). No implementation/test completion evidence.
+- **Notes / blockers:** SEC-016-REQ-001 is independently resolved at design/requirements level; SEC-016-REQ-002 is closed at documentation level. These are not implementation-tested controls. ADR-0017 resolves the artifact-origin decision; its project-owner approval does not imply other stakeholder approval or implementation validation. Roadmap and tracker both contain 16 Phase 7 items including the gate. Remaining authorization gate: explicit implementation authorization and approved execution packet; actual implementation, PostgreSQL concurrency evidence and independent implementation/security gates remain future work. Status remains Not Started. No P7-15 expansion, grading/profile infrastructure, speculative legacy backfill, Phase 8 work or rollout is authorized.
+
+### P7-16 ordered implementation handoff (ADR-0017 prerequisite)
+
+1. **A — Origin persistence and legacy eligibility.** Add only the forward-only origin-binding migration with artifact/owner, mission/owner and objective/mission constraints; enforce non-reassignment/non-mutation while the artifact exists and leave existing artifacts unbound. Persist a new binding atomically with the generated artifact, sources, first activity and mission update under the existing short owned-mission transaction. Expose a narrow origin read. Reject missing/conflicting origin for future reuse without backfill, while preserving existing owned presentation and immutable attempt/receipt reads. Focused repository/use-case tests and real PostgreSQL tests must cover FKs, immutability, atomic rollback, owner isolation, same-objective reuse and legacy/cross-objective/cross-mission denial.
+2. **B — Final authorization.** At the final write boundary, re-read and validate the selected artifact's origin, owner, objective/mission scope, validated/reusable state when required, complete response/presentation contract, grounding, exact source-reference set, frozen MaterialVersion/DocumentNode scope, and current material/source lifecycle. Apply the existing mission lock/snapshot and source-revocation ordering; do not hold AI/network work in the transaction. Denial must make no activity/artifact/attempt/evidence/provider write and use sanitized outcomes. Focused tests plus real PostgreSQL races must cover artifact/source/contract mismatch, foreign owner, revocation, stale mission and concurrent materialization.
+3. **C — Valid visual compatibility.** Preserve the represented pedagogical action when concrete `activity_type = VISUAL`: valid visual UNDERSTAND, CONNECT, APPLY and RETRIEVE must be classified by their actual generated task/payload contract and remain eligible under existing policy. Do not admit a response-bearing payload as presentation or broaden grading authority. Focused contract/materialization/continuation tests must include all four valid visual paths, malformed/type-mismatched payloads and the historical presentation-only exception.
+
+The implementation packet must specify exact files and the eligible changed tests. Required user/CI validation includes PostgreSQL constraint/transaction/concurrency evidence, API/frontend continuation regressions, SEC-004 and SEC-016 source/authorization controls, and P7-14 journey evidence. External general review of the actual diff follows validation; independent ASVS 5.0.0 security review follows clean general review. Neither review is self-approval or waived by ADR acceptance.
 
 # Phase 8 — Learning Evidence + Review System
 
@@ -3080,3 +3106,7 @@ If implementation reveals a significant decision not already resolved by the Sou
 4. Create an ADR if required.
 5. Patch affected Source-of-Truth documents if the accepted decision changes them.
 6. Resume the task only after the decision is resolved.
+
+# Revision History
+
+- **1.0.1 - 2026-10-17 - Project Hippocampus Team:** Recorded accepted ADR-0017 as the P7-16 artifact-origin prerequisite and added the ordered implementation/validation handoff; P7-16 remains Not Started.

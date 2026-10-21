@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: '**/*.integration.spec.ts',
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['html', { open: 'never' }], ['list']] : 'list',
@@ -14,7 +15,7 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     {
       name: 'mobile-chromium',
-      testMatch: /(learning-organization|materials|study-mission)\.spec\.ts/,
+      testMatch: /(learning-organization|materials|study-mission|study-mission-start)\.spec\.ts/,
       use: { ...devices['Pixel 7'] },
     },
   ],

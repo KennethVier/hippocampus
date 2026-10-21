@@ -71,11 +71,11 @@ public class StartStudyMissionUseCase {
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED, timeout = 5)
     public Result execute(Command command) {
         Objects.requireNonNull(command, "command must not be null");
         UUID ownerId = currentUser.authenticatedUser().userId();
-        Topic topic = topics.findOwnedByIdWithActiveSubject(command.topicId(), ownerId)
+        Topic topic = topics.lockOwnedActiveForMissionStart(command.topicId(), ownerId)
                 .filter(candidate -> candidate.status() == TopicStatus.ACTIVE)
                 .orElseThrow(TopicFailures::notFound);
         Subtopic subtopic = resolveSubtopic(command.subtopicId(), command.topicId(), ownerId);
@@ -84,9 +84,14 @@ public class StartStudyMissionUseCase {
                 .map(scope -> new StudyMissionSourceCatalog.SourceSelection(
                         scope.materialId(), scope.documentNodeId()))
                 .toList();
-        StudyMissionSourceCatalog.Resolution sourceResolution = sourceCatalog
-                .resolve(ownerId, command.topicId(), selections)
-                .orElseThrow(StartStudyMissionUseCase::sourceNotFound);
+        StudyMissionSourceCatalog.Resolution sourceResolution;
+        try {
+            sourceResolution = sourceCatalog.resolveLocked(ownerId, command.topicId(), selections)
+                    .orElseThrow(StartStudyMissionUseCase::sourceNotFound);
+        } catch (com.hippocampus.learning.port.InitialStudyMissionSourceAuthority.SourceUnavailableException changed) {
+            throw new StudyMissionStartException(StudyMissionStartException.Kind.STATE_CHANGED,
+                    com.hippocampus.learning.port.StudyMissionStartReceiptRepository.Reason.STATE_CHANGED);
+        }
 
         Instant now = clock.instant();
         UUID missionId = UUID.randomUUID();
@@ -111,22 +116,6 @@ public class StartStudyMissionUseCase {
                         source.documentNodeId()))
                 .toList();
         SourceCapability sourceCapability = sourceCapability(sourceResolution.sources());
-        LearningState initialState = new LearningState(
-                missionId,
-                objectiveId,
-                conceptKey,
-                MissionLifecycleState.ACTIVE,
-                LearningStage.UNDERSTANDING,
-                new LearningEvidenceSnapshot(Map.of()),
-                sourceCapability,
-                new LearningTimeContext(
-                        command.availableTimeMinutes(),
-                        command.availableTimeMinutes(),
-                        0),
-                List.of(),
-                false,
-                constraintsFor(command.groundingMode()));
-        NextLearningAction firstAction = learningEngine.decide(initialState);
         StudyMission mission = new StudyMission(
                 missionId,
                 ownerId,
@@ -146,8 +135,32 @@ public class StartStudyMissionUseCase {
                 now,
                 now);
 
+        NextLearningAction firstAction = learningEngine.decide(
+                new InitialStudyMissionStateAssembler().assemble(mission,sourceCapability,now));
         return new Result(missions.save(mission), firstAction);
     }
+
+    @Transactional(readOnly=true)
+    public EligibleSourceResult eligible(UUID topicId,int limit,UUID after) {
+        UUID owner=currentUser.authenticatedUser().userId();
+        Topic topic=topics.findOwnedByIdWithActiveSubject(topicId,owner)
+                .filter(t->t.status()==TopicStatus.ACTIVE).orElseThrow(TopicFailures::notFound);
+        return new EligibleSourceResult(topic,sourceCatalog.eligible(owner,topicId,limit,after));
+    }
+    @Transactional(readOnly=true)
+    public EligibleSourcesForClient eligibleForClient(UUID topicId,int limit,UUID after) {
+        var result=eligible(topicId,limit,after);
+        return new EligibleSourcesForClient(new SourceTopic(result.topic().id(),result.topic().name()),
+                result.page().items().stream().map(item->new EligibleSourceForClient(item.materialId(),item.title(),
+                        item.activeVersionId(),item.processingStatus(),item.readiness().name())).toList(),
+                result.page().nextAfterMaterialId());
+    }
+    public record SourceTopic(UUID id,String name) {}
+    public record EligibleSourceForClient(UUID materialId,String title,UUID activeVersionId,String processingStatus,String readiness) {}
+    public record EligibleSourcesForClient(SourceTopic topic,List<EligibleSourceForClient> items,UUID nextAfterMaterialId) {
+        public EligibleSourcesForClient { items=List.copyOf(items); }
+    }
+    public record EligibleSourceResult(Topic topic,StudyMissionSourceCatalog.SourcePage page) {}
 
     private Subtopic resolveSubtopic(UUID subtopicId, UUID topicId, UUID ownerId) {
         if (subtopicId == null) {

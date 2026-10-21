@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { Button, Textarea } from '../../../components/ui'
-import type { ActivitySubmission, StudyMissionActivity } from '../api/studyMissionContracts'
+import type { ActivitySubmission, StudyMissionActivity, MissionContinuation } from '../api/studyMissionContracts'
 import type { ActivityResponseInput } from '../api/studyMissionApi'
 
 interface MissionInteractionProps {
   activity: StudyMissionActivity
+  continuation: MissionContinuation | null
   missionStatus: string
   submission: ActivitySubmission | null
   confirmedSubmission: boolean
@@ -24,10 +25,12 @@ export function MissionInteraction(props: MissionInteractionProps) {
   const [selectedOption, setSelectedOption] = useState('')
 
   const completed = activity.status === 'COMPLETED'
-  const canContinue = completed
-    || (activity.type === 'EXPLANATION' && activity.content !== null)
+  const presentation = !completed && (activity.type === 'REFLECTION' || (activity.type === 'EXPLANATION' && activity.content !== null)
     || (activity.type === 'CONNECTION' && activity.content !== null && activity.content.question === null)
-    || (props.confirmedSubmission && props.submission?.continuationAvailable === true)
+  )
+  const canContinue = presentation || (completed && props.continuation !== null && (
+    props.continuation.canMaterialize || props.continuation.actionType === 'COMPLETE'
+    || props.continuation.actionType === 'RETRY_DEPENDENCY'))
   const responseKind = !completed && !props.confirmedSubmission ? responseKindFor(activity) : null
   const interactionDisabled = props.missionStatus !== 'ACTIVE' || props.interactionBlocked
 
@@ -42,6 +45,12 @@ export function MissionInteraction(props: MissionInteractionProps) {
       <h2 id={`interaction-${activity.id}`}>Your response</h2>
       {props.submission?.activityId === activity.id ? <SubmissionFeedback submission={props.submission} /> : null}
       {props.error ? <p className="mission-action-error" role="alert">{props.error}</p> : null}
+      {props.continuation?.actionType === 'COMMUNICATE_LIMITATION' ? (
+        <p role="status">{props.continuation.rationaleCode === 'ASSESSMENT_UNAVAILABLE'
+          ? 'Your response is saved. Automatic assessment is unavailable for this activity. You can pause and return later.'
+          : 'This activity cannot continue with the available sources. You can pause and return later.'}</p>
+      ) : null}
+      {props.continuation?.actionType === 'SOURCE_ONLY' ? <p role="status">Review the available sources. You can pause when ready.</p> : null}
 
       {responseKind ? (
         <form onSubmit={submit}>
@@ -91,7 +100,8 @@ export function MissionInteraction(props: MissionInteractionProps) {
           </div>
         ) : (
           <Button disabled={props.isContinuing || interactionDisabled} onClick={props.onContinue}>
-            {props.isContinuing ? 'Continuing…' : 'Continue'}
+            {props.isContinuing ? 'Continuing…' : props.continuation?.actionType === 'COMPLETE'
+              ? 'Finish session' : props.continuation?.actionType === 'RETRY_DEPENDENCY' ? 'Check again' : 'Continue'}
           </Button>
         )
       ) : null}

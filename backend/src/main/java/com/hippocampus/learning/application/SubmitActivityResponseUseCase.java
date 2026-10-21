@@ -100,8 +100,8 @@ public class SubmitActivityResponseUseCase {
                 mission.updatedAt(), activity.id(), activity.status(), activity.completedAt(),
                 currentAttempts.size(), maxAttempt);
 
-        ActivityResponseContractRepository.ResponseContract contract = contracts
-                .findValidatedForActivity(activity.id(), activity.generatedArtifactId(), userId)
+        ActivityResponseContractRepository.ResponseContract contract = learningStateAssembler.eligibility()
+                .responseContract(mission,activity)
                 .orElseThrow(() -> failure(
                         ActivityResponseException.Reason.EVALUATION_CONTRACT_NOT_FOUND,
                         "The activity cannot be evaluated safely."));
@@ -123,10 +123,14 @@ public class SubmitActivityResponseUseCase {
                             : attempts.findOwnedByActivity(historicalActivity.id(), userId));
         }
         Instant now = clock.instant();
+        UUID attemptId = UUID.randomUUID();
+        StudentAttempt pending = new StudentAttempt(attemptId, userId, activity.id(), maxAttempt + 1,
+                persistedResponseText, command.responsePayload(), now, evaluation.outcome().name(), null,
+                evaluation.deterministic() ? evaluation.outcome().name() : null, now, command.requestId(),
+                evaluation.outcome() == AttemptOutcome.UNGRADED ? "EVALUATION_UNRESOLVED" : null, null);
         NextLearningAction nextAction = learningEngine.decide(
                 learningStateAssembler.assembleForSubmission(
-                        mission, activity, attemptHistory, evaluation.outcome(), now));
-        UUID attemptId = UUID.randomUUID();
+                        mission, activity, attemptHistory, pending, now));
         LearningStage nextStage = stageFor(nextAction, mission.learningState());
         boolean completeMission = nextAction.actionType() == LearningActionType.COMPLETE;
         String limitationCode = evaluation.outcome() == AttemptOutcome.UNGRADED
@@ -148,7 +152,12 @@ public class SubmitActivityResponseUseCase {
         try {
             persisted = persistence.persist(new PersistActivityResponse.Command(
                     mission.id(), userId, snapshot, attempt, nextStage,
-                    completeMission, now));
+                    completeMission, now, nextAction, evaluation.deterministic()
+                            ? new com.hippocampus.learning.domain.FollowUpIntent.Basis("DETERMINISTIC_MCQ", List.of()) : null));
+        } catch (com.hippocampus.learning.port.SourceDependencyBusyException busy) {
+            // The injected final writer has rolled back; do not expose dependency internals.
+            throw failure(ActivityResponseException.Reason.STALE_SUBMISSION,
+                    "The response dependencies changed. Reload the current activity.");
         } catch (ActivityResponseException stale) {
             if (stale.reason() == ActivityResponseException.Reason.STALE_SUBMISSION) {
                 StudyMission latest = missions.findOwnedById(mission.id(), userId)
@@ -160,6 +169,8 @@ public class SubmitActivityResponseUseCase {
             }
             throw stale;
         }
+        if (persisted.attempt() == null) throw failure(ActivityResponseException.Reason.STALE_SUBMISSION,
+                "The follow-up is no longer available.");
         return new Result(persisted.attempt(), persisted.activity(), persisted.mission(),
                 evaluation, nextAction, receipt);
     }
@@ -187,19 +198,13 @@ public class SubmitActivityResponseUseCase {
                 throw failure(ActivityResponseException.Reason.STALE_SUBMISSION,
                         "The request does not match its saved submission.");
             }
-            SubmissionReceipt receipt = SubmissionReceipt.fromJson(previous.submissionReceipt());
-            if (!receipt.attemptId().equals(previous.id())
-                    || !receipt.activityId().equals(activity.id())
-                    || !receipt.missionId().equals(mission.id())) {
-                throw failure(ActivityResponseException.Reason.STALE_SUBMISSION,
-                        "The saved submission could not be confirmed.");
-            }
+            SubmissionReceipt receipt = SubmissionReceipt.fromAttempt(previous, mission.id(), activity.id());
             return new Result(previous, activity, mission, null, null, receipt);
         }
         return null;
     }
 
-    private static boolean isMaterializable(LearningActionType actionType) {
+    static boolean isMaterializable(LearningActionType actionType) {
         return switch (actionType) {
             case START, RESUME, PAUSE, STOP, SOURCE_ONLY, COMMUNICATE_LIMITATION,
                     RETRY_DEPENDENCY, COMPLETE -> false;
@@ -211,11 +216,17 @@ public class SubmitActivityResponseUseCase {
             ActivityResponseContractRepository.ResponseContract contract,
             Command command, StudyMission mission, LearningActivity activity, UUID userId) {
         if (contract.supportsDeterministicEvaluation()) {
+            var trusted = learningStateAssembler.eligibility().deterministic(mission, activity)
+                    .orElseThrow(() -> failure(ActivityResponseException.Reason.EVALUATION_CONTRACT_NOT_FOUND,
+                            "The activity cannot be evaluated safely."));
             String answer = firstNonBlank(command.selectedOption(), command.responseText());
             if (answer == null) {
                 throw failure(ActivityResponseException.Reason.INVALID_RESPONSE,
                         "A response is required for this activity.");
             }
+            if (trusted.optionIds().stream().noneMatch(id -> id.equalsIgnoreCase(answer.trim()))
+                    || !trusted.response().equals(contract)) throw failure(ActivityResponseException.Reason.INVALID_RESPONSE,
+                            "The response option is invalid.");
             AttemptOutcome outcome = contract.correctOption().trim().equalsIgnoreCase(answer.trim())
                     ? AttemptOutcome.CORRECT : AttemptOutcome.INCORRECT;
             return new Evaluation(
@@ -256,22 +267,16 @@ public class SubmitActivityResponseUseCase {
             throw failure(ActivityResponseException.Reason.INVALID_EVALUATION,
                     "The response evaluation was not valid.");
         }
-        AttemptOutcome outcome = switch (evaluated.outcome()) {
-            case CORRECT -> AttemptOutcome.CORRECT;
-            case PARTIAL -> AttemptOutcome.PARTIAL;
-            case INCORRECT -> AttemptOutcome.INCORRECT;
-            case UNCERTAIN -> AttemptOutcome.UNGRADED;
-        };
-        if (outcome == AttemptOutcome.UNGRADED) {
-            return new Evaluation(outcome, List.of(), List.of(), List.of(),
-                    "Your response was saved, but it could not be graded reliably. You can continue safely.",
-                    ResponseEvaluationPort.Certainty.LIMITED,
-                    ResponseEvaluationPort.RecommendedAction.RETRY, false);
-        }
-        return new Evaluation(
-                outcome, evaluated.correctConcepts(), evaluated.missingConcepts(),
-                evaluated.misconceptions(), evaluated.feedback(), evaluated.certainty(),
-                evaluated.recommendedAction(), false);
+        // SEC-004 interim containment. No independently approved runtime basis is
+        // currently bound to free-text contracts. This application boundary also
+        // contains alternate ResponseEvaluationPort implementations; VALIDATED and
+        // model-supplied grades/claims cannot authorize credit or failure evidence.
+        // Keep result validation and propagated failures above distinct from a
+        // successfully submitted, unresolved response. MCQ returns earlier.
+        return new Evaluation(AttemptOutcome.UNGRADED, List.of(), List.of(), List.of(),
+                "Your response was saved, but it could not be graded reliably. You can continue safely.",
+                ResponseEvaluationPort.Certainty.LIMITED,
+                ResponseEvaluationPort.RecommendedAction.RETRY, false);
     }
 
     private static LearningActivity validateCurrentActivity(StudyMission mission, UUID activityId) {
@@ -296,7 +301,7 @@ public class SubmitActivityResponseUseCase {
         return activity;
     }
 
-    private static LearningStage stageFor(NextLearningAction action, LearningStage current) {
+    static LearningStage stageFor(NextLearningAction action, LearningStage current) {
         return switch (action.actionType()) {
             case UNDERSTAND, HINT, PREREQUISITE_SUPPORT, UNDERSTANDING_CHECK -> LearningStage.UNDERSTANDING;
             case RETRIEVE, RETRY, REDUCE_DIFFICULTY, REUSE_VALIDATED_CONTENT -> current;

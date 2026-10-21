@@ -7,11 +7,15 @@ import java.util.UUID;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.hippocampus.learning.domain.LearningActivity;
 import com.hippocampus.learning.domain.LearningObjective;
 import com.hippocampus.learning.domain.MissionMaterial;
 import com.hippocampus.learning.domain.StudyMission;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.FlushModeType;
+import jakarta.persistence.LockModeType;
 import com.hippocampus.learning.port.StudyMissionRepository;
 
 @Repository
@@ -22,18 +26,20 @@ public class JpaStudyMissionRepository implements StudyMissionRepository {
     private final SpringDataLearningObjectiveRepository objectives;
     private final SpringDataLearningActivityRepository activities;
     private final SpringDataActivitySourceReferenceRepository sourceReferences;
+    private final EntityManager entityManager;
 
     public JpaStudyMissionRepository(
             SpringDataStudyMissionRepository missions,
             SpringDataMissionMaterialRepository materials,
             SpringDataLearningObjectiveRepository objectives,
             SpringDataLearningActivityRepository activities,
-            SpringDataActivitySourceReferenceRepository sourceReferences) {
+            SpringDataActivitySourceReferenceRepository sourceReferences, EntityManager entityManager) {
         this.missions = missions;
         this.materials = materials;
         this.objectives = objectives;
         this.activities = activities;
         this.sourceReferences = sourceReferences;
+        this.entityManager = entityManager;
     }
 
     @Override
@@ -115,17 +121,49 @@ public class JpaStudyMissionRepository implements StudyMissionRepository {
     @Override
     @Transactional
     public Optional<StudyMission> findOwnedByIdForUpdate(UUID missionId, UUID ownerId) {
-        return missions.findByIdAndUserIdForUpdate(missionId, ownerId).map(this::toDomain);
+        return lockedSnapshot(missionId, ownerId);
+    }
+
+    @Override
+    @Transactional
+    public Optional<StudyMission> findFreshOwnedByIdForUpdate(UUID missionId, UUID ownerId) {
+        return lockedSnapshot(missionId, ownerId);
+    }
+
+    private Optional<StudyMission> lockedSnapshot(UUID missionId, UUID ownerId) {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()
+                || TransactionSynchronizationManager.isCurrentTransactionReadOnly()) {
+            throw new IllegalStateException("Mission locking requires an effective write transaction");
+        }
+        // Lock admission precedes aggregate mutation. A retained request context may contain
+        // stale or dirty aggregate fields: do not auto-flush them before obtaining committed state.
+        FlushModeType previousFlushMode = entityManager.getFlushMode();
+        entityManager.setFlushMode(FlushModeType.COMMIT);
+        try {
+            return missions.findByIdAndUserIdForUpdate(missionId, ownerId).map(mission -> {
+                entityManager.refresh(mission, LockModeType.PESSIMISTIC_WRITE);
+                return toDomain(mission, true);
+            });
+        } finally {
+            entityManager.setFlushMode(previousFlushMode);
+        }
     }
 
     private StudyMission toDomain(StudyMissionEntity mission) {
+        return toDomain(mission, false);
+    }
+
+    private StudyMission toDomain(StudyMissionEntity mission, boolean refresh) {
         var missionMaterials = materials.findAllByStudyMissionIdOrderById(mission.getId()).stream()
+                .peek(entity -> { if (refresh) entityManager.refresh(entity); })
                 .map(MissionMaterialEntity::toDomain)
                 .toList();
         var missionObjectives = objectives.findAllByStudyMissionIdOrderById(mission.getId()).stream()
+                .peek(entity -> { if (refresh) entityManager.refresh(entity); })
                 .map(LearningObjectiveEntity::toDomain)
                 .toList();
         var missionActivities = activities.findAllByStudyMissionIdOrderBySequenceNumber(mission.getId()).stream()
+                .peek(entity -> { if (refresh) entityManager.refresh(entity); })
                 .map(activity -> activity.toDomain(sourceReferences
                         .findAllByLearningActivityId(activity.getId()).stream()
                         .map(link -> link.getId().sourceReferenceId())

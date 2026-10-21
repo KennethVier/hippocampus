@@ -34,6 +34,8 @@ public class MaterializeLearningActivityUseCase {
     private final ActivityAiTaskPort aiTaskPort;
     private final PersistMaterializedActivity persistence;
     private final Clock clock;
+    private final AssessmentAvailabilityResolver availability;
+    private final StudyMissionStartTransactions initialTransactions;
 
     public MaterializeLearningActivityUseCase(
             CurrentUser currentUser,
@@ -41,13 +43,20 @@ public class MaterializeLearningActivityUseCase {
             ActivityEvidencePort evidencePort,
             ActivityAiTaskPort aiTaskPort,
             PersistMaterializedActivity persistence,
-            Clock clock) {
+            Clock clock, AssessmentAvailabilityResolver availability) {
+        this(currentUser,missions,evidencePort,aiTaskPort,persistence,clock,availability,null);
+    }
+    public MaterializeLearningActivityUseCase(CurrentUser currentUser,StudyMissionRepository missions,
+            ActivityEvidencePort evidencePort,ActivityAiTaskPort aiTaskPort,PersistMaterializedActivity persistence,
+            Clock clock,AssessmentAvailabilityResolver availability,StudyMissionStartTransactions initialTransactions) {
+        this.initialTransactions=initialTransactions;
         this.currentUser = Objects.requireNonNull(currentUser, "currentUser must not be null");
         this.missions = Objects.requireNonNull(missions, "missions must not be null");
         this.evidencePort = Objects.requireNonNull(evidencePort, "evidencePort must not be null");
         this.aiTaskPort = Objects.requireNonNull(aiTaskPort, "aiTaskPort must not be null");
         this.persistence = Objects.requireNonNull(persistence, "persistence must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.availability = Objects.requireNonNull(availability);
     }
 
     public Result execute(Command command) {
@@ -60,6 +69,16 @@ public class MaterializeLearningActivityUseCase {
             throw failure(ActivityMaterializationException.Reason.STALE_MISSION,
                     "The mission changed before the next activity could be prepared.");
         }
+        if(command.initialContext()!=null) {
+            command.deadline().check();
+            if(initialTransactions==null) throw new IllegalStateException("Initial exposure authorization is not configured");
+            if(!command.initialContext().ownerId().equals(userId)
+                || !command.initialContext().missionId().equals(mission.id())
+                || !command.initialContext().selectedAction().equals(command.action())
+                || !mission.activities().isEmpty() || mission.currentActivityId()!=null)
+                throw new StudyMissionStartException(StudyMissionStartException.Kind.STATE_CHANGED,
+                    com.hippocampus.learning.port.StudyMissionStartReceiptRepository.Reason.STATE_CHANGED);
+        }
         verifyMission(mission);
         LearningObjective objective = mission.objectives().stream()
                 .filter(candidate -> candidate.id().equals(command.action().learningObjectiveId()))
@@ -67,30 +86,60 @@ public class MaterializeLearningActivityUseCase {
                 .orElseThrow(() -> failure(ActivityMaterializationException.Reason.OBJECTIVE_NOT_IN_MISSION,
                         "The learning objective does not belong to this mission."));
         verifyMaterializable(command.action().actionType());
+        if (isReuseAction(command.action().actionType())) {
+            // Reject foreign/incompatible reuse before reconstructing availability from prior state.
+            priorActivity(mission, command.action());
+        }
+        if (mission.currentActivityId() != null) {
+            LearningActivity current = mission.activities().stream()
+                    .filter(a -> a.id().equals(mission.currentActivityId())).findFirst().orElseThrow();
+            var facts = availability.resolve(mission, current, availability.history(mission));
+            if (facts.nonScoringAssessment()) {
+                var target = facts.target(command.action());
+                if (target == com.hippocampus.learning.domain.AssessmentAvailability.Kind.UNKNOWN)
+                    throw failure(ActivityMaterializationException.Reason.INVALID_ARTIFACT,
+                            "The activity contract cannot be established.");
+                if (target == com.hippocampus.learning.domain.AssessmentAvailability.Kind.UNAVAILABLE)
+                    throw failure(ActivityMaterializationException.Reason.STALE_MISSION,
+                            "Reload the mission continuation decision.");
+            }
+        }
+
 
         int maxSequence = mission.activities().stream()
                 .mapToInt(LearningActivity::sequenceNumber).max().orElse(0);
         var snapshot = new PersistMaterializedActivity.Snapshot(
                 mission.updatedAt(), mission.currentActivityId(), mission.activities().size(), maxSequence);
-        Materialization materialization = materialize(mission, objective, command.action());
+        if (command.followUp() != null && command.followUp().questionIntent().equals(command.action().constraints().questionIntent())
+                && (!command.followUp().ownerId().equals(userId) || !command.followUp().missionId().equals(mission.id())
+                    || !command.followUp().objectiveId().equals(objective.id()))) {
+            throw failure(ActivityMaterializationException.Reason.STALE_MISSION, "The follow-up is unavailable.");
+        }
+        Materialization materialization = materialize(mission, objective, command.action(),command.deadline(),command.initialContext());
         Instant now = clock.instant();
         LearningActivity activity = new LearningActivity(
                 UUID.randomUUID(), objective.id(), materialization.activityType(),
-                materialization.representedActionType(), materialization.questionIntent(),
+                materialization.representedActionType(), command.followUp() != null
+                        && command.followUp().questionIntent().equals(command.action().constraints().questionIntent())
+                        ? command.followUp().questionIntent() : materialization.questionIntent(),
                 materialization.templateSignature(), "PENDING",
                 materialization.difficulty(), maxSequence + 1, materialization.generatedArtifactId(),
                 command.action().constraints().sourceRequirement() != SourceRequirement.NONE,
                 null, null, now, materialization.sourceReferenceIds());
+        if(command.deadline()!=null) command.deadline().check();
         var persisted = persistence.persist(new PersistMaterializedActivity.Command(
                 mission.id(), userId, snapshot, activity, materialization.sourceReferenceIds(),
                 materialization.artifactDraft(),
                 command.action().actionType() == LearningActionType.REUSE_VALIDATED_CONTENT,
-                mission.groundingMode().name(), now));
+                mission.groundingMode().name(), now, command.followUp(), command.action(),command.initialContext()));
+        if (persisted.activity() == null) throw failure(ActivityMaterializationException.Reason.STALE_MISSION,
+                "The follow-up is no longer available.");
         return new Result(persisted.activity(), persisted.mission());
     }
 
     private Materialization materialize(
-            StudyMission mission, LearningObjective objective, NextLearningAction action) {
+            StudyMission mission, LearningObjective objective, NextLearningAction action,ActivityAiTaskPort.PreparationDeadline deadline,
+            com.hippocampus.learning.port.StudyMissionStartReceiptRepository.InitialContext initial) {
         if (isReuseAction(action.actionType())) {
             LearningActivity prior = priorActivity(mission, action);
             return new Materialization(
@@ -108,20 +157,29 @@ public class MaterializeLearningActivityUseCase {
                     null, Set.of(), null);
         }
 
-        ActivityEvidencePort.Evidence evidence = evidencePort.retrieve(new ActivityEvidencePort.Request(
+        if(deadline!=null) deadline.check();
+        ActivityEvidencePort.Request evidenceRequest = new ActivityEvidencePort.Request(
                 mission.userId(), mission.id(), mission.topicId(), mission.groundingMode(),
-                mission.materials(), objective, action));
+                mission.materials(), objective, action);
+        ActivityEvidencePort.Evidence evidence=initial==null ? evidencePort.retrieve(evidenceRequest)
+                : evidencePort.retrieve(evidenceRequest,initial);
+        if(deadline!=null) deadline.check();
         if (evidence.sourceReferenceIds().isEmpty()
                 && (action.constraints().sourceRequirement() == SourceRequirement.REQUIRED
                         || action.constraints().visualRequired())) {
             throw failure(ActivityMaterializationException.Reason.INVALID_SOURCE_REFERENCES,
                     "Required source evidence is empty.");
         }
-        ActivityAiTaskPort.ValidatedContent content = aiTaskPort.execute(new ActivityAiTaskPort.Request(
+        ActivityAiTaskPort.Request aiRequest = new ActivityAiTaskPort.Request(
                 objective.objectiveText(), displayName(objective, action), action.actionType(),
                 action.difficulty(), mission.groundingMode(), evidence,
                 recentQuestionIntents(mission, objective),
-                action.constraints()));
+                action.constraints());
+        if(initial!=null) initialTransactions.authorizeExposure(initial,evidence.sourceReferenceIds());
+        if(deadline!=null) deadline.check();
+        ActivityAiTaskPort.ValidatedContent content = deadline==null ? aiTaskPort.execute(aiRequest)
+                : aiTaskPort.execute(aiRequest,deadline);
+        if(deadline!=null) deadline.check();
         if (content.validationStatus() != ActivityAiTaskPort.ValidationStatus.VALIDATED) {
             throw failure(ActivityMaterializationException.Reason.INVALID_AI_CONTENT,
                     "Generated activity content was not validated.");
@@ -137,6 +195,10 @@ public class MaterializeLearningActivityUseCase {
     }
 
     private static String displayName(LearningObjective objective, NextLearningAction action) {
+        if (action.constraints().questionIntent() != null
+                && action.constraints().questionIntent().startsWith("assessment-target-v1:")) {
+            return action.conceptKey();
+        }
         if (objective.displayName() != null && !objective.displayName().isBlank()) {
             return objective.displayName();
         }
@@ -214,7 +276,7 @@ public class MaterializeLearningActivityUseCase {
         }
     }
 
-    private static LearningActivityType mapActivityType(NextLearningAction action) {
+    static LearningActivityType mapActivityType(NextLearningAction action) {
         LearningActivityType mapped = switch (action.actionType()) {
             case UNDERSTAND, HINT, PREREQUISITE_SUPPORT -> LearningActivityType.UNDERSTAND;
             case RETRIEVE, UNDERSTANDING_CHECK -> LearningActivityType.RETRIEVE;
@@ -254,15 +316,26 @@ public class MaterializeLearningActivityUseCase {
     public record Command(
             UUID missionId,
             NextLearningAction action,
-            UUID expectedCurrentActivityId) {
+            UUID expectedCurrentActivityId,
+            com.hippocampus.learning.domain.FollowUpIntent followUp,
+            com.hippocampus.learning.port.StudyMissionStartReceiptRepository.InitialContext initialContext,
+            ActivityAiTaskPort.PreparationDeadline deadline) {
+        public Command(UUID missionId,NextLearningAction action,UUID expectedCurrentActivityId,
+                com.hippocampus.learning.domain.FollowUpIntent followUp) {
+            this(missionId,action,expectedCurrentActivityId,followUp,null,null);
+        }
+        public Command(UUID missionId, NextLearningAction action, UUID expectedCurrentActivityId) {
+            this(missionId,action,expectedCurrentActivityId,null);
+        }
 
         public Command(UUID missionId, NextLearningAction action) {
-            this(missionId, action, null);
+            this(missionId, action, null, null);
         }
 
         public Command {
             Objects.requireNonNull(missionId, "missionId must not be null");
             Objects.requireNonNull(action, "action must not be null");
+            if((initialContext==null)!=(deadline==null)) throw new IllegalArgumentException("Initial deadline and claim required together");
         }
     }
 

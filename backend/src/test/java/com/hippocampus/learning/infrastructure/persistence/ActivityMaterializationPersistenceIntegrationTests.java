@@ -77,6 +77,11 @@ class ActivityMaterializationPersistenceIntegrationTests extends PostgresIntegra
             assertThat(reloaded.activities().getFirst().status()).isEqualTo("COMPLETED");
             assertThat(reloaded.currentActivityId()).isEqualTo(result.activity().id());
             assertThat(result.activity().generatedArtifactId()).isNotNull();
+            assertThat(context.getBean(GeneratedArtifactRepository.class)
+                    .findObjectiveOrigin(result.activity().generatedArtifactId(), fixture.ownerId()).orElseThrow())
+                    .isEqualTo(new GeneratedArtifactRepository.ObjectiveOrigin(
+                            result.activity().generatedArtifactId(), mission.objectives().getFirst().id(),
+                            mission.id(), fixture.ownerId()));
             assertThat(result.activity().sourceReferenceIds()).containsExactly(fixture.sourceReferenceId());
             assertThat(result.activity().representedActionType()).isEqualTo(LearningActionType.UNDERSTAND);
             assertThat(result.activity().questionIntent()).isEqualTo("mechanism");
@@ -136,6 +141,9 @@ class ActivityMaterializationPersistenceIntegrationTests extends PostgresIntegra
             LearningActivity selected = mission.activities().getFirst();
             repository.save(mission);
             insertArtifactSource(fixture.existingArtifactId(), fixture.sourceReferenceId());
+            context.getBean(GeneratedArtifactRepository.class).bindObjectiveOrigin(
+                    new GeneratedArtifactRepository.ObjectiveOrigin(fixture.existingArtifactId(),
+                            selected.learningObjectiveId(), mission.id(), fixture.ownerId()));
 
             var useCase = useCase(
                     fixture,
@@ -238,6 +246,7 @@ class ActivityMaterializationPersistenceIntegrationTests extends PostgresIntegra
 
             assertThat(rowCount("generated_artifacts")).isEqualTo(artifactCount);
             assertThat(rowCount("generated_artifact_sources")).isZero();
+            assertThat(rowCount("generated_artifact_objective_origins")).isZero();
             assertThat(repository.findOwnedById(mission.id(), fixture.ownerId()).orElseThrow().activities())
                     .hasSize(1);
         }
@@ -255,20 +264,161 @@ class ActivityMaterializationPersistenceIntegrationTests extends PostgresIntegra
         }
     }
 
+    @Test
+    void originBindingRejectsReassignmentForeignOwnerAndMutation() throws Exception {
+        try (var context = startApplicationWithFlyway()) {
+            Fixture fixture = insertFixture();
+            StudyMission mission = initialMission(fixture);
+            context.getBean(StudyMissionRepository.class).save(mission);
+            StudyMission otherMission = initialMission(fixture);
+            context.getBean(StudyMissionRepository.class).save(otherMission);
+            UUID artifact = fixture.existingArtifactId();
+            UUID objective = mission.objectives().getFirst().id();
+
+            assertSqlRejected(() -> insertOrigin(artifact, objective, mission.id(), UUID.randomUUID()));
+            assertSqlRejected(() -> insertOrigin(artifact, UUID.randomUUID(), mission.id(), fixture.ownerId()));
+            assertSqlRejected(() -> insertOrigin(artifact, objective, UUID.randomUUID(), fixture.ownerId()));
+            assertSqlRejected(() -> insertOrigin(artifact, objective, otherMission.id(), fixture.ownerId()));
+            insertOrigin(artifact, objective, mission.id(), fixture.ownerId());
+            assertSqlRejected(() -> insertOrigin(artifact, objective, mission.id(), fixture.ownerId()));
+            assertSqlRejected(() -> executeOriginMutation(
+                    "UPDATE generated_artifact_objective_origins SET learning_objective_id=? WHERE generated_artifact_id=?",
+                    objective, artifact));
+            assertSqlRejected(() -> executeOriginMutation(
+                    "DELETE FROM generated_artifact_objective_origins WHERE generated_artifact_id=?",
+                    artifact));
+            assertThat(context.getBean(GeneratedArtifactRepository.class)
+                    .findObjectiveOrigin(artifact, fixture.ownerId())).contains(
+                            new GeneratedArtifactRepository.ObjectiveOrigin(
+                                    artifact, objective, mission.id(), fixture.ownerId()));
+        }
+    }
+
+    @Test
+    void sourceRevokedAfterProviderSelectionRejectsFinalWriteWithoutPartialState() throws Exception {
+        Fixture fixture;
+        UUID missionId;
+        int artifactCount;
+        try (var context = startApplicationWithFlyway(MaterializationTestConfiguration.class)) {
+            fixture = insertFixture();
+            StudyMission mission = initialMission(fixture);
+            missionId = mission.id();
+            context.getBean(StudyMissionRepository.class).save(mission);
+            artifactCount = rowCount("generated_artifacts");
+            Runnable revoke = () -> {
+                try {
+                    markMaterialDeleted(fixture.materialId());
+                } catch (SQLException failure) {
+                    throw new IllegalStateException(failure);
+                }
+            };
+            var materializer = useCase(fixture, context.getBean(StudyMissionRepository.class),
+                    context.getBean(PersistMaterializedActivity.class),
+                    Set.of(fixture.sourceReferenceId()), revoke);
+            assertThatThrownBy(() -> materializer.execute(new MaterializeLearningActivityUseCase.Command(
+                    mission.id(), action(mission.objectives().getFirst().id()))))
+                    .isInstanceOf(ActivityMaterializationException.class)
+                    .extracting(error -> ((ActivityMaterializationException) error).reason())
+                    .isEqualTo(ActivityMaterializationException.Reason.INVALID_SOURCE_REFERENCES);
+        }
+        try (var fresh = startApplicationWithFlyway()) {
+            assertThat(rowCount("generated_artifacts")).isEqualTo(artifactCount);
+            assertThat(rowCount("generated_artifact_objective_origins")).isZero();
+            assertThat(rowCount("generated_artifact_sources")).isZero();
+            assertThat(fresh.getBean(StudyMissionRepository.class)
+                    .findOwnedById(missionId, fixture.ownerId()).orElseThrow().activities()).hasSize(1);
+        }
+    }
+
+    @Test
+    void changedReuseContractIsRejectedAtFinalWriteBoundary() throws Exception {
+        Fixture fixture;
+        UUID missionId;
+        try (var context = startApplicationWithFlyway(MaterializationTestConfiguration.class)) {
+            fixture = insertFixture();
+            StudyMission mission = reuseMission(fixture);
+            missionId = mission.id();
+            LearningActivity selected = mission.activities().getFirst();
+            context.getBean(StudyMissionRepository.class).save(mission);
+            insertArtifactSource(fixture.existingArtifactId(), fixture.sourceReferenceId());
+            insertOrigin(fixture.existingArtifactId(), selected.learningObjectiveId(), mission.id(), fixture.ownerId());
+            try (var connection = openPostgresConnection();
+                    var statement = connection.prepareStatement(
+                            "UPDATE generated_artifacts SET content_payload='{}'::jsonb WHERE id=?")) {
+                statement.setObject(1, fixture.existingArtifactId());
+                assertThat(statement.executeUpdate()).isOne();
+            }
+            LearningActivity proposed = new LearningActivity(UUID.randomUUID(), selected.learningObjectiveId(),
+                    selected.activityType(), selected.representedActionType(), selected.questionIntent(),
+                    selected.templateSignature(), "PENDING", selected.difficulty(), 3,
+                    fixture.existingArtifactId(), true, null, null, NOW,
+                    Set.of(fixture.sourceReferenceId()));
+            var command = new PersistMaterializedActivity.Command(mission.id(), fixture.ownerId(),
+                    new PersistMaterializedActivity.Snapshot(mission.updatedAt(), mission.currentActivityId(), 2, 2),
+                    proposed, Set.of(fixture.sourceReferenceId()), null, true, "STRICT_SOURCE", NOW);
+            assertThatThrownBy(() -> context.getBean(PersistMaterializedActivity.class).persist(command))
+                    .isInstanceOf(ActivityMaterializationException.class)
+                    .extracting(error -> ((ActivityMaterializationException) error).reason())
+                    .isEqualTo(ActivityMaterializationException.Reason.INVALID_ARTIFACT);
+        }
+        try (var fresh = startApplicationWithFlyway()) {
+            assertThat(fresh.getBean(StudyMissionRepository.class)
+                    .findOwnedById(missionId, fixture.ownerId()).orElseThrow().activities()).hasSize(2);
+            assertThat(rowCount("generated_artifact_objective_origins")).isOne();
+        }
+    }
+
+    private static void insertOrigin(UUID artifact, UUID objective, UUID mission, UUID owner) throws SQLException {
+        try (var connection = openPostgresConnection();
+                var statement = connection.prepareStatement("""
+                        INSERT INTO generated_artifact_objective_origins
+                            (generated_artifact_id, learning_objective_id, study_mission_id, user_id)
+                        VALUES (?, ?, ?, ?)
+                        """)) {
+            statement.setObject(1, artifact);
+            statement.setObject(2, objective);
+            statement.setObject(3, mission);
+            statement.setObject(4, owner);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void executeOriginMutation(String sql, UUID... parameters) throws SQLException {
+        try (var connection = openPostgresConnection(); var statement = connection.prepareStatement(sql)) {
+            for (int index = 0; index < parameters.length; index++)
+                statement.setObject(index + 1, parameters[index]);
+            statement.executeUpdate();
+        }
+    }
+
     private static MaterializeLearningActivityUseCase useCase(
             Fixture fixture,
             StudyMissionRepository missions,
             PersistMaterializedActivity persistence,
             Set<UUID> sourceReferenceIds) {
+        return useCase(fixture, missions, persistence, sourceReferenceIds, () -> {});
+    }
+
+    private static MaterializeLearningActivityUseCase useCase(
+            Fixture fixture, StudyMissionRepository missions, PersistMaterializedActivity persistence,
+            Set<UUID> sourceReferenceIds, Runnable afterProviderSelection) {
         ActivityEvidencePort evidence = request -> new ActivityEvidencePort.Evidence(sourceReferenceIds);
-        ActivityAiTaskPort ai = request -> new ActivityAiTaskPort.ValidatedContent(
+        ActivityAiTaskPort ai = request -> {
+            afterProviderSelection.run();
+            return new ActivityAiTaskPort.ValidatedContent(
                 "EXPLANATION", "EXPLANATION", "Validated explanation",
                 "{\"kind\":\"explanation\"}", request.groundingMode().name(),
                 "SOURCE_GROUNDED_GENERATED", "EXPLANATION_V1", "1", "GEMINI",
                 "gemini-test", "2026-09", ActivityAiTaskPort.ValidationStatus.VALIDATED, true);
+        };
         return new MaterializeLearningActivityUseCase(
                 () -> new AuthenticatedUser(fixture.ownerId()), missions, evidence, ai,
-                persistence, Clock.fixed(NOW, ZoneOffset.UTC));
+                persistence, Clock.fixed(NOW, ZoneOffset.UTC),
+                new com.hippocampus.learning.application.AssessmentAvailabilityResolver(
+                        org.mockito.Mockito.mock(com.hippocampus.learning.port.ActivityResponseContractRepository.class),
+                         org.mockito.Mockito.mock(com.hippocampus.progress.port.StudentAttemptRepository.class),
+                         org.mockito.Mockito.mock(com.hippocampus.learning.port.StudyMissionSourcePresentationRepository.class),
+                         org.mockito.Mockito.mock(GeneratedArtifactRepository.class)));
     }
 
     private static StudyMission initialMission(Fixture fixture) {
@@ -412,10 +562,11 @@ class ActivityMaterializationPersistenceIntegrationTests extends PostgresIntegra
                     foreignSourceReferenceId, foreignMaterialId, foreignVersionId, "Foreign p. 1"));
             statement.executeUpdate("""
                     INSERT INTO generated_artifacts (
-                        id, user_id, artifact_type, task_type, content_text, grounding_mode,
+                        id, user_id, artifact_type, task_type, content_text, content_payload, grounding_mode,
                         classification, prompt_id, prompt_version, provider, model,
                         validation_status, reusable, created_at)
                     VALUES ('%s', '%s', 'EXPLANATION', 'EXPLANATION', 'Prior',
+                        '{"concept":"Synthetic","explanation":"Prior explanation","keyPoints":[],"prerequisitesUsed":[],"sourceReferences":[],"supplementalKnowledgeUsed":false,"limitations":[]}'::jsonb,
                         'STRICT_SOURCE', 'SOURCE_GROUNDED_GENERATED', 'EXPLANATION_V1',
                         '1', 'GEMINI', 'fixture', 'VALIDATED', true, now())
                     """.formatted(existingArtifactId, ownerId));
@@ -529,8 +680,10 @@ class ActivityMaterializationPersistenceIntegrationTests extends PostgresIntegra
         PersistMaterializedActivity persistMaterializedActivity(
                 FailingMissionRepository missions,
                 GeneratedArtifactRepository artifacts,
-                ActivitySourceReferenceAuthorization sourceAuthorization) {
-            return new PersistMaterializedActivity(missions, artifacts, sourceAuthorization);
+                ActivitySourceReferenceAuthorization sourceAuthorization,
+                com.hippocampus.learning.port.ActivityResponseContractRepository contracts,
+                com.hippocampus.learning.application.StudyMissionContinuationDecision continuation) {
+            return new PersistMaterializedActivity(missions, artifacts, sourceAuthorization, null, null, contracts,continuation);
         }
     }
 

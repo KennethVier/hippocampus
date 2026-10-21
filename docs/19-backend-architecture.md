@@ -4,7 +4,7 @@ Audience: Backend, architecture, AI, QA, security, and DevOps
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 19
-Last Updated: 2026-10-03
+Last Updated: 2026-10-17
 Owner: Project Hippocampus Team
 Prerequisites:
 - 10 - AI Architecture v1.1+
@@ -37,7 +37,7 @@ Scope: Spring Boot modular-monolith structure, package/module ownership,
   security integration, observability hooks, and testing seams.
 Status: Final
 Title: Backend Architecture
-Version: 1.0.2
+Version: 1.0.4
 ---
 
 # 19 - Backend Architecture
@@ -477,6 +477,15 @@ not own pedagogical compatibility. The exact activity identity is not an
 authorization token; foreign ownership, out-of-scope provenance, ineligible
 artifacts, or deleted material fail closed.
 
+ADR-0017 adds an immutable server-owned artifact-origin check for all artifact-
+carrying `RETRY`, `REDUCE_DIFFICULTY`, and `REUSE_VALIDATED_CONTENT` paths. The
+selected activity, requested action and stored origin must identify the same
+LearningObjective and originating StudyMission, with the authenticated owner
+matching both mission and artifact. Cross-mission or unbound legacy artifact
+reuse fails closed. An activity linked later to the artifact cannot establish
+its original objective. The application revalidates this binding together with
+the complete source/contract authorization at the final write boundary.
+
 Valid reusable content does not invoke an AI/provider merely to regenerate it.
 Resolution and validation follow the existing external-call and transaction
 rules: no network wait occurs inside the short write transaction, and
@@ -553,6 +562,41 @@ For simple CRUD metadata, pragmatic mapping may be used.
 ------------------------------------------------------------------------
 
 # 15. Transaction Boundary
+
+## Engine-authorized Continue completion (ADR-0016)
+
+Extend the existing mission-status application boundary with an application-only
+completion operation, not a public COMPLETE command. Require effective READ
+COMMITTED through the injected transactional bean, authenticated owned mission
+write lock, and current activity/mission/saved-attempt snapshots. No self-invocation
+or incompatible outer transaction may silently defeat that boundary.
+
+Acquire the exact finite server-owned source dependency rows individually,
+deduplicated and ascending PostgreSQL UUID order within:
+`material_versions -> materials -> source_references -> document_nodes -> chunks -> visual_assets`.
+Use FOR SHARE NOWAIT. Include only current references and frozen facts actually
+used by completion authorization/Engine, consulted scope nodes and nonnull
+targets. Do not lock unrelated history or every chunk in a version.
+
+Freshly reread the full locked identities/mappings and frozen authorization
+predicates; changed/missing/unexpected dependencies abort, without lock-set
+expansion or SKIP LOCKED. No new active-version, topic-link or READY requirement.
+Source-required empty references cannot pass vacuously; retain only existing
+explicit source-free behavior. Recompute Engine COMPLETE from current local
+facts/time and hold all locks through atomic lifecycle save/commit. Append no
+attempt, activity, artifact or evidence and rewrite no receipt/source history.
+
+Soft deletion's existing material UPDATE conflicts with the shared parent lock;
+version/chunk/target locks protect the other positive predicates. Revocation
+committed first denies completion; completion holding all locks first delays
+conflicting revocation until it ends. In-flight conflicting source writes cause
+rollback. Only acquisition SQLSTATE 55P03 maps, after full rollback, to existing
+sanitized stale 409. Other database/authorization errors retain existing error
+semantics; no blanket catch, automatic retry or global deadlock-free claim.
+NOWAIT is row-specific. Preserve snapshot/terminal duplicate conflicts and
+learner-controlled read recovery. The accepted ordering-resolution document
+contains the required PostgreSQL tests; the operation remains unimplemented.
+
 
 Transactions belong primarily at application-use-case boundaries.
 
@@ -644,6 +688,14 @@ state has not changed.
 ------------------------------------------------------------------------
 
 # 17. Submit Response Flow
+
+ADR-0016 preserves response submission/idempotency and immutable receipts.
+Validated UNCERTAIN -> UNGRADED contains no correctness/failure/mastery evidence;
+Phase 8 evidence writes shown conceptually below are not authorized in P7-16.
+Current continuation is a separate read/Continue decision, not a receipt rewrite.
+Dispatch existing non-materializable actions explicitly instead of forcing them
+through activity materialization or fabricating an activity UUID.
+
 
 ``` mermaid
 sequenceDiagram
@@ -848,6 +900,12 @@ These are not provider-availability problems.
 ------------------------------------------------------------------------
 
 # 25. AI Failure Taxonomy
+
+Known assessment unavailability under ADR-0016 is a validated application
+limitation distinct from invalid provider output or infrastructure failure.
+Authorization, stale snapshot and database failures are not NO_ACTIVITY success;
+retain sanitized error handling and rollback semantics.
+
 
 Normalize provider errors to application errors.
 
@@ -1755,6 +1813,35 @@ Background jobs require idempotency regardless.
 
 # 71. API Versioning
 
+## Continuation representation opt-in (ADR-0016)
+
+On existing mission GET and Continue POST routes, omission of
+`continuationContract` preserves the legacy representation. Exactly one decoded
+value `1` selects the new representation. Empty, repeated (even identical), mixed
+or unsupported explicit values return sanitized 400 before writes/provider work.
+This parameter grants no assessment, source or lifecycle authority.
+
+Legacy GET retains its exact shape. Legacy POST returns 204 only after real
+activity creation; non-materializable results and unfinished presentations return
+409 CONTINUATION_CONTRACT_UPGRADE_REQUIRED before any completion/write/provider
+call. Only already-completed activities qualify for legacy dispatch.
+
+Opt-in GET adds required nullable `continuation: {actionType,rationaleCode,canMaterialize}`.
+It is computed from appropriate current authorized state with no writes/provider
+calls. Opt-in POST returns 200 with one strict alternative:
+`{outcome: ACTIVITY_CREATED, activityId}` or
+`{outcome: NO_ACTIVITY, actionType, rationaleCode}` (no activityId). NO_ACTIVITY
+uses only existing non-materializable actions; COMPLETE requires committed
+lifecycle completion first. Authorization/infrastructure failures stay errors.
+
+Backend compatibility support precedes opt-in clients; test mixed versions,
+missing/204 opt-in results, distinct query-cache keys and private/no-store reads.
+Keep legacy safe denial until explicit retirement approval; assume no cache
+expiry guarantee. Do not roll back to a backend without the guards. Cached old
+clients may display generic conflict until reload, never false creation success.
+No deployment or routing activation is authorized by this contract decision.
+
+
 v1 internal product API may start under:
 
 ``` text
@@ -1821,6 +1908,15 @@ Events must not obscure critical transaction logic.
 ------------------------------------------------------------------------
 
 # 75. Generated Artifact Lifecycle
+
+For a new Study Mission artifact, persist its ADR-0017 origin binding in the
+existing short mission-locked materialization transaction with artifact,
+sources, activity and mission update. The objective is the server-resolved
+generation objective; the mission and owner come from the locked owned mission.
+AI/provider work occurs before this transaction. A missing or conflicting
+binding cannot be repaired from historical activity links, and an origin cannot
+be reassigned or removed while its artifact exists. Retention-driven deletion
+requires an explicitly authorized artifact lifecycle.
 
 Persist only artifacts required for:
 
@@ -1927,6 +2023,13 @@ Do not hide retrieval failure inside an empty prompt.
 ------------------------------------------------------------------------
 
 # 82. AI Failure Integration
+
+ADR-0016 dispatches current Engine decisions without inventing an action:
+COMMUNICATE_LIMITATION communicates and retains explicit Pause; COMPLETE uses
+explicit Finish and its authorized transaction; existing source/dependency
+views retain manual recovery. No automatic mission transition, new activity
+substitution or hidden provider retry follows from assessment unavailability.
+
 
 AI failure is also a Learning Engine/application event.
 
@@ -2308,6 +2411,11 @@ The frontend must preserve the product rule:
 ------------------------------------------------------------------------
 
 # 96. Revision History
+
+- **1.0.4 - 2026-10-17 - Project Hippocampus Team:** Aligned atomic artifact-origin persistence, final reuse/source authorization and legacy rejection with accepted ADR-0017; preserved existing materialization transaction and Engine boundaries.
+
+- **1.0.3 - 2026-10-16 - Project Hippocampus Team:** ADR-0016 governance alignment. Aligned ADR-0016 Continue representation compatibility, existing lifecycle transaction extension and source-revocation ordering; preserved Phase 8 and error boundaries.
+
 
   ----------------------------------------------------------------------------
   Version           Date              Author            Changes

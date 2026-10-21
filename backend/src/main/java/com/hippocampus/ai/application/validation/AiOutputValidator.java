@@ -62,6 +62,12 @@ public final class AiOutputValidator {
         return new ValidatedAiResult<>(normalize(decoded, outputContract, taskContext));
     }
 
+    /** Canonical local structure/format checks; no provider execution or semantic claim. */
+    public void validateQuestionStructure(QuestionGenerationResult question, QuestionGenerationInput request) {
+        validateBusinessRules(question, AiOutputContract.QUESTION_GENERATION);
+        validateRequestedQuestionContract(question, AiOutputContract.QUESTION_GENERATION, request);
+    }
+
     private static void validateRequestedQuestionContract(
             Object decoded,
             AiOutputContract outputContract,
@@ -90,9 +96,6 @@ public final class AiOutputValidator {
                     : promptId == PromptId.RESPONSE_EVALUATION_V4
                             || promptId == PromptId.RESPONSE_EVALUATION_V5
                             || promptId == PromptId.RESPONSE_EVALUATION_V6
-                            || promptId == PromptId.RESPONSE_EVALUATION_V7
-                            || promptId == PromptId.RESPONSE_EVALUATION_V8
-                            || promptId == PromptId.RESPONSE_EVALUATION_V9
                     ? ResponseEvaluationV4Result.class
                     : ResponseEvaluationResult.class;
             case CONCEPT_CONNECTION -> promptId == PromptId.CONCEPT_CONNECTION_V1

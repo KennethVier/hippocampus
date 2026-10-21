@@ -128,6 +128,24 @@ public class JdbcGeneratedArtifactRepository implements GeneratedArtifactReposit
     }
 
     @Override
+    public Optional<GeneratedArtifact> findOwnedByIdForUpdate(UUID artifactId, UUID ownerId) {
+        Objects.requireNonNull(artifactId, "artifactId must not be null");
+        Objects.requireNonNull(ownerId, "ownerId must not be null");
+        return jdbc.sql("""
+                SELECT id, user_id, artifact_type, task_type, content_text,
+                       content_payload::text AS content_payload, grounding_mode,
+                       classification, prompt_id, prompt_version, provider, model,
+                       model_version, validation_status, reusable, created_at
+                FROM generated_artifacts
+                WHERE id = :artifactId AND user_id = :ownerId
+                FOR UPDATE
+                """)
+                .param("artifactId", artifactId)
+                .param("ownerId", ownerId)
+                .query(MAPPER).optional();
+    }
+
+    @Override
     public Set<UUID> findSourceReferenceIds(UUID artifactId) {
         Objects.requireNonNull(artifactId, "artifactId must not be null");
         return Set.copyOf(jdbc.sql("""
@@ -138,5 +156,53 @@ public class JdbcGeneratedArtifactRepository implements GeneratedArtifactReposit
                 """)
                 .param("artifactId", artifactId)
                 .query(UUID.class).list());
+    }
+
+    @Override
+    public Set<UUID> findSourceReferenceIdsForShare(UUID artifactId) {
+        Objects.requireNonNull(artifactId, "artifactId must not be null");
+        return Set.copyOf(jdbc.sql("""
+                SELECT source_reference_id
+                FROM generated_artifact_sources
+                WHERE generated_artifact_id = :artifactId
+                ORDER BY source_reference_id
+                FOR SHARE
+                """)
+                .param("artifactId", artifactId)
+                .query(UUID.class).list());
+    }
+
+    @Override
+    public void bindObjectiveOrigin(ObjectiveOrigin origin) {
+        Objects.requireNonNull(origin, "origin must not be null");
+        jdbc.sql("""
+                INSERT INTO generated_artifact_objective_origins
+                    (generated_artifact_id, learning_objective_id, study_mission_id, user_id)
+                VALUES (:artifactId, :objectiveId, :missionId, :userId)
+                """)
+                .param("artifactId", origin.artifactId())
+                .param("objectiveId", origin.objectiveId())
+                .param("missionId", origin.missionId())
+                .param("userId", origin.userId())
+                .update();
+    }
+
+    @Override
+    public Optional<ObjectiveOrigin> findObjectiveOrigin(UUID artifactId, UUID ownerId) {
+        Objects.requireNonNull(artifactId, "artifactId must not be null");
+        Objects.requireNonNull(ownerId, "ownerId must not be null");
+        return jdbc.sql("""
+                SELECT generated_artifact_id, learning_objective_id, study_mission_id, user_id
+                FROM generated_artifact_objective_origins
+                WHERE generated_artifact_id = :artifactId AND user_id = :ownerId
+                """)
+                .param("artifactId", artifactId)
+                .param("ownerId", ownerId)
+                .query((row, number) -> new ObjectiveOrigin(
+                        row.getObject("generated_artifact_id", UUID.class),
+                        row.getObject("learning_objective_id", UUID.class),
+                        row.getObject("study_mission_id", UUID.class),
+                        row.getObject("user_id", UUID.class)))
+                .optional();
     }
 }

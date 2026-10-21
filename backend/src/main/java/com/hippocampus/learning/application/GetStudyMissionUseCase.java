@@ -37,6 +37,10 @@ public class GetStudyMissionUseCase {
     private final GeneratedActivityContentDecoder contentDecoder;
     private final StudyMissionSourcePresentationRepository sourcePresentations;
     private final StudentAttemptRepository attempts;
+    private final StudyMissionContinuationDecision continuation;
+    private final java.time.Clock clock;
+    private final com.hippocampus.learning.port.StudyMissionStartReceiptRepository startReceipts;
+    private final com.hippocampus.learning.port.InitialStudyMissionSourceAuthority initialSources;
 
     public GetStudyMissionUseCase(
             CurrentUser currentUser,
@@ -45,6 +49,23 @@ public class GetStudyMissionUseCase {
             GeneratedActivityContentDecoder contentDecoder,
             StudyMissionSourcePresentationRepository sourcePresentations,
             StudentAttemptRepository attempts) {
+        this(currentUser, missions, artifacts, contentDecoder, sourcePresentations, attempts, null,
+                java.time.Clock.systemUTC());
+    }
+
+    public GetStudyMissionUseCase(CurrentUser currentUser, StudyMissionRepository missions,
+            GeneratedArtifactRepository artifacts, GeneratedActivityContentDecoder contentDecoder,
+            StudyMissionSourcePresentationRepository sourcePresentations, StudentAttemptRepository attempts,
+            StudyMissionContinuationDecision continuation, java.time.Clock clock) {
+        this(currentUser,missions,artifacts,contentDecoder,sourcePresentations,attempts,continuation,clock,null,null);
+    }
+    public GetStudyMissionUseCase(CurrentUser currentUser,StudyMissionRepository missions,
+            GeneratedArtifactRepository artifacts,GeneratedActivityContentDecoder contentDecoder,
+            StudyMissionSourcePresentationRepository sourcePresentations,StudentAttemptRepository attempts,
+            StudyMissionContinuationDecision continuation,java.time.Clock clock,
+            com.hippocampus.learning.port.StudyMissionStartReceiptRepository startReceipts,
+            com.hippocampus.learning.port.InitialStudyMissionSourceAuthority initialSources) {
+        this.startReceipts=startReceipts;this.initialSources=initialSources;
         this.currentUser = Objects.requireNonNull(currentUser, "currentUser must not be null");
         this.missions = Objects.requireNonNull(missions, "missions must not be null");
         this.artifacts = Objects.requireNonNull(artifacts, "artifacts must not be null");
@@ -52,6 +73,8 @@ public class GetStudyMissionUseCase {
         this.sourcePresentations = Objects.requireNonNull(
                 sourcePresentations, "sourcePresentations must not be null");
         this.attempts = Objects.requireNonNull(attempts, "attempts must not be null");
+        this.continuation = continuation;
+        this.clock = Objects.requireNonNull(clock);
     }
 
     public GetStudyMissionUseCase(
@@ -71,7 +94,13 @@ public class GetStudyMissionUseCase {
     }
 
     @Transactional(readOnly = true)
-    public Result execute(UUID missionId) {
+    public Result execute(UUID missionId) { return execute(missionId, false); }
+
+    @Transactional(readOnly = true)
+    public Result execute(UUID missionId, boolean optIn) { return execute(missionId,optIn,false); }
+
+    @Transactional(readOnly = true)
+    public Result execute(UUID missionId,boolean optIn,boolean initialOptIn) {
         Objects.requireNonNull(missionId, "missionId must not be null");
         UUID ownerId = currentUser.authenticatedUser().userId();
         StudyMission mission = missions.findOwnedById(missionId, ownerId)
@@ -83,7 +112,7 @@ public class GetStudyMissionUseCase {
                     .stream().reduce((left, right) -> right)
                     .orElse(null);
             if (latest != null && latest.submissionReceipt() != null) {
-                latestSubmission = SubmissionReceipt.fromJson(latest.submissionReceipt());
+                latestSubmission = SubmissionReceipt.fromAttempt(latest, mission.id(), mission.currentActivityId());
                 if (!latestSubmission.attemptId().equals(latest.id())
                         || !latestSubmission.missionId().equals(mission.id())
                         || !latestSubmission.activityId().equals(mission.currentActivityId())
@@ -92,11 +121,42 @@ public class GetStudyMissionUseCase {
                 }
             }
         }
+        Continuation view = null;
+        if (optIn && mission.status() == com.hippocampus.learning.domain.StudyMissionStatus.ACTIVE
+                && mission.currentActivityId() != null) {
+            var activity = mission.activities().stream().filter(a -> a.id().equals(mission.currentActivityId()))
+                    .findFirst().orElseThrow(GetStudyMissionUseCase::notFound);
+            if ("COMPLETED".equals(activity.status()) && activity.completedAt() != null) {
+                if (continuation == null) throw new IllegalStateException("Continuation projection is not configured");
+                try {
+                    var action = continuation.decide(mission, activity, clock.instant()).action();
+                    view = new Continuation(action.actionType().name(), action.rationaleCode(),
+                            StudyMissionContinuationDecision.materializable(action));
+                } catch (com.hippocampus.shared.domain.error.DomainConflictException blocked) {
+                    // No eligible next action does not make the saved mission unreadable.
+                    // The nullable read projection withholds Continue; POST retains its conflict.
+                    if (!"FOLLOW_UP_NO_PROGRESS".equals(blocked.errorCode().value())) throw blocked;
+                }
+            }
+        }
+        InitialActivity initial=null;
+        if(initialOptIn) {
+            if(startReceipts==null || initialSources==null) throw new IllegalStateException("Initial projection is not configured");
+            var receipt=startReceipts.findByMission(ownerId,missionId);
+            if(receipt.isPresent()) {
+                var stored=receipt.get();
+                boolean sourceAvailable=true;
+                try { initialSources.inspect(ownerId,mission.materials()); }
+                catch(com.hippocampus.learning.port.InitialStudyMissionSourceAuthority.SourceUnavailableException | StudyMissionStartException unavailable) { sourceAvailable=false; }
+                var initialView=new StudyMissionStartTransactions.View(mission,stored,true,startReceipts.databaseTime(),null);
+                initial=InitialActivity.from(initialView,sourceAvailable);
+            }
+        }
         return new Result(
                 mission.id(), mission.status().name(),
                 mission.learningState() == null ? null : mission.learningState().name(),
                 currentActivity, mission.availableTimeMinutes(), mission.startedAt(),
-                mission.completedAt(), mission.stoppedAt(), mission.updatedAt(), latestSubmission);
+                mission.completedAt(), mission.stoppedAt(), mission.updatedAt(), latestSubmission, view,initial);
     }
 
     private CurrentActivity currentActivity(StudyMission mission, UUID ownerId) {
@@ -188,6 +248,28 @@ public class GetStudyMissionUseCase {
         return new ApplicationNotFoundException(MISSION_NOT_FOUND, "Study mission was not found.");
     }
 
+    public record InitialActivity(UUID startRequestId,String state,int attemptsUsed,int maximumAttempts,
+            boolean canRetry,Integer retryAfterSeconds,String reasonCode,InitialDecision decision) {
+        static InitialActivity from(StudyMissionStartTransactions.View view,boolean sourceAvailable) {
+            var r=view.receipt();
+            var action=r.selectedAction();
+            boolean control=action!=null && switch(action.actionType()) {
+                case SOURCE_ONLY,COMMUNICATE_LIMITATION,RETRY_DEPENDENCY,PAUSE,COMPLETE,STOP,START,RESUME -> true;
+                default -> false;
+            };
+            String reason=!sourceAvailable ? "SOURCE_UNAVAILABLE"
+                : r.reasonCode()==null ? null : r.reasonCode().name();
+            boolean canRetry=sourceAvailable && view.canRetry();
+            int seconds=view.retrySeconds();
+            return new InitialActivity(r.startRequestId(),r.state().name(),r.attemptsUsed(),3,
+                canRetry,seconds==0?null:seconds,reason,
+                sourceAvailable && control ? new InitialDecision(action.actionType().name(),action.rationaleCode()) : null);
+        }
+    }
+    public record InitialDecision(String actionType,String rationaleCode) {}
+
+    public record Continuation(String actionType, String rationaleCode, boolean canMaterialize) {}
+
     public record Result(
             UUID id,
             String status,
@@ -198,7 +280,19 @@ public class GetStudyMissionUseCase {
             Instant completedAt,
             Instant stoppedAt,
             Instant updatedAt,
-            SubmissionReceipt latestSubmission) {
+            SubmissionReceipt latestSubmission, Continuation continuation,InitialActivity initialActivity) {
+        public Result(UUID id,String status,String stage,CurrentActivity currentActivity,Integer availableTimeMinutes,
+                Instant startedAt,Instant completedAt,Instant stoppedAt,Instant updatedAt,
+                SubmissionReceipt latestSubmission,Continuation continuation) {
+            this(id,status,stage,currentActivity,availableTimeMinutes,startedAt,completedAt,stoppedAt,updatedAt,
+                latestSubmission,continuation,null);
+        }
+        public Result(UUID id, String status, String stage, CurrentActivity currentActivity,
+                Integer availableTimeMinutes, Instant startedAt, Instant completedAt,
+                Instant stoppedAt, Instant updatedAt, SubmissionReceipt latestSubmission) {
+            this(id, status, stage, currentActivity, availableTimeMinutes, startedAt, completedAt,
+                    stoppedAt, updatedAt, latestSubmission, null);
+        }
         public Result(UUID id, String status, String stage, CurrentActivity currentActivity,
                 Integer availableTimeMinutes, Instant startedAt, Instant completedAt,
                 Instant stoppedAt, Instant updatedAt) {

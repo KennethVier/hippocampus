@@ -1,12 +1,12 @@
 ---
 Document ID: 06
 Title: User Journey & Learning Flow
-Version: 1.0.1
+Version: 1.0.3
 Status: Final
 Owner: Project Hippocampus Team
 Authors: Project Hippocampus Team
 Created: 2026-08-23
-Last Updated: 2026-10-03
+Last Updated: 2026-10-20
 Purpose: Define the end-to-end student journey and evidence-aligned learning flow through Hippocampus.
 Scope: Entry paths, material intake, study planning, Study Mission stages, learning-state adaptation, review loops, continuity, exceptions, and requirement traceability.
 Audience: Product, UX, engineering, AI, research, and medical-education contributors.
@@ -899,6 +899,23 @@ Example:
 
 # 19. Stage 9 — Resume, Continue, or Stop
 
+## Initial mission completion admission (ADR-0019)
+
+An ACTIVE mission with no genuine completed LearningActivity cannot be completed by initial preparation merely because the Engine selected COMPLETE. Return a non-scoring NO_ACTIVITY admission denial, preserve the selected action/rationale and actual lifecycle, and retain learner Pause/Stop. Do not fabricate work/evidence, automatically reset/restart or offer initial Finish. Repeated unchanged initial blocking state produces no generation or receipt churn; legitimate re-evaluation requires an explicit authorized action and relevant state change. Elapsed time/resume alone cannot reset the original budget. This result is not M3 acceptance.
+
+
+## Assessment-unavailable continuation (ADR-0016)
+
+After a real saved UNGRADED attempt, application-owned evidence may establish
+that a response-bearing target still lacks an approved assessment basis. Do
+not reuse or regenerate that known-unassessable target. Preserve existing
+higher-priority lifecycle, safety, source, time and anti-repetition decisions;
+otherwise use existing COMMUNICATE_LIMITATION with ASSESSMENT_UNAVAILABLE.
+Keep saved work visible and Pause learner-controlled. Do not automatically
+Pause/Stop/complete the mission or claim failure, correctness or mastery.
+A separately selected Engine COMPLETE may be committed through explicit Finish.
+
+
 At the end of a mission, the student should have a clear next state.
 
 Possible outcomes:
@@ -1054,6 +1071,12 @@ This protects against unnecessary repetition while preserving intentional spaced
 
 # 24. Non-Repetition Rule
 
+Repeating a known-unassessable response-bearing activity after saved UNGRADED
+is not corrective retrieval practice. ADR-0016 blocks both artifact reuse and
+regeneration under the same unavailable basis. Generic UNGRADED alone does not
+establish permanent ineligibility or justify a new activity-selection sequence.
+
+
 The student's request that learning should not feel unnecessarily repetitive is formalized as:
 
 > **Avoid accidental repetition; preserve intentional repetition.**
@@ -1158,6 +1181,8 @@ Narrow the mission scope and preserve unfinished work.
 
 ## 27.4 Insufficient Learning Evidence
 
+ADR-0016 assessment limitation must not fabricate correctness/failure/mastery evidence or personalize from unassessable work.
+
 Avoid false personalization and use a reasonable baseline flow.
 
 ## 27.5 Repeated Learner Difficulty
@@ -1166,9 +1191,13 @@ Increase scaffolding or revisit prerequisites rather than simply increasing ques
 
 ## 27.6 AI Uncertainty
 
+Distinguish response-specific uncertainty from server-established missing assessment basis and infrastructure failure; generic UNGRADED is insufficient for the no-repeat classification.
+
 Communicate uncertainty and preserve verification pathways where appropriate.
 
 ## 27.7 Student Stops Mid-Session
+
+Keep Pause learner-controlled, preserve saved work and revalidate availability on resume under ADR-0016; resumption alone does not restore assessment authority.
 
 Preserve progress and allow the session to resume without unnecessary repetition.
 
@@ -1326,6 +1355,11 @@ Feature
 ---
 
 # 35. Revision History
+
+- **1.0.3 — 2026-10-20 — Proposed for final owner approval:** ADR-0019 initial-completion admission; no fabricated work, terminal mutation or repeated generation.
+
+- **1.0.2 - 2026-10-16 - Project Hippocampus Team:** ADR-0016 governance alignment. Aligned known assessment-unavailable continuation, learner-controlled Pause and no-repeat/resume boundaries with accepted ADR-0016.
+
 
 | Version | Date | Author | Changes |
 |---|---|---|---|

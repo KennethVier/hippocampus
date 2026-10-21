@@ -14,6 +14,10 @@ public interface ActivityEvidencePort {
 
     Evidence retrieve(Request request);
 
+    default Evidence retrieve(Request request,StudyMissionStartReceiptRepository.InitialContext initial) {
+        throw new IllegalStateException("Initial frozen-source retrieval is not configured");
+    }
+
     record Request(
             UUID userId,
             UUID missionId,

@@ -72,6 +72,39 @@ class LearningActivityAiTaskAdapterTests {
     }
 
     @Test
+    void initialTimedWaitCancelsTheSameOrchestratorFuture() {
+        CompletableFuture<ValidatedAiResult<?>> pending=new CompletableFuture<>() {
+            @Override public ValidatedAiResult<?> get(long timeout,java.util.concurrent.TimeUnit unit)
+                    throws java.util.concurrent.TimeoutException {
+                assertThat(unit).isEqualTo(java.util.concurrent.TimeUnit.NANOSECONDS);
+                assertThat(timeout).isPositive().isLessThanOrEqualTo(java.time.Duration.ofSeconds(150).toNanos());
+                throw new java.util.concurrent.TimeoutException();
+            }
+        };
+        when(orchestrator.execute(any(),any(),any(),anyList(),any())).thenReturn(pending);
+        assertThatThrownBy(()->adapter.execute(request(StudyMissionGroundingMode.STRICT_SOURCE,false),
+                ActivityAiTaskPort.PreparationDeadline.start(java.time.Duration.ofSeconds(150))))
+                .isInstanceOf(java.util.concurrent.CancellationException.class);
+        assertThat(pending.isCancelled()).isTrue();
+    }
+
+    @Test
+    void initialInterruptCancelsAndPreservesInterruptStatus() {
+        CompletableFuture<ValidatedAiResult<?>> pending=new CompletableFuture<>() {
+            @Override public ValidatedAiResult<?> get(long timeout,java.util.concurrent.TimeUnit unit)
+                    throws InterruptedException { throw new InterruptedException(); }
+        };
+        when(orchestrator.execute(any(),any(),any(),anyList(),any())).thenReturn(pending);
+        try {
+            assertThatThrownBy(()->adapter.execute(request(StudyMissionGroundingMode.STRICT_SOURCE,false),
+                    ActivityAiTaskPort.PreparationDeadline.start(java.time.Duration.ofSeconds(150))))
+                    .isInstanceOf(java.util.concurrent.CancellationException.class);
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            assertThat(pending.isCancelled()).isTrue();
+        } finally { Thread.interrupted(); }
+    }
+
+    @Test
     void rejectsSupplementalExplanationWhenLearningEngineDisallowsIt() {
         stubSupplementalExplanation();
 

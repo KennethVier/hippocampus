@@ -41,7 +41,10 @@ final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             "ACTIVITY_RESPONSE_STALE_SUBMISSION",
             "ACTIVITY_MATERIALIZATION_MISSION_NOT_ACTIVE",
             "ACTIVITY_MATERIALIZATION_UNFINISHED_CURRENT_ACTIVITY",
-            "ACTIVITY_MATERIALIZATION_STALE_MISSION");
+            "ACTIVITY_MATERIALIZATION_STALE_MISSION",
+            "STUDY_MISSION_START_REQUEST_CONFLICT",
+            "STUDY_MISSION_INITIAL_STATE_CHANGED",
+            "STUDY_MISSION_SOURCE_BUSY");
 
     @ExceptionHandler(DomainConflictException.class)
     ResponseEntity<Object> handleDomainConflict(
@@ -83,10 +86,17 @@ final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             HttpServletRequest request) {
         HttpStatus status = APPLICATION_CONFLICT_CODES.contains(exception.errorCode().value())
                 ? HttpStatus.CONFLICT
-                : HttpStatus.UNPROCESSABLE_CONTENT;
+                : "ACTIVITY_MATERIALIZATION_CONTINUATION_CONTRACT_UPGRADE_REQUIRED".equals(exception.errorCode().value())
+                        ? HttpStatus.CONFLICT : switch(exception.errorCode().value()) {
+                            case "STUDY_MISSION_START_UNAVAILABLE" -> HttpStatus.SERVICE_UNAVAILABLE;
+                            case "MALFORMED_REQUEST", "INVALID_INITIAL_ACTIVITY_CONTRACT" -> HttpStatus.BAD_REQUEST;
+                            case "REQUEST_TOO_LARGE" -> HttpStatus.PAYLOAD_TOO_LARGE;
+                            default -> HttpStatus.UNPROCESSABLE_CONTENT;
+                        };
         return problem(
                 status,
-                exception.errorCode().value(),
+                "ACTIVITY_MATERIALIZATION_CONTINUATION_CONTRACT_UPGRADE_REQUIRED".equals(exception.errorCode().value())
+                        ? "CONTINUATION_CONTRACT_UPGRADE_REQUIRED" : exception.errorCode().value(),
                 exception.clientMessage(),
                 NO_DETAILS,
                 request);

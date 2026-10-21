@@ -33,6 +33,7 @@ public final class LearningRationaleCodes {
     public static final String OBJECTIVE_COMPLETE = "OBJECTIVE_COMPLETE";
     public static final String UNDERSTANDING_CHECK_REQUIRED = "UNDERSTANDING_CHECK_REQUIRED";
     public static final String UNGRADED_RETRY = "UNGRADED_RETRY";
+    public static final String ASSESSMENT_UNAVAILABLE = "ASSESSMENT_UNAVAILABLE";
 
     private LearningRationaleCodes() {
     }

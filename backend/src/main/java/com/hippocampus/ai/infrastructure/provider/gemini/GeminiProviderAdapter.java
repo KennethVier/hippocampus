@@ -84,11 +84,7 @@ public final class GeminiProviderAdapter implements AiProviderAdapter {
                     responseModelId(response, request.target().modelId()),
                     rawContent,
                     mapUsage(response),
-                    latency,
-                    0,
-                    0,
-                    response.getResult().getMetadata() == null ? Optional.empty()
-                            : Optional.ofNullable(response.getResult().getMetadata().getFinishReason()));
+                    latency);
         } catch (ProviderExecutionException exception) {
             throw exception;
         } catch (RuntimeException exception) {
@@ -166,21 +162,15 @@ public final class GeminiProviderAdapter implements AiProviderAdapter {
                 .responseSchema(ProviderStructuredOutputSchema.geminiSchema(
                         request.outputContract(), request.promptContext().taskPromptId()));
         PromptId promptId = request.promptContext().taskPromptId();
-        boolean atomicResponseEvaluation = request.taskType() == AiTaskType.RESPONSE_EVALUATION
-                && (promptId == PromptId.RESPONSE_EVALUATION_V4
-                        || promptId == PromptId.RESPONSE_EVALUATION_V5
-                        || promptId == PromptId.RESPONSE_EVALUATION_V6
-                        || promptId == PromptId.RESPONSE_EVALUATION_V7
-                        || promptId == PromptId.RESPONSE_EVALUATION_V8
-                        || promptId == PromptId.RESPONSE_EVALUATION_V9
-                        || promptId == PromptId.RESPONSE_EVALUATION_DISCOVERY_V1
+        boolean attributionResponseEvaluation = request.taskType() == AiTaskType.RESPONSE_EVALUATION
+                && (promptId == PromptId.RESPONSE_EVALUATION_DISCOVERY_V1
                         || promptId == PromptId.RESPONSE_EVALUATION_VERIFICATION_V1);
         // Repair retains the original output contract, but has its own task/prompt identity.
         // Keep this bounded transformation policy confined to response-evaluation repair.
         boolean responseEvaluationRepair = request.taskType() == AiTaskType.STRUCTURED_OUTPUT_REPAIR
                 && promptId == PromptId.STRUCTURED_OUTPUT_REPAIR_V1;
         if (request.outputContract() == AiOutputContract.RESPONSE_EVALUATION
-                && (atomicResponseEvaluation || responseEvaluationRepair)) {
+                && (attributionResponseEvaluation || responseEvaluationRepair)) {
             optionsBuilder.thinkingLevel(GoogleGenAiThinkingLevel.LOW);
         }
         GoogleGenAiChatOptions options = optionsBuilder.build();

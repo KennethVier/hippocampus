@@ -1,0 +1,14 @@
+{
+  "status": "PENDING",
+  "reviewerIdentity": null,
+  "credentials": null,
+  "independenceAndConflicts": null,
+  "runId": null,
+  "outputSha256": null,
+  "executionIdentity": null,
+  "rubricSha256": null,
+  "adjudication": null,
+  "signedAt": null,
+  "authenticSignature": null,
+  "warning": "Complete only through independently authenticated medical review; collector cannot approve."
+}

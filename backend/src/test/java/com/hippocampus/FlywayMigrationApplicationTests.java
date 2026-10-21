@@ -61,7 +61,18 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("22");
         assertSuccessfulFlywayVersion("23");
         assertSuccessfulFlywayVersion("24");
+        assertSuccessfulFlywayVersion("25");
+        assertSuccessfulFlywayVersion("26");
+        assertSuccessfulFlywayVersion("27");
+        assertSuccessfulFlywayVersion("28");
         assertNoFailedFlywayMigration();
+        try (var connection = openPostgresConnection(); var statement = connection.createStatement();
+                var rows = statement.executeQuery("SELECT version FROM flyway_schema_history WHERE version IN ('26','27','28') AND success ORDER BY installed_rank")) {
+            assertThat(rows.next()).isTrue(); assertThat(rows.getString(1)).isEqualTo("26");
+            assertThat(rows.next()).isTrue(); assertThat(rows.getString(1)).isEqualTo("27");
+            assertThat(rows.next()).isTrue(); assertThat(rows.getString(1)).isEqualTo("28");
+            assertThat(rows.next()).isFalse();
+        }
         assertDomainTablesExist();
         assertLearningActivityCompatibilityColumns();
         assertSpringSessionSchema();
@@ -110,6 +121,10 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertSuccessfulFlywayVersion("22");
         assertSuccessfulFlywayVersion("23");
         assertSuccessfulFlywayVersion("24");
+        assertSuccessfulFlywayVersion("25");
+        assertSuccessfulFlywayVersion("26");
+        assertSuccessfulFlywayVersion("27");
+        assertSuccessfulFlywayVersion("28");
         assertNoFailedFlywayMigration();
         assertDomainTablesExist();
         assertLearningActivityCompatibilityColumns();
@@ -353,6 +368,84 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
         assertEmbeddingDimensionsMatchGeneration(generationId, 3, 2);
     }
 
+
+    @Test
+    void populatedV25UpgradePreservesLegacyArtifactsProvenanceAndReceiptsWithoutInventingOrigins() throws Exception {
+        try (var context = startMigrationApplicationAtTarget("25")) { assertThat(context.isActive()).isTrue(); }
+        UUID activity = insertLegacyLearningActivity("RETRIEVE", true);
+        UUID artifact = UUID.randomUUID(), attempt = UUID.randomUUID(), material = UUID.randomUUID();
+        UUID version = UUID.randomUUID(), reference = UUID.randomUUID();
+        try (var connection = openPostgresConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    INSERT INTO generated_artifacts(id,user_id,artifact_type,task_type,content_payload,grounding_mode,
+                        classification,prompt_id,prompt_version,provider,model,validation_status,reusable,created_at)
+                    SELECT '%s',m.user_id,'QUESTION','QUESTION_GENERATION','{"question":"Legacy question?","expectedAnswer":"Synthetic"}'::jsonb,
+                        'STRICT_SOURCE','SOURCE_GROUNDED_GENERATED','QUESTION_GENERATION_V1','1','SYNTHETIC_NO_PROVIDER','NONE','VALIDATED',true,now()
+                    FROM study_missions m JOIN learning_activities a ON a.study_mission_id=m.id WHERE a.id='%s'
+                    """.formatted(artifact, activity));
+            statement.executeUpdate("UPDATE learning_activities SET generated_artifact_id='" + artifact + "',completed_at=now() WHERE id='" + activity + "'");
+            statement.executeUpdate("""
+                    UPDATE study_missions SET current_activity_id='%s'
+                    WHERE id=(SELECT study_mission_id FROM learning_activities WHERE id='%s')
+                    """.formatted(activity, activity));
+            statement.executeUpdate("""
+                    INSERT INTO student_attempts(id,user_id,learning_activity_id,attempt_number,response_text,submitted_at,
+                        evaluation_status,created_at,request_id,limitation_code,submission_receipt)
+                    SELECT '%s',m.user_id,a.id,1,'Legacy response',now(),'UNGRADED',now(),'%s','EVALUATION_UNRESOLVED',
+                        '{"outcome":"UNGRADED","feedback":"Legacy saved receipt"}'::jsonb
+                    FROM learning_activities a JOIN study_missions m ON m.id=a.study_mission_id WHERE a.id='%s'
+                    """.formatted(attempt, UUID.randomUUID(), activity));
+            statement.executeUpdate("""
+                    INSERT INTO materials(id,user_id,title,material_type,status,created_at,updated_at)
+                    SELECT '%s',m.user_id,'Legacy material','PDF','READY',now(),now()
+                    FROM study_missions m JOIN learning_activities a ON a.study_mission_id=m.id WHERE a.id='%s'
+                    """.formatted(material, activity));
+            statement.executeUpdate("""
+                    INSERT INTO material_versions(id,material_id,version_number,page_count,processing_status,created_at)
+                    VALUES ('%s','%s',1,1,'READY',now())
+                    """.formatted(version, material));
+            statement.executeUpdate("UPDATE materials SET active_version_id='" + version + "' WHERE id='" + material + "'");
+            statement.executeUpdate("""
+                    INSERT INTO source_references(id,material_id,material_version_id,page_number,display_label,created_at)
+                    VALUES ('%s','%s','%s',1,'Legacy source',now())
+                    """.formatted(reference, material, version));
+            statement.executeUpdate("INSERT INTO generated_artifact_sources VALUES ('" + artifact + "','" + reference + "')");
+            statement.executeUpdate("INSERT INTO activity_source_references VALUES ('" + activity + "','" + reference + "')");
+            statement.executeUpdate("""
+                    INSERT INTO mission_materials(id,study_mission_id,material_id,material_version_id)
+                    SELECT '%s',study_mission_id,'%s','%s' FROM learning_activities WHERE id='%s'
+                    """.formatted(UUID.randomUUID(), material, version, activity));
+        }
+        var before = legacyUpgradeRows();
+        try (var context = startMigrationApplication()) { assertThat(context.isActive()).isTrue(); }
+        assertSuccessfulFlywayVersion("26");
+        assertSuccessfulFlywayVersion("27");
+        assertSuccessfulFlywayVersion("28");
+        assertThat(legacyUpgradeRows()).isEqualTo(before);
+        try (var connection = openPostgresConnection(); var statement = connection.createStatement();
+                var rows = statement.executeQuery("SELECT count(*) FROM generated_artifact_objective_origins")) {
+            assertThat(rows.next()).isTrue(); assertThat(rows.getLong(1)).isZero();
+        }
+        try (var context = startMigrationApplication()) { assertThat(context.isActive()).isTrue(); }
+        assertThat(legacyUpgradeRows()).isEqualTo(before);
+    }
+
+    private static Map<String, List<String>> legacyUpgradeRows() throws SQLException {
+        var result = new java.util.LinkedHashMap<String, List<String>>();
+        try (var connection = openPostgresConnection(); var statement = connection.createStatement()) {
+            for (String table : List.of("study_missions", "learning_objectives", "learning_activities", "student_attempts",
+                    "generated_artifacts", "generated_artifact_sources", "activity_source_references", "mission_materials",
+                    "materials", "material_versions", "source_references")) {
+                var values = new ArrayList<String>();
+                try (var rows = statement.executeQuery("SELECT to_jsonb(t)::text FROM " + table + " t ORDER BY to_jsonb(t)::text")) {
+                    while (rows.next()) values.add(rows.getString(1));
+                }
+                result.put(table, List.copyOf(values));
+            }
+        }
+        return Map.copyOf(result);
+    }
+
     private static void assertDatabaseIsEmpty() throws SQLException {
         try (var connection = openPostgresConnection();
                 var statement = connection.createStatement();
@@ -453,10 +546,12 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                     "chunk_visual_links",
                     "chunks",
                     "document_nodes",
+                    "generated_artifact_objective_origins",
                     "generated_artifact_sources",
                     "generated_artifacts",
                     "index_generations",
                     "learning_activities",
+                    "learning_follow_up_intents",
                     "learning_objectives",
                     "material_topic_links",
                     "material_versions",
@@ -468,6 +563,7 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
                     "spring_session",
                     "spring_session_attributes",
                     "student_attempts",
+                    "study_mission_start_receipts",
                     "study_missions",
                     "subjects",
                     "subtopics",
@@ -602,6 +698,10 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
     }
 
     private static UUID insertLegacyLearningActivity(String activityType) throws SQLException {
+        return insertLegacyLearningActivity(activityType, false);
+    }
+
+    private static UUID insertLegacyLearningActivity(String activityType, boolean withRepresentedAction) throws SQLException {
         UUID userId = UUID.randomUUID();
         UUID subjectId = UUID.randomUUID();
         UUID topicId = UUID.randomUUID();
@@ -634,9 +734,11 @@ class FlywayMigrationApplicationTests extends PostgresIntegrationTestSupport {
             statement.executeUpdate("""
                     INSERT INTO learning_activities (
                         id, study_mission_id, learning_objective_id, activity_type,
-                        status, sequence_number, source_required, created_at)
-                    VALUES ('%s', '%s', '%s', '%s', 'COMPLETED', 1, false, now())
-                    """.formatted(activityId, missionId, objectiveId, activityType));
+                        status, sequence_number, source_required, created_at%s)
+                    VALUES ('%s', '%s', '%s', '%s', 'COMPLETED', 1, false, now()%s)
+                    """.formatted(withRepresentedAction ? ", represented_action_type" : "",
+                            activityId, missionId, objectiveId, activityType,
+                            withRepresentedAction ? ", '" + activityType + "'" : ""));
         }
         return activityId;
     }

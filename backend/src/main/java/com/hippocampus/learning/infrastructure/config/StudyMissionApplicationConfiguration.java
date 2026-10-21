@@ -2,6 +2,9 @@ package com.hippocampus.learning.infrastructure.config;
 
 import java.time.Clock;
 import java.util.EnumMap;
+import org.springframework.beans.factory.ObjectProvider;
+import com.hippocampus.learning.application.AssessmentAvailabilityResolver;
+import com.hippocampus.learning.application.StudyMissionContinuationDecision;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -11,6 +14,8 @@ import org.springframework.context.annotation.Lazy;
 
 import com.hippocampus.identity.port.CurrentUser;
 import com.hippocampus.learning.application.StartStudyMissionUseCase;
+import com.hippocampus.learning.application.FollowUpIntentLifecycle;
+import com.hippocampus.learning.port.FollowUpIntentRepository;
 import com.hippocampus.learning.application.ChangeStudyMissionStatusUseCase;
 import com.hippocampus.learning.application.ContinueStudyMissionUseCase;
 import com.hippocampus.learning.application.GetStudyMissionUseCase;
@@ -51,6 +56,15 @@ import com.hippocampus.progress.port.StudentAttemptRepository;
 public class StudyMissionApplicationConfiguration {
 
     @Bean
+    @Lazy
+    FollowUpIntentLifecycle followUpIntentLifecycle(FollowUpIntentRepository intents,
+            StudyMissionRepository missions, StudentAttemptRepository attempts,
+            ActivitySourceReferenceAuthorization sources, LearningEngine learningEngine,
+            StudyMissionLearningStateAssembler assembler, AssessmentAvailabilityResolver availability) {
+        return new FollowUpIntentLifecycle(intents,missions,attempts,sources,learningEngine,assembler,availability);
+    }
+
+    @Bean
     @ConditionalOnMissingBean
     Clock studyMissionClock() {
         return Clock.systemUTC();
@@ -82,8 +96,61 @@ public class StudyMissionApplicationConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    StudyMissionLearningStateAssembler studyMissionLearningStateAssembler() {
-        return new StudyMissionLearningStateAssembler();
+    @Lazy
+    com.hippocampus.learning.application.AttemptEvidenceEligibility attemptEvidenceEligibility(
+            ActivityResponseContractRepository contracts, ActivitySourceReferenceAuthorization sources,
+            GeneratedArtifactRepository artifacts) {
+        return new com.hippocampus.learning.application.AttemptEvidenceEligibility(contracts,sources,artifacts);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    StudyMissionLearningStateAssembler studyMissionLearningStateAssembler(
+            com.hippocampus.learning.application.AttemptEvidenceEligibility eligibility) {
+        return new StudyMissionLearningStateAssembler(eligibility);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnBean({ActivityResponseContractRepository.class, StudentAttemptRepository.class,
+            StudyMissionSourcePresentationRepository.class, GeneratedArtifactRepository.class})
+    AssessmentAvailabilityResolver assessmentAvailabilityResolver(ActivityResponseContractRepository contracts,
+            StudentAttemptRepository attempts, StudyMissionSourcePresentationRepository sources,
+            GeneratedArtifactRepository artifacts, com.hippocampus.learning.application.AttemptEvidenceEligibility eligibility) {
+        return new AssessmentAvailabilityResolver(contracts, attempts, sources, artifacts, eligibility);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnBean({AssessmentAvailabilityResolver.class, StudyMissionSourcePresentationRepository.class})
+    StudyMissionContinuationDecision studyMissionContinuationDecision(AssessmentAvailabilityResolver availability,
+            LearningEngine engine, StudyMissionLearningStateAssembler assembler,
+            StudyMissionSourcePresentationRepository sources, FollowUpIntentLifecycle followUps) {
+        return new StudyMissionContinuationDecision(availability, engine, assembler, sources, followUps);
+    }
+
+    @Bean
+    com.hippocampus.learning.application.InitialStudyMissionStateAssembler initialStudyMissionStateAssembler() {
+        return new com.hippocampus.learning.application.InitialStudyMissionStateAssembler();
+    }
+
+    @Bean
+    @Lazy
+    com.hippocampus.learning.application.InitialStudyMissionAdmission initialStudyMissionAdmission(
+            com.hippocampus.learning.port.StudyMissionStartReceiptRepository receipts,
+            com.hippocampus.learning.port.InitialStudyMissionSourceAuthority sources,
+            com.hippocampus.learning.application.InitialStudyMissionStateAssembler assembler,LearningEngine engine) {
+        return new com.hippocampus.learning.application.InitialStudyMissionAdmission(receipts,sources,assembler,engine);
+    }
+
+    @Bean
+    @Lazy
+    com.hippocampus.learning.application.StudyMissionStartTransactions studyMissionStartTransactions(
+            CurrentUser currentUser,StartStudyMissionUseCase start,StudyMissionRepository missions,
+            com.hippocampus.learning.port.StudyMissionStartReceiptRepository receipts,
+            com.hippocampus.learning.port.InitialStudyMissionSourceAuthority sources,
+            com.hippocampus.learning.application.InitialStudyMissionStateAssembler assembler,LearningEngine engine) {
+        return new com.hippocampus.learning.application.StudyMissionStartTransactions(currentUser,start,missions,receipts,sources,assembler,engine);
     }
 
     @Bean
@@ -109,28 +176,33 @@ public class StudyMissionApplicationConfiguration {
     @Bean
     @Lazy
     @ConditionalOnMissingBean
-    @ConditionalOnBean({GeneratedArtifactRepository.class, ActivitySourceReferenceAuthorization.class})
+    @ConditionalOnBean({GeneratedArtifactRepository.class, ActivitySourceReferenceAuthorization.class,
+            ActivityResponseContractRepository.class})
     PersistMaterializedActivity persistMaterializedActivity(
             StudyMissionRepository missions,
             GeneratedArtifactRepository artifacts,
-            ActivitySourceReferenceAuthorization sourceAuthorization) {
-        return new PersistMaterializedActivity(missions, artifacts, sourceAuthorization);
+            ActivitySourceReferenceAuthorization sourceAuthorization, FollowUpIntentLifecycle followUps,
+            com.hippocampus.learning.port.FollowUpActivityContentValidation followUpValidation, ActivityResponseContractRepository contracts,
+            StudyMissionContinuationDecision continuation,
+            com.hippocampus.learning.application.InitialStudyMissionAdmission initialAdmission) {
+        return new PersistMaterializedActivity(missions, artifacts, sourceAuthorization, followUps, followUpValidation, contracts,continuation,initialAdmission);
     }
 
     @Bean
     @Lazy
     @ConditionalOnMissingBean
     @ConditionalOnBean({ActivityEvidencePort.class, ActivityAiTaskPort.class,
-            PersistMaterializedActivity.class})
+            PersistMaterializedActivity.class, AssessmentAvailabilityResolver.class})
     MaterializeLearningActivityUseCase materializeLearningActivityUseCase(
             CurrentUser currentUser,
             StudyMissionRepository missions,
             ActivityEvidencePort evidencePort,
             ActivityAiTaskPort aiTaskPort,
             PersistMaterializedActivity persistence,
-            Clock studyMissionClock) {
+            Clock studyMissionClock, AssessmentAvailabilityResolver availability,
+            com.hippocampus.learning.application.StudyMissionStartTransactions initialTransactions) {
         return new MaterializeLearningActivityUseCase(
-                currentUser, missions, evidencePort, aiTaskPort, persistence, studyMissionClock);
+                currentUser, missions, evidencePort, aiTaskPort, persistence, studyMissionClock, availability,initialTransactions);
     }
 
     @Bean
@@ -139,15 +211,18 @@ public class StudyMissionApplicationConfiguration {
     @ConditionalOnBean(StudentAttemptRepository.class)
     PersistActivityResponse persistActivityResponse(
             StudyMissionRepository missions,
-            StudentAttemptRepository attempts) {
-        return new PersistActivityResponse(missions, attempts);
+            StudentAttemptRepository attempts, FollowUpIntentLifecycle followUps,
+            StudyMissionLearningStateAssembler assembler, LearningEngine engine) {
+        return new PersistActivityResponse(missions, attempts, followUps, assembler, engine);
     }
 
     @Bean
     @Lazy
     @ConditionalOnMissingBean
-    PersistPresentationCompletion persistPresentationCompletion(StudyMissionRepository missions) {
-        return new PersistPresentationCompletion(missions);
+    PersistPresentationCompletion persistPresentationCompletion(StudyMissionRepository missions,
+            ActivityResponseContractRepository contracts, ActivitySourceReferenceAuthorization sources,
+            GeneratedArtifactRepository artifacts) {
+        return new PersistPresentationCompletion(missions, contracts, sources, artifacts);
     }
 
     @Bean
@@ -176,20 +251,19 @@ public class StudyMissionApplicationConfiguration {
     @Lazy
     @ConditionalOnMissingBean
     @ConditionalOnBean({StudentAttemptRepository.class, ActivityResponseContractRepository.class,
-            MaterializeLearningActivityUseCase.class, PersistPresentationCompletion.class})
+            MaterializeLearningActivityUseCase.class, PersistPresentationCompletion.class,
+            StudyMissionContinuationDecision.class})
     ContinueStudyMissionUseCase continueStudyMissionUseCase(
             CurrentUser currentUser,
             StudyMissionRepository missions,
-            StudentAttemptRepository attempts,
             ActivityResponseContractRepository contracts,
-            LearningEngine learningEngine,
-            StudyMissionLearningStateAssembler learningStateAssembler,
             MaterializeLearningActivityUseCase materializeLearningActivity,
             PersistPresentationCompletion persistPresentationCompletion,
-            Clock studyMissionClock) {
+            Clock studyMissionClock, StudyMissionContinuationDecision continuation,
+            ChangeStudyMissionStatusUseCase statusChanges, FollowUpIntentLifecycle followUps) {
         return new ContinueStudyMissionUseCase(
-                currentUser, missions, attempts, contracts, learningEngine, learningStateAssembler,
-                materializeLearningActivity, persistPresentationCompletion, studyMissionClock);
+                currentUser, missions, contracts, continuation, materializeLearningActivity,
+                persistPresentationCompletion, statusChanges, studyMissionClock, followUps);
     }
 
     @Bean
@@ -199,9 +273,12 @@ public class StudyMissionApplicationConfiguration {
             CurrentUser currentUser,
             StudyMissionRepository missions,
             MissionStateMachinePolicy stateMachine,
-            Clock studyMissionClock) {
+            Clock studyMissionClock, ObjectProvider<StudyMissionContinuationDecision> continuation,
+            ObjectProvider<ActivitySourceReferenceAuthorization> sourceAuthorization, FollowUpIntentLifecycle followUps,
+            com.hippocampus.learning.application.StudyMissionStartTransactions initialTransactions) {
         return new ChangeStudyMissionStatusUseCase(
-                currentUser, missions, stateMachine, studyMissionClock);
+                currentUser, missions, stateMachine, studyMissionClock,
+                continuation.getIfAvailable(), sourceAuthorization.getIfAvailable(), followUps, initialTransactions);
     }
 
     @Bean
@@ -219,8 +296,12 @@ public class StudyMissionApplicationConfiguration {
             GeneratedArtifactRepository artifacts,
             GeneratedActivityContentDecoder contentDecoder,
             StudyMissionSourcePresentationRepository sourcePresentations,
-            StudentAttemptRepository attempts) {
+            StudentAttemptRepository attempts, ObjectProvider<StudyMissionContinuationDecision> continuation,
+            Clock studyMissionClock,
+            com.hippocampus.learning.port.StudyMissionStartReceiptRepository receipts,
+            com.hippocampus.learning.port.InitialStudyMissionSourceAuthority initialSources) {
         return new GetStudyMissionUseCase(
-                currentUser, missions, artifacts, contentDecoder, sourcePresentations, attempts);
+                currentUser, missions, artifacts, contentDecoder, sourcePresentations, attempts,
+                continuation.getIfAvailable(), studyMissionClock,receipts,initialSources);
     }
 }

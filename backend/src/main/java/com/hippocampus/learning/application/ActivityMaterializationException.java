@@ -23,6 +23,7 @@ public final class ActivityMaterializationException extends ApplicationException
         COMPATIBLE_ACTIVITY_NOT_FOUND,
         UNFINISHED_CURRENT_ACTIVITY,
         STALE_MISSION,
+        CONTINUATION_CONTRACT_UPGRADE_REQUIRED,
         INVALID_SOURCE_REFERENCES,
         INVALID_ARTIFACT,
         INVALID_AI_CONTENT

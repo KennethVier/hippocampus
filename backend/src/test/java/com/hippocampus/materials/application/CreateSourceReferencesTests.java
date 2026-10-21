@@ -56,6 +56,44 @@ class CreateSourceReferencesTests {
         assertThat(repository.seenUsers).isEmpty();
     }
 
+    @Test
+    void initialBatchUsesAuthenticatedOwnerAndNeverFallsBackToCatalogAuthorization() {
+        UUID owner=UUID.randomUUID(),id=UUID.randomUUID();
+        var repository=org.mockito.Mockito.mock(SourceReferenceRepository.class);
+        var binding=new SourceReferenceRepository.FrozenMissionBinding(id,2,UUID.randomUUID());
+        var targets=List.<SourceReferenceTarget>of(new ChunkSourceTarget(id,id,id));
+        org.mockito.Mockito.when(repository.createInitialMissionBatch(owner,binding,targets)).thenReturn(List.of());
+        var useCase=new CreateSourceReferences(()->new AuthenticatedUser(owner),repository);
+        assertThat(useCase.executeForInitialMission(new CreateSourceReferences.Command(targets),binding)).isEmpty();
+        org.mockito.Mockito.verify(repository).createInitialMissionBatch(owner,binding,targets);
+        org.mockito.Mockito.verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    void initialBatchRejectsDuplicateAndPageTargetsBeforePersistence() {
+        UUID id=UUID.randomUUID();
+        var repository=org.mockito.Mockito.mock(SourceReferenceRepository.class);
+        var useCase=new CreateSourceReferences(()->new AuthenticatedUser(id),repository);
+        var binding=new SourceReferenceRepository.FrozenMissionBinding(id,1,id);
+        var target=new ChunkSourceTarget(id,id,id);
+        assertThatThrownBy(()->useCase.executeForInitialMission(new CreateSourceReferences.Command(List.of(target,target)),binding))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(()->useCase.executeForInitialMission(new CreateSourceReferences.Command(List.of(new PageSourceTarget(id,id,1))),binding))
+                .isInstanceOf(IllegalArgumentException.class);
+        org.mockito.Mockito.verifyNoInteractions(repository);
+    }
+
+    @Test
+    void legacyRepositoryFailsClosedForInitialBatch() {
+        UUID id=UUID.randomUUID();
+        var repository=new CapturingRepository(id,id,id,id,id);
+        var useCase=new CreateSourceReferences(()->new AuthenticatedUser(id),repository);
+        assertThatThrownBy(()->useCase.executeForInitialMission(new CreateSourceReferences.Command(
+                List.of(new ChunkSourceTarget(id,id,id))),new SourceReferenceRepository.FrozenMissionBinding(id,1,id)))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(repository.seenUsers).isEmpty();
+    }
+
     private static final class CapturingRepository implements SourceReferenceRepository {
         private final UUID expectedUser;
         private final UUID material;

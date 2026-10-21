@@ -1,3 +1,4 @@
+import { StudyMissionStartPage } from '../../features/study-mission/pages/StudyMissionStartPage'
 import { Navigate, type RouteObject } from 'react-router'
 
 import { AuthPlaceholderLayout } from '../layout/AuthPlaceholderLayout'
@@ -28,7 +29,7 @@ export const appRoutes = [
               { path: 'home', element: <RoutePlaceholder title="Home" /> },
               { path: 'subjects', element: <SubjectsPage /> },
               { path: 'subjects/:subjectId', element: <SubjectDetailPage /> },
-              { path: 'topics/:topicId', element: <RoutePlaceholder title="Topic" /> },
+              { path: 'topics/:topicId', element: <StudyMissionStartPage /> },
               { path: 'missions/:missionId', element: <StudyMissionPage /> },
               { path: 'materials', element: <MaterialsPage /> },
               { path: 'materials/:materialId', element: <MaterialDetailPage /> },

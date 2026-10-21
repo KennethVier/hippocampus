@@ -51,6 +51,26 @@ class ChangeStudyMissionStatusUseCaseTests {
     }
 
     @Test
+    void pauseAndStopFenceInitialWorkBeforeFollowUpLocksWhileResumeNeverPrepares() {
+        var initial=org.mockito.Mockito.mock(StudyMissionStartTransactions.class);
+        var followUps=org.mockito.Mockito.mock(FollowUpIntentLifecycle.class);
+        var useCase=new ChangeStudyMissionStatusUseCase(()->new AuthenticatedUser(USER_ID),missions,new MissionStateMachinePolicy(),
+            Clock.fixed(NOW,ZoneOffset.UTC),null,null,followUps,initial);
+        var original=missions.current;
+        useCase.execute(MISSION_ID,ChangeStudyMissionStatusUseCase.Command.PAUSE);
+        var order=org.mockito.Mockito.inOrder(initial,followUps);
+        order.verify(initial).fenceForLifecycle(original,false);
+        order.verify(followUps).lockForDecision(org.mockito.ArgumentMatchers.any());
+        order.verify(followUps).revalidate(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.eq(NOW));
+        useCase.execute(MISSION_ID,ChangeStudyMissionStatusUseCase.Command.RESUME);
+        org.mockito.Mockito.verifyNoMoreInteractions(initial);
+        var resumed=missions.current;
+        useCase.execute(MISSION_ID,ChangeStudyMissionStatusUseCase.Command.STOP);
+        org.mockito.Mockito.verify(initial).fenceForLifecycle(resumed,true);
+        org.mockito.Mockito.verifyNoMoreInteractions(initial);
+    }
+
+    @Test
     void supportsEveryRequestedValidTransition() {
         assertThat(execute(ChangeStudyMissionStatusUseCase.Command.PAUSE).status())
                 .isEqualTo("PAUSED");

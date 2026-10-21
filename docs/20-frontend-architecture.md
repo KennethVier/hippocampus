@@ -4,7 +4,7 @@ Audience: Frontend, architecture, product, UX, QA, backend, and
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 20
-Last Updated: 2026-10-04
+Last Updated: 2026-10-16
 Owner: Project Hippocampus Team
 Prerequisites:
 - 04 - Product Requirements
@@ -41,7 +41,7 @@ Scope: React application structure, routing, feature/module
   loading/error states, and testing seams.
 Status: Final
 Title: Frontend Architecture
-Version: 1.0.3
+Version: 1.0.4
 ---
 
 # 20 - Frontend Architecture
@@ -1839,6 +1839,13 @@ For v1, handwritten shared TypeScript types are acceptable.
 
 # 84. API Type Generation
 
+ADR-0016 requires separate strict legacy and `continuationContract=1` response
+schemas and query-cache identities. Opt-in reads require nullable continuation
+metadata; opt-in POST requires the ACTIVITY_CREATED/NO_ACTIVITY union. Missing
+metadata, empty/204 or invalid opt-in responses must not silently fall back to
+legacy success. The query parameter never conveys grading/lifecycle authority.
+
+
 OpenAPI-based TypeScript generation may be introduced if:
 
 -   Endpoint count becomes large
@@ -1852,6 +1859,14 @@ presentation-specific view models.
 ------------------------------------------------------------------------
 
 # 85. Loading/Error State Matrix
+
+ADR-0016 distinguishes saved UNGRADED feedback, assessment limitation, real
+activity creation and failure. Only ACTIVITY_CREATED confirms creation.
+NO_ACTIVITY renders the existing action/limitation and refetches without a false
+creation latch. No automatic mutation retry; refetch after conflict or ambiguous
+network result before learner-controlled retry. Failed recovery disables unsafe
+continuation while retaining appropriate Pause/recovery controls.
+
 
 Every major feature should define:
 
@@ -1876,6 +1891,15 @@ CONFLICT
 ------------------------------------------------------------------------
 
 # 86. UI State Machine --- Study Mission
+
+Under ADR-0016, completed activity or old receipt.continuationAvailable alone
+cannot authorize another activity. Current decision/status governs response-
+bearing continuation. An owned unfinished presentation-only activity retains its
+existing explicit completion control even when continuation metadata is null;
+unknown contracts/pending responses cannot claim that exception. Preserve
+learner-controlled Pause and explicit Engine-selected Finish, no automatic state
+transition or new backend mission status. Refresh/resume revalidates current facts.
+
 
 ``` mermaid
 stateDiagram-v2
@@ -1905,6 +1929,16 @@ This is client interaction state, not the backend mission state machine.
 ------------------------------------------------------------------------
 
 # 87. Study Mission Sequence
+
+ADR-0016 continuation follows submission/refetch separately: opt-in Continue
+returns ACTIVITY_CREATED only after persistence, otherwise NO_ACTIVITY for a
+successfully dispatched existing non-materializable action. Render limitation
+and saved work instead of always rendering a new question. Keep original receipt
+and replay unchanged; new time/source context can change the current decision.
+Use backend-first compatibility coordination and safe client reload for cached
+legacy clients as specified in Document 19; do not assume old strict schemas
+accept extra fields or that old clients inspect a new POST body.
+
 
 ``` mermaid
 sequenceDiagram
@@ -2322,6 +2356,9 @@ Documents 13, 18, and 19.
 ------------------------------------------------------------------------
 
 # 107. Revision History
+
+- **1.0.4 - 2026-10-16 - Project Hippocampus Team:** ADR-0016 governance alignment. Aligned strict opt-in continuation schemas, compatibility recovery, presentation completion exception and no-false-creation UI with accepted ADR-0016.
+
 
   ---------------------------------------------------------------------------
   Version           Date              Author            Changes

@@ -26,6 +26,20 @@ import com.hippocampus.rag.port.EvidenceVisualRepository;
 import com.hippocampus.rag.port.EvidenceVisualSource;
 
 class BuildEvidencePackageTests {
+    @org.junit.jupiter.api.Test
+    void initialVisualLookupPreservesClaimBindingWithoutCatalogFallback() {
+        var repository=org.mockito.Mockito.mock(com.hippocampus.rag.port.EvidenceVisualRepository.class);
+        var binding=new com.hippocampus.rag.port.FrozenMissionSourceBinding(UUID.randomUUID(),2,UUID.randomUUID());
+        var scope=scope(GroundingMode.STRICT_SOURCE,Set.of());
+        var candidate=candidate(uuid(10),NODE);
+        org.mockito.Mockito.when(repository.findLinkedVisuals(scope,Set.of(candidate.chunkId()),binding)).thenReturn(List.of());
+        var result=new BuildEvidencePackage(repository).execute(new BuildEvidencePackage.Command(scope,List.of(candidate),
+                RetrievalQuality.STRONG,new EvidencePackageBudget(2,2),binding));
+        assertThat(result.chunks()).hasSize(1);
+        org.mockito.Mockito.verify(repository).findLinkedVisuals(scope,Set.of(candidate.chunkId()),binding);
+        org.mockito.Mockito.verifyNoMoreInteractions(repository);
+    }
+
     private static final UUID USER = uuid(1);
     private static final UUID TOPIC = uuid(2);
     private static final UUID MATERIAL = uuid(3);

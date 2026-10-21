@@ -15,6 +15,18 @@ public interface StudyMissionSourceCatalog {
 
     Optional<Resolution> resolve(UUID ownerId, UUID topicId, List<SourceSelection> selections);
 
+    default Optional<Resolution> resolveLocked(UUID ownerId,UUID topicId,List<SourceSelection> selections) {
+        throw new IllegalStateException("Locked source freeze is not configured");
+    }
+    default SourcePage eligible(UUID ownerId,UUID topicId,int limit,UUID afterMaterialId) {
+        throw new IllegalStateException("Eligible source listing is not configured");
+    }
+    record EligibleSource(UUID materialId,String title,UUID activeVersionId,String processingStatus,
+                          SourceReadiness readiness) {}
+    record SourcePage(List<EligibleSource> items,UUID nextAfterMaterialId) {
+        public SourcePage { items=List.copyOf(items); }
+    }
+
     record SourceSelection(UUID materialId, UUID documentNodeId) {
         public SourceSelection {
             Objects.requireNonNull(materialId, "materialId must not be null");

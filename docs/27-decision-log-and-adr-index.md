@@ -4,7 +4,7 @@ Audience: Product, architecture, backend, frontend, AI/RAG, DevOps,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 27
-Last Updated: 2026-10-11
+Last Updated: 2026-10-20
 Owner: Project Hippocampus Team
 Prerequisites:
 - README
@@ -24,7 +24,7 @@ Scope: Decision authority, decision categories, ADR lifecycle, ADR
   Source-of-Truth freeze procedure.
 Status: Final
 Title: Decision Log / ADR Index
-Version: 1.0.12
+Version: 1.0.17
 ---
 
 # 27 - Decision Log / ADR Index
@@ -531,6 +531,9 @@ The following major decisions are already established by Documents
 ------------------------------------------------------------------------
 
 # 24. Educational Decisions
+
+Accepted ADR-0016 adds only the scoped no-repeat assessment-unavailable continuation decision, truthful limitation and learner-controlled Pause. Product and explicit education-specific approval are recorded separately from technical review; no new grading authority or Phase 8 educational policy is implied.
+
 
   -----------------------------------------------------------------------
   ID                      Decision                Authority
@@ -1394,9 +1397,58 @@ When ADRs exist, add an index:
 | [ADR-0011](adr/ADR-0011-layered-p7-09-response-evaluation-qualification.md) | Layered P7-09 Response-Evaluation Qualification | ACCEPTED | 2026-10-08 | TESTING, AI, ARCHITECTURE |
 | [ADR-0012](adr/ADR-0012-verifiable-response-evaluation-component-attribution.md) | Verifiable Component Attribution for Response Evaluation | ACCEPTED | 2026-10-11 | AI, DOMAIN, SECURITY, TESTING |
 | [ADR-0013](adr/ADR-0013-graded-response-follow-up-question-policy.md) | Learning-Engine Follow-up Questions After Graded Responses | ACCEPTED | 2026-10-11 | EDUCATION, DOMAIN, AI |
+| [ADR-0014](adr/ADR-0014-bounded-free-text-response-attribution.md) | Bounded Automatic Credit for Free-Text Response Attribution | PROPOSED | 2026-10-15 | AI, DOMAIN, EDUCATION, SECURITY, TESTING |
+| [ADR-0015](adr/ADR-0015-bounded-dynamic-assessment-contracts.md) | Bounded Dynamic Assessment Contracts for Study Missions | PROPOSED | 2026-10-16 | EDUCATION, DOMAIN, AI, SECURITY, BACKEND, TESTING |
+| [ADR-0016](adr/ADR-0016-assessment-unavailable-mission-continuation.md) | Assessment-Unavailable Study Mission Continuation | ACCEPTED | 2026-10-16 | EDUCATION, DOMAIN, BACKEND, FRONTEND, SECURITY, TESTING |
+| [ADR-0017](adr/ADR-0017-generated-artifact-objective-origin-binding.md) | Immutable Objective Origin for Generated Study-Mission Artifacts | ACCEPTED | 2026-10-17 | DATA, DOMAIN, BACKEND, EDUCATION, SECURITY, TESTING |
+| [ADR-0018](adr/ADR-0018-response-evaluation-authority-and-historical-evidence-eligibility.md) | Runtime Response-Evaluation Authority and Historical Evidence Eligibility | ACCEPTED | 2026-10-19 | EDUCATION, DOMAIN, AI, SECURITY, DATA, BACKEND, TESTING |
+| [ADR-0019](adr/ADR-0019-initial-mission-completion-admission.md) | Initial Mission Completion Admission Without Completed Learner Activity | ACCEPTED | 2026-10-20 | EDUCATION, DOMAIN, BACKEND, FRONTEND, SECURITY, TESTING |
 
 This table begins empty at initial v1 freeze unless a real pending
 decision already exists.
+
+## ADR-0018 Accepted Decision Summary
+
+The project owner explicitly approved ADR-0018 v1 and its bounded remediation
+packet conversationally on 2026-10-19. No independent identity authentication
+or additional medical/security approval is claimed. Preserve free-text
+containment; semantic helpers/model agreement cannot authorize grades; exclude
+unqualified/ambiguous historical evaluations from every active grade-derived
+decision; retain positively corroborated deterministic MCQ and immutable replay.
+Use one eligibility decision, distinct historical non-scoring continuation facts
+and existing SAFETY intent cancellation. Implement without migration/backfill in
+a new isolated derivative; preserve integrated authority and previous evidence.
+
+Required testing and independent Gate 1 then Gate 2 remain separate. Acceptance
+is not medical qualification, grading activation, SEC-004 closure, deployed-data
+audit authorization, final Gate 2/P7-14 acceptance or publication. SEC-004 remains
+High pending independent verification. New schema/authority/architecture needs
+another owner decision. Tracker statuses are unchanged.
+
+## ADR-0016 Decision Summary
+
+Accepted 2026-10-16 after product approval, the user's explicit architecture/API-
+owner acceptance and separate education-specific approval, plus independent
+architecture/security requirements closure. P7-16 owns known-unassessable
+continuation using existing actions, opt-in compatible transport and the existing
+mission-status transaction boundary with approved source dependency locks.
+SEC-016-REQ-001 is requirements-resolved only. Documents 06/07/11/15/19/20/26
+are version-aligned; P7-16 stays Not Started and P7-14 depends on it. No production
+implementation, medical qualification or rollout authorization follows. ADR-0012
+is unchanged; ADR-0014/0015 remain PROPOSED.
+
+## ADR-0017 Decision Summary
+
+The project decision owner explicitly approved ADR-0017 on 2026-10-17. A new
+Study Mission artifact receives one immutable server-owned objective/mission/
+owner origin binding atomically with its first persistence. Artifact reuse is
+eligible only for the same objective and originating mission after existing
+authorization, contract and source checks. Unbound legacy artifacts cannot be
+reused; no historical origin is inferred. The approved forward-only migration
+is a scoped exception to ADR-0016's earlier no-schema assumption. Origin cannot
+be reassigned or removed while the artifact exists; retention-driven deletion
+requires an explicitly authorized lifecycle. This acceptance does not supply
+implementation, validation, independent review or rollout approval.
 
 ## ADR-0001 Decision Summary
 
@@ -1805,6 +1857,17 @@ Phase 0 — Engineering Foundation
 
 # 68. Revision History
 
+- **1.0.17 — 2026-10-20 — Proposed decision preparation:** ADR-0019 records the owner-selected conservative initial COMPLETE admission for final approval. No acceptance, implementation, Golden qualification, SEC-004 closure or M3 completion is asserted.
+
+- **1.0.16 - 2026-10-19 - Explicit conversational owner decision:** Accepted ADR-0018 v1 and authorized the bounded no-migration remediation; independent identity authentication, validation/security closure and medical qualification are not claimed.
+
+- **1.0.15 - 2026-10-19 - Codex proposal preparation:** Registered PROPOSED ADR-0018 for response-evaluation authority and historical evidence eligibility. Owner approval is pending; no runtime policy change, security closure, grading activation or completion is granted.
+
+- **1.0.14 - 2026-10-17 - Project Hippocampus Team:** Registered accepted ADR-0017 and its scoped artifact-origin exception to ADR-0016; preserved separate implementation, validation and review gates.
+
+- **1.0.13 - 2026-10-16 - Project Hippocampus Team:** ADR-0016 governance alignment. Accepted/indexed ADR-0016 after explicit owner-role replies and independent requirements resolution; synchronized versioned SOT amendments without implementation authorization.
+
+
 - **1.0.12 — 2026-10-11 — Project Hippocampus Team:** Accepted and indexed ADR-0012 and ADR-0013; aligned ungraded evaluation and Phase 7 follow-up governance without claiming runtime implementation or Golden qualification.
 
 - **1.0.11 — 2026-10-08 — Project Hippocampus Team:** Synchronized the accepted
@@ -1890,3 +1953,7 @@ Phase 0 — Engineering Foundation
 **Reviewed By:** Project Hippocampus Team
 
 **Approved By:** Project Hippocampus Team
+
+## Final owner acceptance — 2026-10-20
+
+The project owner explicitly accepted proposal version 1 and the complete P7-14 v2.1 packet in the attached conversation request, retained at `.validation/p714-implementation-evidence-v1-20261020/OWNER-APPROVAL.txt` (SHA-256 `258e8c2652c497464fb2fc8d1e94d9ad02368a397742d20845f292f10eea5ff7`). The approval-subject manifest SHA-256 is `177631875bbcf824d4bd06f9b79672e1ecd579b377a42efa3f30f1fb10c75dea`. Earlier proposal-stage statements below remain historical preparation context; they do not negate this final acceptance. This owner acceptance supplies no medical qualification, global SEC-004 closure, M3 acceptance or independent implementation/security approval.

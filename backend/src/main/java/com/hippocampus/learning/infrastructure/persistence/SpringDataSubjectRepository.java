@@ -13,6 +13,9 @@ public interface SpringDataSubjectRepository extends JpaRepository<SubjectEntity
     Optional<SubjectEntity> findByIdAndUserId(UUID id, UUID userId);
     Optional<SubjectEntity> findByIdAndUserIdAndStatus(UUID id, UUID userId, LearningOrganizationStatus status);
 
+    @Query(value="SELECT id FROM subjects WHERE id=:id AND user_id=:owner AND status='ACTIVE' FOR SHARE NOWAIT",nativeQuery=true)
+    Optional<UUID> lockActiveForMissionStart(@Param("id") UUID id,@Param("owner") UUID owner);
+
     @Query(value = """
             SELECT * FROM subjects
             WHERE user_id = :userId AND status = 'ACTIVE'

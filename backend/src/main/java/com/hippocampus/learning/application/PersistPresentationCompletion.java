@@ -6,11 +6,15 @@ import java.util.Objects;
 import java.util.UUID;
 
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
+import com.hippocampus.learning.port.GeneratedArtifactRepository;
 
 import com.hippocampus.learning.domain.LearningActivity;
 import com.hippocampus.learning.domain.StudyMission;
 import com.hippocampus.learning.domain.StudyMissionStatus;
 import com.hippocampus.learning.port.StudyMissionRepository;
+import com.hippocampus.learning.port.ActivityResponseContractRepository;
+import com.hippocampus.learning.port.ActivitySourceReferenceAuthorization;
 import com.hippocampus.shared.application.error.ApplicationNotFoundException;
 import com.hippocampus.shared.domain.error.ErrorCode;
 
@@ -31,12 +35,20 @@ public class PersistPresentationCompletion {
     private static final ErrorCode MISSION_NOT_FOUND = new ErrorCode("STUDY_MISSION_NOT_FOUND");
 
     private final StudyMissionRepository missions;
+    private final ActivityResponseContractRepository contracts;
+    private final ActivitySourceReferenceAuthorization sources;
+    private final GeneratedArtifactRepository artifacts;
 
-    public PersistPresentationCompletion(StudyMissionRepository missions) {
+    public PersistPresentationCompletion(StudyMissionRepository missions,
+            ActivityResponseContractRepository contracts, ActivitySourceReferenceAuthorization sources,
+            GeneratedArtifactRepository artifacts) {
         this.missions = Objects.requireNonNull(missions, "missions must not be null");
+        this.contracts = Objects.requireNonNull(contracts);
+        this.sources = Objects.requireNonNull(sources);
+        this.artifacts = Objects.requireNonNull(artifacts);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public Result persist(Command command) {
         Objects.requireNonNull(command, "command must not be null");
         StudyMission mission = missions.findOwnedByIdForUpdate(command.missionId(), command.userId())
@@ -55,6 +67,42 @@ public class PersistPresentationCompletion {
                     "The presentation activity has already been completed.");
         }
 
+        if (current.learningObjectiveId() == null || mission.objectives().stream()
+                .noneMatch(objective -> objective.id().equals(current.learningObjectiveId()))) {
+            throw new ActivityMaterializationException(ActivityMaterializationException.Reason.OBJECTIVE_NOT_IN_MISSION,
+                    "The activity has no valid mission objective binding.");
+        }
+        if (!ActivityResponseContractRepository.isSourceFreeReflection(current)) {
+        // Keep the admitted content and provenance stable until this transaction ends.
+        // Missing origins remain allowed for approved historical presentation completion;
+        // an existing origin is immutable and must agree with this owned mission.
+        if (current.generatedArtifactId() == null
+                || artifacts.findOwnedByIdForUpdate(current.generatedArtifactId(), mission.userId()).isEmpty()
+                || !artifacts.findSourceReferenceIdsForShare(current.generatedArtifactId())
+                        .equals(current.sourceReferenceIds())) {
+            throw new ActivityMaterializationException(ActivityMaterializationException.Reason.INVALID_ARTIFACT,
+                    "The presentation provenance cannot be established.");
+        }
+        var origin = artifacts.findObjectiveOrigin(current.generatedArtifactId(), mission.userId());
+        if (origin.isPresent() && (!origin.orElseThrow().artifactId().equals(current.generatedArtifactId())
+                || !origin.orElseThrow().objectiveId().equals(current.learningObjectiveId())
+                || !origin.orElseThrow().missionId().equals(mission.id())
+                || !origin.orElseThrow().userId().equals(mission.userId()))) {
+            throw new ActivityMaterializationException(ActivityMaterializationException.Reason.INVALID_ARTIFACT,
+                    "The presentation origin is incompatible with this mission.");
+        }
+        if (contracts.classify(current, command.userId(), mission.groundingMode().name())
+                != ActivityResponseContractRepository.ActivityContractKind.PRESENTATION) {
+            throw new ActivityMaterializationException(ActivityMaterializationException.Reason.INVALID_ARTIFACT,
+                    "The presentation contract cannot be established.");
+        }
+        }
+        if (!sources.lockAndValidateForCompletion(command.userId(), mission.materials(),
+                current.sourceReferenceIds(), current.sourceRequired())) {
+            throw new ActivityMaterializationException(ActivityMaterializationException.Reason.INVALID_SOURCE_REFERENCES,
+                    "The activity sources are not available.");
+        }
+
         LearningActivity completed = new LearningActivity(
                 current.id(), current.learningObjectiveId(), current.activityType(),
                 current.representedActionType(), current.questionIntent(), current.templateSignature(),
@@ -69,7 +117,8 @@ public class PersistPresentationCompletion {
 
         StudyMission updated = new StudyMission(
                 mission.id(), mission.userId(), mission.topicId(), mission.subtopicId(),
-                mission.status(), mission.learningState(), mission.groundingMode(),
+                mission.status(), current.activityType() == com.hippocampus.learning.domain.LearningActivityType.REFLECT
+                        ? com.hippocampus.learning.domain.LearningStage.EVIDENCE_UPDATE : mission.learningState(), mission.groundingMode(),
                 mission.availableTimeMinutes(), mission.startedAt(), mission.completedAt(),
                 mission.stoppedAt(), completed.id(), mission.materials(), mission.objectives(),
                 activities, mission.createdAt(), command.completedAt());

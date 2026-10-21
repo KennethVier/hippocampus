@@ -212,3 +212,8 @@ qualification inputs prospectively. Preserve historical identities.
 Accepted with the 2026-10-11 controlling adjustments. Runtime changes require
 the separately approved P7-09 implementation packet and normal validation,
 independent review, security review, and qualification gates.
+
+
+## ADR-0018 scoped eligibility clarification ? 2026-10-19
+
+Accepted ADR-0018 adds runtime authority and historical evidence eligibility without altering this record's original approval provenance. Safely graded means independently admitted under the current trusted contract, not a persisted grade label or model agreement. Preserve original attempts/receipts; current unqualified free-text history cannot drive competence, failure, prerequisite or graded follow-up. A historical ineligible evaluation is distinct from a real saved UNGRADED attempt. Preserve existing safety/source/time/stop/terminal precedence, immutable audit and independent qualification requirements. No new medical grading authority or schema is approved.

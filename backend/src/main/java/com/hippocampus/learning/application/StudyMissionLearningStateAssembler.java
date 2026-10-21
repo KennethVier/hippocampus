@@ -32,6 +32,19 @@ import com.hippocampus.learning.domain.StudyMissionGroundingMode;
 import com.hippocampus.progress.domain.StudentAttempt;
 
 public class StudyMissionLearningStateAssembler {
+    private final AttemptEvidenceEligibility eligibility;
+    public StudyMissionLearningStateAssembler() { this(new AttemptEvidenceEligibility()); }
+    public StudyMissionLearningStateAssembler(AttemptEvidenceEligibility eligibility) {
+        this.eligibility = Objects.requireNonNull(eligibility);
+    }
+    public AttemptEvidenceEligibility.Decision evidenceDecision(StudyMission mission,
+            LearningActivity activity, StudentAttempt attempt) { return eligibility.decide(mission, activity, attempt); }
+    public AttemptEvidenceEligibility eligibility() { return eligibility; }
+    public LearningState assembleForSubmission(StudyMission mission, LearningActivity current,
+            Map<UUID,List<StudentAttempt>> attempts, StudentAttempt pending, Instant now) {
+        return assemble(mission, current, attempts, evidenceDecision(mission, current, pending).effectiveOutcome(), now);
+    }
+
 
     public LearningState assembleForSubmission(
             StudyMission mission,
@@ -40,7 +53,8 @@ public class StudyMissionLearningStateAssembler {
             AttemptOutcome pendingOutcome,
             Instant now) {
         Objects.requireNonNull(pendingOutcome, "pendingOutcome must not be null");
-        return assemble(mission, current, attempts, pendingOutcome, now);
+        // An enum carries no evaluator/contract provenance; only the attempt overload can admit a grade.
+        return assemble(mission, current, attempts, AttemptOutcome.UNGRADED, now);
     }
 
     public LearningState assembleFromPersistedAttempts(
@@ -51,7 +65,17 @@ public class StudyMissionLearningStateAssembler {
         return assemble(mission, current, attempts, null, now);
     }
 
-    private static LearningState assemble(
+    /** Existing domain policies traverse oldest-to-newest history backwards. The legacy
+     * receipt/submission assembler remains unchanged; follow-up selection supplies that order. */
+    public LearningState assembleForFollowUp(StudyMission mission, LearningActivity current,
+            Map<UUID,List<StudentAttempt>> attempts, Instant now) {
+        LearningState state=assembleFromPersistedAttempts(mission,current,attempts,now);
+        return new LearningState(state.missionId(),state.learningObjectiveId(),state.conceptKey(),state.missionState(),
+                state.currentStage(),state.evidence(),state.sourceCapability(),state.timeContext(),
+                state.recentActivityHistory().reversed(),state.connectionRelevant(),state.actionConstraints());
+    }
+
+    private LearningState assemble(
             StudyMission mission,
             LearningActivity current,
             Map<UUID, List<StudentAttempt>> attempts,
@@ -89,7 +113,7 @@ public class StudyMissionLearningStateAssembler {
                             .sorted(Comparator.comparingInt(StudentAttempt::attemptNumber).reversed())
                             .forEach(attempt -> addHistory(
                                     recent, evidence, mission, currentObjective, activityObjective,
-                                    activity, outcome(attempt.evaluationStatus())));
+                                    activity, evidenceDecision(mission, activity, attempt).effectiveOutcome()));
                     if (activityAttempts.isEmpty()
                             && !(activity.id().equals(current.id()) && pendingOutcome != null)
                             && isDurablePresentationCompletion(activity)
@@ -148,9 +172,19 @@ public class StudyMissionLearningStateAssembler {
             evidence.merge(dimension, strength, (left, right) -> left.compareTo(right) >= 0 ? left : right);
         }
         if (activity.difficulty() != null) {
-            recent.add(activity.toRecentLearningActivity(
+            var entry = activity.toRecentLearningActivity(
                     conceptKey(activityObjective), mission.id(), outcome,
-                    LearningActivityIntent.STANDARD, activity.generatedArtifactId() != null));
+                    LearningActivityIntent.STANDARD, activity.generatedArtifactId() != null);
+            // Legacy attempts have no target metadata. Treat the whole validated objective/concept
+            // conservatively as equivalent, without changing historical activities or receipts.
+            if (entry.questionIntent() == null || !entry.questionIntent().startsWith("assessment-target-v1:")) {
+                entry = new com.hippocampus.learning.domain.RecentLearningActivity(
+                        entry.learningActivityId(), entry.conceptKey(), entry.activityType(),
+                        com.hippocampus.learning.domain.FollowUpIntent.identity(activityObjective.id(), conceptKey(activityObjective)),
+                        entry.difficulty(), entry.sessionId(), entry.templateSignature(), entry.attemptOutcome(),
+                        entry.repetitionIntent(), entry.validatedContent());
+            }
+            recent.add(entry);
         }
     }
 

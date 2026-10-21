@@ -1,4 +1,8 @@
 package com.hippocampus.ai.infrastructure.provider.gemini;
+import com.hippocampus.ai.application.prompt.PromptId;
+import com.hippocampus.ai.application.prompt.PromptContext;
+import com.hippocampus.ai.application.provider.ProviderExecutionRequest;
+import com.hippocampus.ai.domain.AiTaskType;
 
 import static com.hippocampus.ai.infrastructure.provider.ProviderTestFixtures.liveExplanationRequest;
 import static com.hippocampus.ai.infrastructure.provider.ProviderTestFixtures.request;
@@ -35,10 +39,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
 
-import com.hippocampus.ai.application.prompt.PromptContext;
-import com.hippocampus.ai.application.prompt.PromptId;
 import com.hippocampus.ai.application.provider.ProviderExecutionException;
-import com.hippocampus.ai.application.provider.ProviderExecutionRequest;
 import com.hippocampus.ai.application.provider.ProviderExecutionResult;
 import com.hippocampus.ai.application.provider.ProviderFailureType;
 import com.hippocampus.ai.application.provider.ProviderStreamCompleted;
@@ -47,29 +48,12 @@ import com.hippocampus.ai.application.provider.ProviderTextDelta;
 import com.hippocampus.ai.application.routing.ProviderId;
 import com.hippocampus.ai.application.routing.ProviderRoute;
 import com.hippocampus.ai.domain.AiOutputContract;
-import com.hippocampus.ai.domain.AiTaskType;
 import com.hippocampus.ai.domain.ExplanationResult;
 import com.hippocampus.ai.domain.ValidatedAiResult;
 import com.hippocampus.ai.infrastructure.provider.ProviderStructuredOutputSchema;
 import reactor.core.publisher.Flux;
 
 class GeminiProviderAdapterTests {
-
-    @Test
-    void retainsFinishReasonAcrossRequestManagerExecutionMetadata() {
-        ChatModel model = mock(ChatModel.class);
-        org.springframework.ai.chat.metadata.ChatGenerationMetadata metadata =
-                mock(org.springframework.ai.chat.metadata.ChatGenerationMetadata.class);
-        when(metadata.getFinishReason()).thenReturn("MAX_TOKENS");
-        when(model.call(any(Prompt.class))).thenReturn(new ChatResponse(List.of(
-                new Generation(new AssistantMessage("{\"incomplete\":"), metadata))));
-        ProviderExecutionResult result = new GeminiProviderAdapter(model)
-                .execute(request(ProviderId.GEMINI, "test-model"));
-        assertThat(result.finishReason()).contains("MAX_TOKENS");
-        assertThat(result.withExecutionMetadata(1, 2).finishReason()).contains("MAX_TOKENS");
-        assertThat(result.withExecutionMetadata(1, 2).retryCount()).isEqualTo(1);
-        assertThat(result.withExecutionMetadata(1, 2).providerInvocationCount()).isEqualTo(2);
-    }
 
     @Test
     void responseEvaluationRepairUsesLowThinkingWithoutChangingBudgetOrSchema() {
@@ -101,12 +85,8 @@ class GeminiProviderAdapterTests {
     }
 
     @Test
-    void usesLowThinkingOnlyForCurrentAtomicResponseEvaluationPrompts() {
-        for (PromptId id : List.of(PromptId.RESPONSE_EVALUATION_V4,
-                PromptId.RESPONSE_EVALUATION_V5, PromptId.RESPONSE_EVALUATION_V6,
-                PromptId.RESPONSE_EVALUATION_V7, PromptId.RESPONSE_EVALUATION_V8,
-                PromptId.RESPONSE_EVALUATION_V9,
-                PromptId.RESPONSE_EVALUATION_DISCOVERY_V1,
+    void usesLowThinkingForAttributionPassesWithoutChangingUnrelatedTasks() {
+        for (PromptId id : List.of(PromptId.RESPONSE_EVALUATION_DISCOVERY_V1,
                 PromptId.RESPONSE_EVALUATION_VERIFICATION_V1)) {
             ChatModel model = mock(ChatModel.class);
             when(model.call(any(Prompt.class))).thenReturn(new ChatResponse(List.of(
@@ -119,7 +99,7 @@ class GeminiProviderAdapterTests {
             assertThat(options.getThinkingLevel())
                     .isEqualTo(org.springframework.ai.google.genai.common.GoogleGenAiThinkingLevel.LOW);
             assertThat(options.getMaxOutputTokens()).isEqualTo(request.promptContext().reservedOutputTokens());
-            assertThat(options.getResponseSchema()).isEqualTo(
+            assertThat(options.getResponseSchema()).isNotBlank().isEqualTo(
                     ProviderStructuredOutputSchema.geminiSchema(AiOutputContract.RESPONSE_EVALUATION, id));
         }
         for (PromptId id : List.of(PromptId.RESPONSE_EVALUATION_V1,
@@ -180,62 +160,11 @@ class GeminiProviderAdapterTests {
         GoogleGenAiChatOptions options = (GoogleGenAiChatOptions) prompt.getOptions();
         assertThat(options.getModel()).isEqualTo("gemini-selected");
         assertThat(options.getMaxOutputTokens()).isEqualTo(64);
-        assertThat(options.getThinkingLevel()).isNull();
         assertThat(options.getResponseMimeType()).isEqualTo("application/json");
         assertThat(options.getResponseSchema())
                 .isEqualTo(ProviderStructuredOutputSchema.geminiSchema(AiOutputContract.EXPLANATION))
                 .contains("\"concept\"", "\"supplementalKnowledgeUsed\"", "\"required\"")
                 .doesNotContain("additionalProperties");
-    }
-
-    @Test
-    void usesAtomicResponseEvaluationSchemaForCurrentPromptsButLeavesLegacyV3Unconstrained() {
-        ChatModel currentModel = mock(ChatModel.class);
-        when(currentModel.call(any(Prompt.class)))
-                .thenReturn(new ChatResponse(List.of(new Generation(new AssistantMessage("{}")))));
-        new GeminiProviderAdapter(currentModel)
-                .execute(responseEvaluationRequest(PromptId.RESPONSE_EVALUATION_V6));
-
-        ArgumentCaptor<Prompt> currentPrompt = ArgumentCaptor.forClass(Prompt.class);
-        verify(currentModel).call(currentPrompt.capture());
-        GoogleGenAiChatOptions currentOptions =
-                (GoogleGenAiChatOptions) currentPrompt.getValue().getOptions();
-        String currentSchema = ProviderStructuredOutputSchema.geminiSchema(
-                AiOutputContract.RESPONSE_EVALUATION,
-                PromptId.RESPONSE_EVALUATION_V6);
-        assertThat(currentOptions.getResponseSchema())
-                .isEqualTo(currentSchema)
-                .contains(
-                        "\"judgments\"",
-                        "\"expectedConceptIndex\"",
-                        "\"expectedConcept\"",
-                        "\"status\"",
-                        "\"assessability\"",
-                        "\"recommendedAction\"");
-        assertThat(ProviderStructuredOutputSchema.geminiSchema(
-                        AiOutputContract.RESPONSE_EVALUATION,
-                        PromptId.RESPONSE_EVALUATION_V4))
-                .isEqualTo(currentSchema);
-        assertThat(ProviderStructuredOutputSchema.geminiSchema(
-                        AiOutputContract.RESPONSE_EVALUATION,
-                        PromptId.RESPONSE_EVALUATION_V5))
-                .isEqualTo(currentSchema);
-        assertThat(ProviderStructuredOutputSchema.geminiSchema(
-                        AiOutputContract.RESPONSE_EVALUATION,
-                        PromptId.RESPONSE_EVALUATION_V9))
-                .isEqualTo(currentSchema);
-
-        ChatModel legacyModel = mock(ChatModel.class);
-        when(legacyModel.call(any(Prompt.class)))
-                .thenReturn(new ChatResponse(List.of(new Generation(new AssistantMessage("{}")))));
-        new GeminiProviderAdapter(legacyModel)
-                .execute(responseEvaluationRequest(PromptId.RESPONSE_EVALUATION_V3));
-
-        ArgumentCaptor<Prompt> legacyPrompt = ArgumentCaptor.forClass(Prompt.class);
-        verify(legacyModel).call(legacyPrompt.capture());
-        GoogleGenAiChatOptions legacyOptions =
-                (GoogleGenAiChatOptions) legacyPrompt.getValue().getOptions();
-        assertThat(legacyOptions.getResponseSchema()).isNull();
     }
 
     @Test
@@ -279,7 +208,6 @@ class GeminiProviderAdapterTests {
         assertThat(result.usage().inputTokens()).isEmpty();
         assertThat(result.usage().outputTokens()).isEmpty();
         assertThat(result.usage().totalTokens()).isEmpty();
-        assertThat(result.finishReason()).isEmpty();
     }
 
     @Test
@@ -452,6 +380,19 @@ class GeminiProviderAdapterTests {
                 });
     }
 
+    private static void assertSdkFailure(RuntimeException sdkFailure, ProviderFailureType expected) {
+        ChatModel chatModel = mock(ChatModel.class);
+        when(chatModel.call(any(Prompt.class))).thenThrow(new IllegalStateException("wrapper raw-provider-body", sdkFailure));
+
+        assertThatThrownBy(() -> new GeminiProviderAdapter(chatModel)
+                        .execute(request(ProviderId.GEMINI, "gemini-selected")))
+                .isInstanceOfSatisfying(ProviderExecutionException.class, failure -> {
+                    assertThat(failure.failureType()).isEqualTo(expected);
+                    assertThat(failure).hasNoCause();
+                    assertThat(failure.getMessage()).doesNotContain(
+                            "api-key-secret", "system-policy-secret-marker", "student-task-secret-marker", "raw-provider-body");
+                });
+    }
     private static ProviderExecutionRequest responseEvaluationRequest(PromptId promptId) {
         return new ProviderExecutionRequest(
                 AiTaskType.RESPONSE_EVALUATION,
@@ -467,17 +408,4 @@ class GeminiProviderAdapterTests {
                 new ProviderRoute.Target(ProviderId.GEMINI, "gemini-selected"));
     }
 
-    private static void assertSdkFailure(RuntimeException sdkFailure, ProviderFailureType expected) {
-        ChatModel chatModel = mock(ChatModel.class);
-        when(chatModel.call(any(Prompt.class))).thenThrow(new IllegalStateException("wrapper raw-provider-body", sdkFailure));
-
-        assertThatThrownBy(() -> new GeminiProviderAdapter(chatModel)
-                        .execute(request(ProviderId.GEMINI, "gemini-selected")))
-                .isInstanceOfSatisfying(ProviderExecutionException.class, failure -> {
-                    assertThat(failure.failureType()).isEqualTo(expected);
-                    assertThat(failure).hasNoCause();
-                    assertThat(failure.getMessage()).doesNotContain(
-                            "api-key-secret", "system-policy-secret-marker", "student-task-secret-marker", "raw-provider-body");
-                });
-    }
 }

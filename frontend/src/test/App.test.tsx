@@ -106,6 +106,7 @@ describe('App', () => {
       completedAt: null,
       stoppedAt: null,
       updatedAt: '2026-10-02T01:00:00Z',
+      continuation: null,
     }
 
     vi.mocked(fetch).mockImplementation(async (input) => {
@@ -115,14 +116,14 @@ describe('App', () => {
           ? input.href
           : input.url
 
-      if (url.endsWith(`/api/study-missions/${missionId}`)) {
+      if (url.endsWith(`/api/study-missions/${missionId}?continuationContract=1`)) {
         return new Response(JSON.stringify(mission), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })
       }
 
-      if (url.endsWith('/api/auth/session')) {
+      if (url.endsWith('/api/auth/me')) {
         return new Response(JSON.stringify({ userId: missionId }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },

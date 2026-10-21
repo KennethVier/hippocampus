@@ -4,7 +4,7 @@ Audience: Backend, frontend, architecture, QA, security, AI/RAG, DevOps,
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 25
-Last Updated: 2026-10-08
+Last Updated: 2026-08-24
 Owner: Project Hippocampus Team
 Prerequisites:
 - 03 - Educational Foundation
@@ -35,7 +35,7 @@ Scope: Unit, integration, architecture, database, frontend, E2E,
   data, CI/CD quality checks, regression suites, and pilot validation.
 Status: Final
 Title: Testing Strategy
-Version: 1.0.2
+Version: 1.0.0
 ---
 
 # 25 - Testing Strategy
@@ -2207,12 +2207,6 @@ any student flow works.
 ------------------------------------------------------------------------
 
 # 125. Revision History
-
-- **1.0.2 — 2026-10-08 — Project Hippocampus Team:** Clarified successful live
-  evidence collection with pending/failed semantic review versus qualification.
-
-- **1.0.1 — 2026-10-08 — Project Hippocampus Team:** Aligned P7-09 deterministic,
-  live-provider, and human semantic qualification layers with accepted ADR-0011.
 
   ------------------------------------------------------------------------------
   Version           Date              Author            Changes

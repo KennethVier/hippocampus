@@ -4,7 +4,7 @@ Audience: Backend, architecture, database, AI, QA, security, and DevOps
 Authors: Project Hippocampus Team
 Created: 2026-08-24
 Document ID: 18
-Last Updated: 2026-10-03
+Last Updated: 2026-10-20
 Owner: Project Hippocampus Team
 Prerequisites:
 - 00 - Project Vision
@@ -47,7 +47,7 @@ Scope: Core entities, aggregate boundaries, PostgreSQL schema design,
   versioning, and migration rules.
 Status: Final
 Title: Domain Model & Database Design
-Version: 1.0.7
+Version: 1.0.10
 ---
 
 # 18 - Domain Model & Database Design
@@ -1197,6 +1197,29 @@ SUPPLEMENTAL_GENERATED
 GENERAL_GENERATED
 ```
 
+Accepted ADR-0017 adds a learning-owned immutable origin binding for each new
+Study Mission generated artifact. `generated_artifacts` remains the shared
+AI-content provenance record; the binding stores the server-resolved objective,
+originating mission, and owner. Artifact generation and binding insertion are
+atomic with source links and the first activity. Existing artifacts receive no
+inferred backfill.
+
+## Table: `generated_artifact_objective_origins` (ADR-0017)
+
+``` text
+generated_artifact_id UUID PK FK -> generated_artifacts.id
+learning_objective_id UUID NOT NULL
+study_mission_id UUID NOT NULL
+user_id UUID NOT NULL
+```
+
+Composite foreign keys must enforce artifact/owner, mission/owner, and
+objective/mission agreement. The origin cannot be reassigned, updated, or
+deleted while its artifact exists. Any retention-driven deletion requires an
+explicitly authorized artifact lifecycle; it cannot detach an origin from a
+surviving artifact. Use a forward-only Flyway migration, leaving legacy
+artifacts unbound.
+
 ------------------------------------------------------------------------
 
 # 35. GeneratedArtifactSource
@@ -1746,6 +1769,11 @@ JPA `@Version` may be used where appropriate.
 
 # 55. Study Mission Consistency
 
+## Initial completion admission (ADR-0019)
+
+An initial Engine COMPLETE for an ACTIVE mission with no genuine completed LearningActivity does not write COMPLETED/completed_at, objective completion, activity, StudentAttempt, grade or learning evidence. NO_ACTIVITY/INITIAL_COMPLETION_NOT_ADMISSIBLE is application admission metadata, not a new mission status or competence fact. Operational preparation receipts/claim outcomes remain separate from learner activity/evidence. A matching non-scoring block may be recorded once under the mission/receipt lock; identical repeats and GET do not churn it. Preserve source versions, owner bindings, actual lifecycle and immutable history; do not synthesize a completion snapshot or reset/restart the mission. Final authorization, snapshot/deadline/fencing and canonical source locks remain necessary.
+
+
 A StudyMission should maintain these invariants:
 
 -   Topic belongs to same User.
@@ -1825,6 +1853,16 @@ The application resolves that exact activity within the same StudyMission and
 applicable LearningObjective/context, then resolves its exact GeneratedArtifact.
 It does not search for another pedagogically compatible activity or artifact.
 Exact identity is necessary but not sufficient.
+
+ADR-0017 additionally requires the artifact's immutable origin objective to
+equal both the selected activity and requested action objective IDs. Its origin
+mission and owner must equal the current owned mission. This applies whenever
+`RETRY`, `REDUCE_DIFFICULTY`, or `REUSE_VALIDATED_CONTENT` carries an artifact.
+Cross-mission reuse is ineligible even for matching text/concept keys. A missing,
+legacy, or conflicting binding fails closed before reuse; a later activity link
+cannot establish origin. Existing owned activities and approved historical
+presentation-only interpretation remain available under their existing checks,
+without rewriting attempts or immutable receipts.
 
 A reusable generated artifact must have `reusable = true` and
 `validation_status = VALIDATED` and should match at minimum:
@@ -2630,6 +2668,11 @@ and:
 
 # 93. Revision History
 
+- **1.0.10 — 2026-10-20 — Proposed for final owner approval:** ADR-0019 initial-completion admission; no fabricated work, terminal mutation or repeated generation.
+
+- **1.0.8 - 2026-10-17 - Project Hippocampus Team:** Aligned generated-artifact objective-origin schema, atomic persistence, immutable binding, legacy policy and reuse eligibility with accepted ADR-0017.
+
+
   -----------------------------------------------------------------------
   Version           Date              Author            Changes
   ----------------- ----------------- ----------------- -----------------
@@ -2707,3 +2750,13 @@ and:
 **Reviewed By:** Project Hippocampus Team
 
 **Approved By:** Project Hippocampus Team
+
+
+## ADR-0018: immutable records and active evidence eligibility
+
+StudentAttempt and SubmissionReceipt retain original response, outcome, evaluator/source provenance and replay bytes. V21/V25 optional evaluation_artifact_id/deterministic_result and generated-artifact metadata do not establish historical medical free-text qualification. No schema migration, backfill, destructive regrading or fabricated qualification flag is approved. Exclude all currently unqualified/ambiguous free-text grades through an application-owned effective eligibility projection before evidence/mission/follow-up consumption. Positively corroborated deterministic MCQ remains under its existing trusted owned contract; unknown identity fails closed.
+
+Preserve chronology and distinguish effective non-scoring disposition from recorded grade; do not synthesize evidence events, failure, presentation completion or mastery. Invalid stored outcomes/bindings/receipts remain data errors. Existing follow-up grade/basis/origin are immutable and do not attest qualification: read projection hides ineligible active intent; authorized writes may cancel nonterminal intent with existing SAFETY semantics, never rewrite the grade/basis or satisfy it falsely. Preserve owner/source/mission/objective constraints and final canonical locks/snapshot checks. A later qualified-history binding or repair of demonstrated durable projections requires a separate approved design/audit scope. No deployed-data source was inspected and no absence claim is warranted.
+
+
+Revision 1.0.9 ? 2026-10-19: ADR-0018 owner-approved eligibility/containment alignment; no runtime test, security closure or medical qualification claim.

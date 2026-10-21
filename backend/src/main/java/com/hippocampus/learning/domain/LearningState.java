@@ -15,7 +15,8 @@ public record LearningState(
         LearningTimeContext timeContext,
         List<RecentLearningActivity> recentActivityHistory,
         boolean connectionRelevant,
-        LearningActionConstraints actionConstraints) {
+        LearningActionConstraints actionConstraints,
+        AssessmentAvailability assessmentAvailability) {
 
     public LearningState {
         Objects.requireNonNull(missionId, "missionId must not be null");
@@ -32,6 +33,23 @@ public record LearningState(
         Objects.requireNonNull(recentActivityHistory, "recentActivityHistory must not be null");
         recentActivityHistory = List.copyOf(recentActivityHistory);
         Objects.requireNonNull(actionConstraints, "actionConstraints must not be null");
+        Objects.requireNonNull(assessmentAvailability, "assessmentAvailability must not be null");
+    }
+
+    public LearningState(UUID missionId, UUID learningObjectiveId, String conceptKey,
+            MissionLifecycleState missionState, LearningStage currentStage,
+            LearningEvidenceSnapshot evidence, SourceCapability sourceCapability,
+            LearningTimeContext timeContext, List<RecentLearningActivity> recentActivityHistory,
+            boolean connectionRelevant, LearningActionConstraints actionConstraints) {
+        this(missionId, learningObjectiveId, conceptKey, missionState, currentStage, evidence,
+                sourceCapability, timeContext, recentActivityHistory, connectionRelevant,
+                actionConstraints, AssessmentAvailability.unspecified());
+    }
+
+    public LearningState withAssessmentAvailability(AssessmentAvailability availability) {
+        return new LearningState(missionId, learningObjectiveId, conceptKey, missionState, currentStage,
+                evidence, sourceCapability, timeContext, recentActivityHistory, connectionRelevant,
+                actionConstraints, availability);
     }
 
     public LearningState(

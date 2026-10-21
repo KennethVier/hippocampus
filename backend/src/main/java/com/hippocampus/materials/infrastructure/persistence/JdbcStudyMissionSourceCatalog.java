@@ -113,4 +113,80 @@ public class JdbcStudyMissionSourceCatalog implements StudyMissionSourceCatalog 
         }
         return Optional.of(new Resolution(resolved));
     }
+    @Override
+    public Optional<Resolution> resolveLocked(UUID owner,UUID topic,List<SourceSelection> selections) {
+        if (!org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()
+                || org.springframework.transaction.support.TransactionSynchronizationManager.isCurrentTransactionReadOnly()
+                || !Integer.valueOf(java.sql.Connection.TRANSACTION_READ_COMMITTED).equals(
+                    org.springframework.transaction.support.TransactionSynchronizationManager.getCurrentTransactionIsolationLevel()))
+            throw new IllegalStateException("Source freeze requires READ_COMMITTED write transaction");
+        Optional<Resolution> first=resolve(owner,topic,selections);
+        if(first.isEmpty()) return Optional.empty();
+        var locks=new java.util.LinkedHashMap<String,List<UUID>>();
+        for(String table:List.of("material_versions","materials","material_topic_links","document_nodes","chunks","visual_assets"))
+            locks.put(table,new ArrayList<>());
+        var linkBindings=new java.util.LinkedHashMap<UUID,ResolvedSource>();
+        for(ResolvedSource source:first.get().sources()) {
+            locks.get("material_versions").add(source.materialVersionId()); locks.get("materials").add(source.materialId());
+            if(source.documentNodeId()!=null) locks.get("document_nodes").add(source.documentNodeId());
+            UUID link=jdbcClient.sql("""
+                SELECT id FROM material_topic_links WHERE material_id=:material AND topic_id=:topic AND status='ACTIVE'
+                  AND (material_version_id IS NULL OR material_version_id=:version)
+                  AND (document_node_id IS NULL OR document_node_id=CAST(:node AS uuid)) ORDER BY id LIMIT 1
+                """).param("material",source.materialId()).param("topic",topic).param("version",source.materialVersionId())
+                .param("node",source.documentNodeId()).query(UUID.class).optional().orElse(null);
+            if(link==null) return Optional.empty();
+            locks.get("material_topic_links").add(link);
+            linkBindings.put(link,source);
+            locks.get("chunks").addAll(jdbcClient.sql("""
+                SELECT id FROM chunks WHERE material_version_id=:version AND is_active AND btrim(content)<>''
+                  AND (CAST(:node AS uuid) IS NULL OR document_node_id=CAST(:node AS uuid)) ORDER BY id LIMIT 1
+                """).param("version",source.materialVersionId()).param("node",source.documentNodeId()).query(UUID.class).list());
+            for(boolean reliable:List.of(false,true)) locks.get("visual_assets").addAll(jdbcClient.sql("""
+                SELECT id FROM visual_assets WHERE material_version_id=:version
+                  AND (CAST(:node AS uuid) IS NULL OR document_node_id=CAST(:node AS uuid))
+                """+(reliable?" AND interpretation_status='SUPPORTED'":"")+" ORDER BY id LIMIT 1")
+                .param("version",source.materialVersionId()).param("node",source.documentNodeId()).query(UUID.class).list());
+        }
+        for(var group:locks.entrySet()) for(UUID id:group.getValue().stream().distinct()
+                .sorted(java.util.Comparator.comparing(UUID::toString)).toList()) {
+            if(jdbcClient.sql("SELECT id FROM "+group.getKey()+" WHERE id=:id FOR SHARE NOWAIT")
+                    .param("id",id).query(UUID.class).optional().isEmpty()) throw changed();
+        }
+        for(var entry:linkBindings.entrySet()) {
+            var source=entry.getValue();
+            boolean valid=jdbcClient.sql("""
+                SELECT EXISTS(SELECT 1 FROM material_topic_links WHERE id=:id AND material_id=:material
+                  AND topic_id=:topic AND status='ACTIVE'
+                  AND (material_version_id IS NULL OR material_version_id=:version)
+                  AND (document_node_id IS NULL OR document_node_id=CAST(:node AS uuid)))
+                """).param("id",entry.getKey()).param("material",source.materialId()).param("topic",topic)
+                .param("version",source.materialVersionId()).param("node",source.documentNodeId()).query(Boolean.class).single();
+            if(!valid) throw changed();
+        }
+        Optional<Resolution> after=resolve(owner,topic,selections);
+        if(!first.equals(after)) throw changed();
+        return after;
+    }
+
+    @Override
+    public SourcePage eligible(UUID owner,UUID topic,int limit,UUID after) {
+        if(limit<1 || limit>50) throw new IllegalArgumentException("Invalid page limit");
+        String sql=RESOLVE_SOURCE.replace("SELECT m.id AS material_id,",
+                "SELECT m.id AS material_id,m.title,mv.processing_status,")
+                .replace("WHERE m.id = :materialId","WHERE (CAST(:after AS uuid) IS NULL OR m.id>CAST(:after AS uuid))")
+                +" ORDER BY m.id LIMIT :maximum";
+        List<EligibleSource> rows=jdbcClient.sql(sql).param("ownerId",owner).param("topicId",topic)
+                .param("documentNodeId",null,Types.OTHER).param("after",after).param("maximum",limit+1)
+                .query((r,n)->new EligibleSource(r.getObject("material_id",UUID.class),r.getString("title"),
+                    r.getObject("material_version_id",UUID.class),r.getString("processing_status"),
+                    SourceReadiness.valueOf(r.getString("source_readiness")))).list();
+        boolean more=rows.size()>limit;
+        List<EligibleSource> items=more?rows.subList(0,limit):rows;
+        return new SourcePage(items,more?items.getLast().materialId():null);
+    }
+    private static com.hippocampus.learning.port.InitialStudyMissionSourceAuthority.SourceUnavailableException changed() {
+        return new com.hippocampus.learning.port.InitialStudyMissionSourceAuthority.SourceUnavailableException();
+    }
+
 }

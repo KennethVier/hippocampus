@@ -34,6 +34,7 @@ class StudentAttemptPersistenceIntegrationTests extends PostgresIntegrationTestS
             assertThat(context.isActive()).isTrue();
             assertThat(successfulMigration("21")).isTrue();
             assertThat(successfulMigration("25")).isTrue();
+            assertThat(successfulMigration("27")).isTrue();
             assertThat(columnContract()).containsExactlyInAnyOrderEntriesOf(Map.ofEntries(
                     Map.entry("id", "uuid:NO"),
                     Map.entry("user_id", "uuid:NO"),
@@ -52,6 +53,7 @@ class StudentAttemptPersistenceIntegrationTests extends PostgresIntegrationTestS
             assertThat(constraintNames()).containsExactlyInAnyOrder(
                     "pk_student_attempts",
                     "uq_student_attempts_activity_number",
+                    "uq_follow_up_attempt_owner_activity",
                     "fk_student_attempts_user",
                     "fk_student_attempts_learning_activity",
                     "fk_student_attempts_evaluation_artifact",
@@ -59,6 +61,24 @@ class StudentAttemptPersistenceIntegrationTests extends PostgresIntegrationTestS
                     "chk_student_attempts_ungraded_shape");
             assertThat(constraintDefinition("uq_student_attempts_activity_number"))
                     .contains("UNIQUE (learning_activity_id, attempt_number)");
+            assertThat(constraintDefinition("uq_follow_up_attempt_owner_activity"))
+                    .isEqualTo("UNIQUE (id, user_id, learning_activity_id)");
+            // PostgreSQL requires this exact composite candidate key for the intent's FK;
+            // a primary key on attempt ID alone cannot enforce owner/activity correspondence.
+            try (var connection = openPostgresConnection(); var statement = connection.createStatement();
+                    var result = statement.executeQuery("""
+                            SELECT pg_get_constraintdef(oid)
+                            FROM pg_constraint
+                            WHERE conrelid = 'public.learning_follow_up_intents'::regclass
+                              AND confrelid = 'public.student_attempts'::regclass
+                              AND contype = 'f'
+                            """)) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString(1)).isEqualTo(
+                        "FOREIGN KEY (originating_attempt_id, owner_id, originating_activity_id) "
+                                + "REFERENCES student_attempts(id, user_id, learning_activity_id)");
+                assertThat(result.next()).isFalse();
+            }
             assertThat(constraintDefinition("chk_student_attempts_attempt_number"))
                     .contains("attempt_number >= 1");
             assertThat(foreignKeyDeleteRules()).containsExactlyInAnyOrderEntriesOf(Map.of(

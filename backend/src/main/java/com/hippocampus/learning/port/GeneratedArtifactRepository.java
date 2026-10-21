@@ -19,7 +19,32 @@ public interface GeneratedArtifactRepository {
         return findById(artifactId).filter(artifact -> ownerId.equals(artifact.userId()));
     }
 
+    default Optional<GeneratedArtifact> findOwnedByIdForUpdate(UUID artifactId, UUID ownerId) {
+        return findOwnedById(artifactId, ownerId);
+    }
+
     Set<UUID> findSourceReferenceIds(UUID artifactId);
+
+    default Set<UUID> findSourceReferenceIdsForShare(UUID artifactId) {
+        return findSourceReferenceIds(artifactId);
+    }
+
+    default void bindObjectiveOrigin(ObjectiveOrigin origin) {
+        throw new IllegalStateException("Generated artifact objective origin persistence is not configured");
+    }
+
+    default Optional<ObjectiveOrigin> findObjectiveOrigin(UUID artifactId, UUID ownerId) {
+        return Optional.empty();
+    }
+
+    record ObjectiveOrigin(UUID artifactId, UUID objectiveId, UUID missionId, UUID userId) {
+        public ObjectiveOrigin {
+            Objects.requireNonNull(artifactId, "artifactId must not be null");
+            Objects.requireNonNull(objectiveId, "objectiveId must not be null");
+            Objects.requireNonNull(missionId, "missionId must not be null");
+            Objects.requireNonNull(userId, "userId must not be null");
+        }
+    }
 
     record GeneratedArtifact(
             UUID id,

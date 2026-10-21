@@ -4,7 +4,7 @@ Audience: Architecture, AI, backend, QA, product, medical-education
 Authors: Project Hippocampus Team
 Created: 2026-08-23
 Document ID: 15
-Last Updated: 2026-10-11
+Last Updated: 2026-10-19
 Owner: Project Hippocampus Team
 Prerequisites:
 - 00 - Project Vision
@@ -32,7 +32,7 @@ Scope: Evaluation principles, datasets, rubrics, RAG evaluation,
   analysis, and MVP acceptance criteria.
 Status: Final
 Title: AI Evaluation Strategy
-Version: 1.0.5
+Version: 1.0.7
 ---
 
 # 15 - AI Evaluation Strategy
@@ -703,6 +703,13 @@ discrimination.
 
 # 31. Response Evaluation Quality
 
+ADR-0016 continuation qualification is separate from grading correctness and
+medical answer-key qualification. Verify empty scoring/evidence impact for
+assessment limitations and distinguish permanent basis absence, response
+uncertainty, source problems and infrastructure failure. Safe containment and
+continuation do not qualify medical grading or demonstrate grading availability.
+
+
 Accepted ADR-0012 adds assertion discovery that works when the first model
 proposes zero credit, exact student/source attribution, complete expected
 concept and relevant-assertion coverage, source authorization before model
@@ -1031,6 +1038,14 @@ The LLM should not decide this transition.
 
 # 49. Mission Flow Evaluation
 
+For ADR-0016/P7-16, qualify saved UNGRADED with known assessment unavailability:
+no repeated unassessable reuse/generation, truthful limitation, learner-controlled
+Pause, refresh/resume/replay and unchanged receipts. Repeated limitation checks
+must create no activity/artifact/attempt/evidence or provider call. Test legacy
+and opt-in clients, presentation completion, conflict recovery and actual
+ACTIVITY_CREATED versus NO_ACTIVITY. No availability percentage is assumed.
+
+
 End-to-end Study Mission tests should verify:
 
 ``` text
@@ -1057,6 +1072,12 @@ must follow the approved learning architecture.
 ------------------------------------------------------------------------
 
 # 50. Timer Evaluation
+
+A time-selected COMPLETE may differ from the earlier submission decision.
+ADR-0016 requires explicit Finish/Continue, fresh authorization and atomic
+completion, never automatic completion from a limitation or GET. Test time
+changes alongside source revocation, not medical correctness changes.
+
 
 The study timer is application-owned.
 
@@ -1278,6 +1299,12 @@ alone.
 
 # 61. Failure Taxonomy
 
+ADR-0016 assessment unavailability is a separately attributed application
+limitation, not automatically an AI/provider failure or learner error. Keep
+response uncertainty, authorization denial, infrastructure failure and stale
+transaction conflicts distinct; never normalize them all into NO_ACTIVITY.
+
+
 Every significant AI failure should be classifiable.
 
 Recommended categories:
@@ -1303,6 +1330,13 @@ SECURITY_FAILURE
 ------------------------------------------------------------------------
 
 # 62. Failure Attribution
+
+For ADR-0016, trace availability facts, protected Engine choice, authorization,
+transaction outcome and client rendering separately. Require PostgreSQL
+interleavings for both completion/revocation orders, partial-lock rollback,
+non-key dependency updates, stale snapshots and idempotency. Design-level
+SEC-016-REQ-001 closure is not implementation SECURITY PASS or release approval.
+
 
 Example:
 
@@ -2035,6 +2069,9 @@ remains overall qualification FAIL even if evidence collection succeeded.
 
 # 91. Revision History
 
+- **1.0.6 - 2026-10-16 - Project Hippocampus Team:** ADR-0016 governance alignment. Added separate ADR-0016 continuation, compatibility, source-ordering and no-false-evidence qualification requirements.
+
+
 - **1.0.5 — 2026-10-11 — Project Hippocampus Team:** Aligned ADR-0012 verified attribution and ungraded qualification, prospective Golden v7 Case 3 correction, and separate ADR-0013 follow-up task without changing historical evidence.
 
 - **1.0.4 — 2026-10-08 — Project Hippocampus Team:** Clarified ADR-0011 evidence
@@ -2088,3 +2125,13 @@ remains overall qualification FAIL even if evidence collection succeeded.
 **Reviewed By:** Project Hippocampus Team
 
 **Approved By:** Project Hippocampus Team
+
+
+## ADR-0018: containment verification versus medical qualification
+
+Accepted ADR-0018 retains unqualified free-text containment at helper, adapter, application and final persistence boundaries and excludes unqualified historical grade evidence. Tests must attack unsupported complete relations hidden inside PARTIAL/CONSTITUENT, false verifier agreement, negation, multi-assertion expansion, missing provenance and direct grade/intent/transition injection. Preserve legitimate deterministic MCQ, authorization, immutable replay, refresh/resume and concurrent continuation. No schema migration/backfill is approved.
+
+A scoped containment/security pass does not establish the original SEC-004 graded-capability criteria, Golden PASS, medical partial-credit validity, provider availability or M3 acceptance. Preserve the versioned nine-case packet, Case 3/5 medical adjudication, alternative phrasing, held-out attacks, authentic independent review/adjudication and provider-specific full-flow availability evidence. No numeric benchmark proposal or live-provider run is approved by ADR-0018. Free-text activation requires a separately approved authority and identity-bound medical qualification; semantic labels, exact spans and two-model agreement remain insufficient.
+
+
+Revision 1.0.7 ? 2026-10-19: ADR-0018 owner-approved eligibility/containment alignment; no runtime test, security closure or medical qualification claim.

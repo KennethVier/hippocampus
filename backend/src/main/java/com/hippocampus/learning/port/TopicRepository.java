@@ -8,6 +8,9 @@ public interface TopicRepository {
     Optional<Topic> createUnderActiveOwnedSubject(Topic topic, UUID ownerId);
     Optional<Topic> findOwnedById(UUID topicId, UUID ownerId);
     Optional<Topic> findOwnedByIdWithActiveSubject(UUID topicId, UUID ownerId);
+    default Optional<Topic> lockOwnedActiveForMissionStart(UUID topicId,UUID ownerId) {
+        throw new IllegalStateException("Locked mission start is not configured");
+    }
     Optional<Topic> saveOwned(Topic topic, UUID ownerId);
     Optional<TopicPage> findActiveByOwnedActiveSubject(UUID subjectId, UUID ownerId, TopicPageRequest request);
 }

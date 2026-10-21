@@ -144,6 +144,17 @@ class ApiErrorContractTests {
                 .andExpect(jsonPath("$.code").value(code));
     }
 
+    @ParameterizedTest
+    @CsvSource({"STUDY_MISSION_START_REQUEST_CONFLICT,409","STUDY_MISSION_INITIAL_STATE_CHANGED,409",
+            "STUDY_MISSION_SOURCE_BUSY,409","STUDY_MISSION_START_UNAVAILABLE,503","MALFORMED_REQUEST,400",
+            "INVALID_INITIAL_ACTIVITY_CONTRACT,400","REQUEST_TOO_LARGE,413"})
+    void missionStartApplicationCodesPreserveStatusAndSanitizedEnvelope(String code,int expectedStatus) throws Exception {
+        mockMvc.perform(get("/test/errors/application/{code}",code).header(CorrelationIdFilter.HEADER_NAME,CORRELATION_ID))
+                .andExpect(status().is(expectedStatus)).andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value(code)).andExpect(jsonPath("$.correlationId").value(CORRELATION_ID))
+                .andExpect(jsonPath("$.details").isEmpty());
+    }
+
     @Test
     void unexpectedFailureDoesNotExposeInternalDetails() throws Exception {
         var result = mockMvc.perform(get("/test/errors/internal"))

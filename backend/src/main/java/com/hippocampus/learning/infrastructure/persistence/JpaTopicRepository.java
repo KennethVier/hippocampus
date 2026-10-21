@@ -39,6 +39,14 @@ public class JpaTopicRepository implements TopicRepository {
                 .map(JpaTopicRepository::toDomain);
     }
 
+    @Override public Optional<Topic> lockOwnedActiveForMissionStart(UUID topicId,UUID ownerId) {
+        Optional<UUID> parent=topics.findOwnedParentId(topicId,ownerId);
+        if(parent.isEmpty() || subjects.lockActiveForMissionStart(parent.get(),ownerId).isEmpty()) return Optional.empty();
+        return topics.lockActiveForMissionStart(topicId,parent.get(),ownerId)
+            .map(t->new Topic(t.getId(),t.getSubjectId(),t.getName(),t.getDescription(),
+                TopicStatus.valueOf(t.getStatus()),t.getCreatedAt(),t.getUpdatedAt()));
+    }
+
     @Override public Optional<Topic> saveOwned(Topic topic,UUID ownerId) {
         return topics.findByIdAndSubjectUserId(topic.id(),ownerId).map(entity -> {
             entity.setName(topic.name()); entity.setDescription(topic.description());

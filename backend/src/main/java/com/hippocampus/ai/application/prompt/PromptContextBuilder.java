@@ -85,8 +85,6 @@ public final class PromptContextBuilder {
                     Map.of(
                             "schema", registry.resolveRepairSchema(
                                     request.outputContract(), input.originalTaskPromptVersion()),
-                            "repairRules", registry.resolveRepairRules(
-                                    request.outputContract(), input.originalTaskPromptVersion()),
                             "previousResponse", jsonString(input.previousResponse())),
                     List.of(),
                     0,

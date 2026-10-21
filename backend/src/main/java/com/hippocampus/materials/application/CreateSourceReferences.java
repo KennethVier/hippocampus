@@ -40,6 +40,16 @@ public class CreateSourceReferences {
         return List.copyOf(result);
     }
 
+    @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED,timeout=5)
+    public List<SourceReference> executeForInitialMission(Command command,SourceReferenceRepository.FrozenMissionBinding binding) {
+        Objects.requireNonNull(command);Objects.requireNonNull(binding);
+        rejectDuplicateTargets(command.targets());
+        if(command.targets().stream().anyMatch(t->!(t instanceof com.hippocampus.materials.domain.ChunkSourceTarget)
+                && !(t instanceof com.hippocampus.materials.domain.VisualSourceTarget)))
+            throw new IllegalArgumentException("Initial evidence accepts only chunk and visual targets");
+        return references.createInitialMissionBatch(currentUser.authenticatedUser().userId(),binding,command.targets());
+    }
+
     private static void rejectDuplicateTargets(List<SourceReferenceTarget> targets) {
         Set<SourceReferenceTarget> unique = new HashSet<>();
         if (targets.stream().anyMatch(target -> !unique.add(target))) {

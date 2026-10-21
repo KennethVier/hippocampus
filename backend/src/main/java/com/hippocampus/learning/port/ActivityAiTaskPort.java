@@ -13,6 +13,29 @@ public interface ActivityAiTaskPort {
 
     ValidatedContent execute(Request request);
 
+    default ValidatedContent execute(Request request, PreparationDeadline deadline) {
+        throw new IllegalStateException("Deadline-aware initial generation is not configured");
+    }
+
+    /** Monotonic elapsed limit; wall-clock deadline/fence is independently checked in persistence. */
+    record PreparationDeadline(long startedNanos, long budgetNanos) {
+        public PreparationDeadline {
+            if (budgetNanos <= 0 || budgetNanos > java.time.Duration.ofSeconds(150).toNanos())
+                throw new IllegalArgumentException("Invalid preparation budget");
+        }
+        public static PreparationDeadline start(java.time.Duration remaining) {
+            return new PreparationDeadline(System.nanoTime(),remaining.toNanos());
+        }
+        public long remainingNanos() {
+            long elapsed=System.nanoTime()-startedNanos;
+            return Math.max(0,budgetNanos-Math.max(0,elapsed));
+        }
+        public void check() {
+            if (Thread.currentThread().isInterrupted() || remainingNanos()==0)
+                throw new java.util.concurrent.CancellationException("Initial preparation deadline reached");
+        }
+    }
+
     record Request(
             String objective,
             String targetDisplayName,

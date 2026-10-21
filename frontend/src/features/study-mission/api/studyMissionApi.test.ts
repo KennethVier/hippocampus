@@ -9,6 +9,7 @@ vi.mock('../../../api/apiClient', async (importOriginal) => {
 
 import {
   continueStudyMission,
+  startStudyMission, retryInitialActivity, rememberMissionStart, pendingMissionStart,
   getStudyMission,
   pauseStudyMission,
   resumeStudyMission,
@@ -19,6 +20,7 @@ const missionId = '3f2504e0-4f89-41d3-9a0c-0305e82c3301'
 const activityId = '9a7b3302-b431-45e1-90e3-298c9d80918f'
 const sourceReferenceId = '11111111-1111-4111-8111-111111111111'
 const mission = {
+  continuation: null,
   id: missionId,
   status: 'ACTIVE',
   stage: 'EXPLAIN',
@@ -48,7 +50,7 @@ describe('study mission API contract', () => {
     transport.json.mockResolvedValue(mission)
     const signal = new AbortController().signal
     await expect(getStudyMission(missionId, signal)).resolves.toEqual(mission)
-    expect(transport.json).toHaveBeenCalledWith(`/api/study-missions/${missionId}`, { signal })
+    expect(transport.json).toHaveBeenCalledWith(`/api/study-missions/${missionId}?continuationContract=1`, { signal })
   })
 
   it('accepts a mission with no current learning stage', async () => {
@@ -193,10 +195,11 @@ describe('study mission API contract', () => {
   })
 
   it('continues without sending a client-selected next action', async () => {
-    transport.json.mockResolvedValue(undefined)
-    await expect(continueStudyMission(missionId, activityId)).resolves.toBeUndefined()
+    const created = { outcome: 'ACTIVITY_CREATED', activityId }
+    transport.json.mockResolvedValue(created)
+    await expect(continueStudyMission(missionId, activityId)).resolves.toEqual(created)
     expect(transport.json).toHaveBeenCalledWith(
-      `/api/study-missions/${missionId}/activities/${activityId}/continue`,
+      `/api/study-missions/${missionId}/activities/${activityId}/continue?continuationContract=1`,
       { method: 'POST' },
     )
   })
@@ -217,5 +220,61 @@ describe('study mission API contract', () => {
     const request = action === 'pause' ? pauseStudyMission : resumeStudyMission
     await expect(request(missionId)).resolves.toEqual(lifecycle)
     expect(transport.json).toHaveBeenCalledWith(`/api/study-missions/${missionId}/${action}`, { method: 'POST' })
+  })
+})
+
+
+describe('P7-16 continuation contract', () => {
+  it('rejects contradictory materialization metadata', async () => {
+    transport.json.mockResolvedValue({ ...mission, continuation: {
+      actionType: 'COMPLETE', rationaleCode: 'TIME_EXHAUSTED', canMaterialize: true,
+    } })
+    await expect(getStudyMission(missionId)).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+
+  it('rejects legacy 204 and a read without required opt-in metadata', async () => {
+    transport.json.mockResolvedValue(undefined)
+    await expect(continueStudyMission(missionId, activityId)).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    const legacy: Record<string, unknown> = { ...mission }
+    delete legacy.continuation
+    transport.json.mockResolvedValue(legacy)
+    await expect(getStudyMission(missionId)).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+
+  it('accepts no activity without an id and rejects dummy activity combinations', async () => {
+    const noActivity = { outcome: 'NO_ACTIVITY', actionType: 'COMMUNICATE_LIMITATION', rationaleCode: 'ASSESSMENT_UNAVAILABLE' }
+    transport.json.mockResolvedValue(noActivity)
+    await expect(continueStudyMission(missionId, activityId)).resolves.toEqual(noActivity)
+    transport.json.mockResolvedValue({ ...noActivity, activityId })
+    await expect(continueStudyMission(missionId, activityId)).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+})
+
+describe('bounded initial mission contract', () => {
+  it('requests the independent initial opt-in and rejects missing metadata without fallback', async () => {
+    transport.json.mockResolvedValue(mission)
+    await expect(getStudyMission(missionId, undefined, true)).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    expect(transport.json).toHaveBeenCalledTimes(1)
+    expect(transport.json.mock.calls[0]?.[0]).toBe('/api/study-missions/' + missionId + '?continuationContract=1&initialActivityContract=1')
+    transport.json.mockResolvedValue({ ...mission, initialActivity: null })
+    await expect(getStudyMission(missionId, undefined, true)).resolves.toMatchObject({ initialActivity: null })
+  })
+  it('never accepts client-supplied owner or action authority', async () => {
+    const input = { startRequestId: missionId, topicId: missionId, learningObjectiveText: 'Objective',
+      availableTimeMinutes: 20, groundingMode: 'STRICT_SOURCE' as const, sourceScopes: [{ materialId: activityId }], ownerId: activityId }
+    await expect(startStudyMission(input)).rejects.toBeDefined()
+    expect(transport.json).not.toHaveBeenCalled()
+  })
+  it('sends only the owned start identity on explicit retry', async () => {
+    transport.json.mockResolvedValue({ missionId, startRequestId: activityId, missionStatus: 'ACTIVE',
+      replayed: true, outcome: 'PREPARING', retryAfterSeconds: 5 })
+    await retryInitialActivity(missionId, activityId)
+    expect(transport.json).toHaveBeenCalledWith('/api/study-missions/' + missionId + '/initial-activity',
+      { method: 'POST', body: { startRequestId: activityId } })
+  })
+  it('scopes pending request identities to the authenticated owner', () => {
+    rememberMissionStart(missionId, activityId, sourceReferenceId)
+    expect(pendingMissionStart(missionId, activityId)).toBe(sourceReferenceId)
+    expect(pendingMissionStart(sourceReferenceId, activityId)).toBeNull()
   })
 })

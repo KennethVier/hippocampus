@@ -47,8 +47,6 @@ public final class AiResponseEvaluationAdapter implements ResponseEvaluationPort
     private final AiTaskExecutionPolicy executionPolicy;
     private final ResponseAttributionValidator.Limits limits;
     private final ResponseAttributionValidator attributionValidator;
-    private final VerifiedResponseEvaluationAggregator aggregator =
-            new VerifiedResponseEvaluationAggregator();
 
     public AiResponseEvaluationAdapter(
             AiExecutionOrchestrator orchestrator,
@@ -115,7 +113,10 @@ public final class AiResponseEvaluationAdapter implements ResponseEvaluationPort
             ResponseAttributionVerification verification = normalizedVerification.value();
             attributionValidator.validateVerification(
                     verificationInput, authorized, discovery, verification);
-            return aggregator.aggregate(verificationInput, discovery, verification);
+            // SEC-004 interim containment: spans and model dispositions are not an
+            // independently approved runtime verification basis. Keep existing pass
+            // validation/failure handling, but release no grades or feedback claims.
+            return VerifiedResponseEvaluationAggregator.uncertain();
         } catch (RuntimeException unresolved) {
             return VerifiedResponseEvaluationAggregator.uncertain();
         }

@@ -36,3 +36,4 @@ documentation patches.
 | [ADR-0009](ADR-0009-explicit-application-level-selection.md) | Explicit Application Level Selection | ACCEPTED | 2026-10-01 |
 | [ADR-0010](ADR-0010-presentation-only-understand-progression.md) | Presentation-Only UNDERSTAND Progression and Evidence | ACCEPTED | 2026-10-02 |
 | [ADR-0011](ADR-0011-layered-p7-09-response-evaluation-qualification.md) | Layered P7-09 Response-Evaluation Qualification | ACCEPTED | 2026-10-08 |
+| [ADR-0018](ADR-0018-response-evaluation-authority-and-historical-evidence-eligibility.md) | Runtime Response-Evaluation Authority and Historical Evidence Eligibility | ACCEPTED | 2026-10-19 |

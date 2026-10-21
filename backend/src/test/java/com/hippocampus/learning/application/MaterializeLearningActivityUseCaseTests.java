@@ -40,7 +40,7 @@ import com.hippocampus.learning.port.ActivityEvidencePort;
 import com.hippocampus.learning.port.GeneratedArtifactRepository;
 import com.hippocampus.learning.port.StudyMissionRepository;
 import com.hippocampus.learning.infrastructure.persistence.JsonActivityResponseContractRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.hippocampus.shared.application.error.ApplicationNotFoundException;
 
 class MaterializeLearningActivityUseCaseTests {
@@ -61,18 +61,76 @@ class MaterializeLearningActivityUseCaseTests {
     private Set<UUID> deniedSources;
     private MaterializeLearningActivityUseCase useCase;
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans={false,true})
+    void initialMaterializationWithoutClaimAwareExposureWiringFailsBeforeRetrieval(boolean expired) {
+        var mission=InitialStudyMissionStateAssemblerTests.mission(20);
+        var repository=org.mockito.Mockito.mock(StudyMissionRepository.class);
+        var evidence=org.mockito.Mockito.mock(ActivityEvidencePort.class);
+        var ai=org.mockito.Mockito.mock(ActivityAiTaskPort.class);
+        var persistence=org.mockito.Mockito.mock(PersistMaterializedActivity.class);
+        org.mockito.Mockito.when(repository.findOwnedById(mission.id(),mission.userId())).thenReturn(Optional.of(mission));
+        var action=new NextLearningAction(LearningActionType.UNDERSTAND,mission.objectives().getFirst().id(),"topic:"+mission.topicId(),
+            LearningDifficulty.FOUNDATIONAL,"INITIAL",true,LearningActionConstraints.unconstrained());
+        var frozen=InitialStudyMissionStateAssembler.frozenFingerprint(mission);
+        var receipt=com.hippocampus.learning.port.StudyMissionStartReceiptRepository.Receipt.ready(mission.userId(),UUID.randomUUID(),"a".repeat(64),mission.id(),
+            mission.objectives().getFirst().id(),frozen,"b".repeat(64),mission.updatedAt()).claim(UUID.randomUUID(),
+            new com.hippocampus.learning.port.StudyMissionStartReceiptRepository.Snapshot(mission.updatedAt(),null,0,0,mission.objectives().getFirst().id(),frozen),action,mission.updatedAt());
+        var useCase=new MaterializeLearningActivityUseCase(()->new AuthenticatedUser(mission.userId()),repository,evidence,ai,persistence,
+            Clock.fixed(mission.updatedAt(),ZoneOffset.UTC),org.mockito.Mockito.mock(AssessmentAvailabilityResolver.class));
+        var budget=java.time.Duration.ofSeconds(150).toNanos();
+        var deadline=new ActivityAiTaskPort.PreparationDeadline(System.nanoTime()-(expired?java.time.Duration.ofSeconds(151).toNanos():0),budget);
+        assertThatThrownBy(()->useCase.execute(new MaterializeLearningActivityUseCase.Command(mission.id(),action,null,null,receipt.context(),deadline)))
+            .isInstanceOf(expired?java.util.concurrent.CancellationException.class:IllegalStateException.class);
+        org.mockito.Mockito.verifyNoInteractions(evidence,ai,persistence);
+    }
+
     @BeforeEach
     void setUp() {
-        missions = new InMemoryMissionRepository(activeMission(List.of(), null));
+        // These mapping/continuation fixtures are noninitial; no attempt, grade or competence evidence is seeded.
+        LearningActivity predecessor = new LearningActivity(UUID.randomUUID(), OBJECTIVE_ID,
+                LearningActivityType.REFLECT, LearningActionType.REFLECT, null, null, "COMPLETED", null, 1,
+                null, false, NOW.minusSeconds(40), NOW.minusSeconds(20), NOW.minusSeconds(50), Set.of());
+        missions = new InMemoryMissionRepository(activeMission(List.of(predecessor), predecessor.id()));
         evidence = new RecordingEvidencePort();
         ai = new RecordingAiPort();
         artifacts = new InMemoryArtifactRepository();
         deniedSources = new java.util.HashSet<>();
-        var persistence = new PersistMaterializedActivity(
-                missions, artifacts, (userId, scopes, ids) -> ids.stream().noneMatch(deniedSources::contains));
+        var sourceAuthorization = new com.hippocampus.learning.port.ActivitySourceReferenceAuthorization() {
+            @Override public boolean allOwnedAndWithinMissionScope(UUID userId, List<MissionMaterial> scopes,
+                    Set<UUID> ids) { return ids.stream().noneMatch(deniedSources::contains); }
+            @Override public boolean lockAndValidateForCompletion(UUID userId, List<MissionMaterial> scopes,
+                    Set<UUID> ids, boolean required) {
+                return (!required || !ids.isEmpty()) && allOwnedAndWithinMissionScope(userId, scopes, ids);
+            }
+            @Override public boolean lockAndValidateForCompletion(UUID userId, List<MissionMaterial> scopes,
+                    Set<UUID> ids, boolean required,List<MissionMaterial> consulted,Set<UUID> consultedIds) {
+                return new java.util.HashSet<>(scopes).containsAll(consulted)
+                        && lockAndValidateForCompletion(userId,scopes,ids,required)
+                        && allOwnedAndWithinMissionScope(userId,scopes,consultedIds);
+            }
+        };
+        var contracts = org.mockito.Mockito.mock(com.hippocampus.learning.port.ActivityResponseContractRepository.class);
+        org.mockito.Mockito.when(contracts.classify(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(com.hippocampus.learning.port.ActivityResponseContractRepository.ActivityContractKind.PRESENTATION);
+        var attempts = org.mockito.Mockito.mock(com.hippocampus.progress.port.StudentAttemptRepository.class);
+        var sourcePresentation = (com.hippocampus.learning.port.StudyMissionSourcePresentationRepository)
+                (owner, scopes, ids) -> java.util.Optional.of(java.util.List.of());
+        var eligibility = new AttemptEvidenceEligibility(contracts,sourceAuthorization,artifacts);
+        var assembler = new StudyMissionLearningStateAssembler(eligibility);
+        var availability = new AssessmentAvailabilityResolver(
+                new JsonActivityResponseContractRepository(artifacts,new ObjectMapper()),
+                attempts,sourcePresentation,artifacts,eligibility);
+        var durations = new java.util.EnumMap<LearningActionType,Integer>(LearningActionType.class);
+        for (var type:LearningActionType.values()) durations.put(type,2);
+        var engine = new com.hippocampus.learning.domain.LearningEngine(new com.hippocampus.learning.domain.LearningPolicyConfiguration(
+                2,3,4,5,2,com.hippocampus.learning.domain.LearningPolicyConfiguration.V1_DUPLICATE_HISTORY_WINDOW,durations));
+        var admission = new StudyMissionContinuationDecision(availability,engine,assembler,sourcePresentation);
+        var persistence = new PersistMaterializedActivity(missions,artifacts,sourceAuthorization,null,null,contracts,admission);
         useCase = new MaterializeLearningActivityUseCase(
                 () -> new AuthenticatedUser(USER_ID), missions, evidence, ai,
-                persistence, Clock.fixed(NOW, ZoneOffset.UTC));
+                persistence, Clock.fixed(NOW, ZoneOffset.UTC), availability);
     }
 
     @Test
@@ -97,7 +155,7 @@ class MaterializeLearningActivityUseCaseTests {
     @Test
     void expectedCurrentActivityMismatchFailsBeforeMaterialization() {
         LearningActivity completed = execute(action(
-                LearningActionType.FEEDBACK, null, false)).activity();
+                LearningActionType.FEEDBACK, null, false, LearningActionConstraints.unconstrained())).activity();
         completeCurrentActivity();
 
         assertThatThrownBy(() -> useCase.execute(
@@ -215,14 +273,34 @@ class MaterializeLearningActivityUseCaseTests {
 
     @Test
     void feedbackAndReflectAreDeterministicWithoutEvidenceAiOrArtifact() {
-        var feedback = execute(action(LearningActionType.FEEDBACK, null, false));
+        var feedback = execute(action(LearningActionType.FEEDBACK, null, false,
+                LearningActionConstraints.unconstrained()));
         completeCurrentActivity();
-        var reflection = execute(action(LearningActionType.REFLECT, null, false));
+        var reflection = execute(action(LearningActionType.REFLECT, null, false,
+                LearningActionConstraints.unconstrained()));
 
         assertThat(feedback.activity().activityType()).isEqualTo(LearningActivityType.FEEDBACK);
         assertThat(reflection.activity().activityType()).isEqualTo(LearningActivityType.REFLECT);
         assertThat(feedback.activity().generatedArtifactId()).isNull();
         assertThat(reflection.activity().generatedArtifactId()).isNull();
+        assertThat(feedback.activity().sourceRequired()).isFalse();
+        assertThat(reflection.activity().sourceRequired()).isFalse();
+        assertThat(feedback.activity().sourceReferenceIds()).isEmpty();
+        assertThat(reflection.activity().sourceReferenceIds()).isEmpty();
+        assertThat(evidence.calls).isZero();
+        assertThat(ai.calls).isZero();
+        assertThat(artifacts.saved).isEmpty();
+    }
+
+    @Test
+    void sourceRequiredDeterministicActivityCannotBypassFinalAuthorization() {
+        for (LearningActionType type : List.of(LearningActionType.FEEDBACK, LearningActionType.REFLECT)) {
+            assertThatThrownBy(() -> execute(action(type, null, false)))
+                    .isInstanceOf(ActivityMaterializationException.class)
+                    .extracting(error -> ((ActivityMaterializationException) error).reason())
+                    .isEqualTo(ActivityMaterializationException.Reason.INVALID_SOURCE_REFERENCES);
+        }
+        assertThat(missions.saveCalls).isZero();
         assertThat(evidence.calls).isZero();
         assertThat(ai.calls).isZero();
         assertThat(artifacts.saved).isEmpty();
@@ -291,6 +369,34 @@ class MaterializeLearningActivityUseCaseTests {
     }
 
     @Test
+    void retryRejectsUnboundAndConflictingArtifactOriginsWithoutWrites() {
+        LearningActivity prior = completedActivity(LearningActivityType.RETRIEVE,
+                LearningActionType.RETRIEVE, LearningDifficulty.INTERMEDIATE, UUID.randomUUID());
+        artifacts.putExisting(prior.generatedArtifactId());
+        missions.replace(activeMission(List.of(prior), prior.id()));
+        artifacts.origins.remove(prior.generatedArtifactId());
+
+        assertThatThrownBy(() -> execute(action(LearningActionType.RETRY, LearningDifficulty.APPLIED, false)))
+                .isInstanceOf(ActivityMaterializationException.class)
+                .extracting(error -> ((ActivityMaterializationException) error).reason())
+                .isEqualTo(ActivityMaterializationException.Reason.INVALID_ARTIFACT);
+        artifacts.origins.put(prior.generatedArtifactId(), new GeneratedArtifactRepository.ObjectiveOrigin(
+                prior.generatedArtifactId(), UUID.randomUUID(), MISSION_ID, USER_ID));
+        assertThatThrownBy(() -> execute(action(LearningActionType.RETRY, LearningDifficulty.APPLIED, false)))
+                .isInstanceOf(ActivityMaterializationException.class)
+                .extracting(error -> ((ActivityMaterializationException) error).reason())
+                .isEqualTo(ActivityMaterializationException.Reason.INVALID_ARTIFACT);
+        artifacts.origins.put(prior.generatedArtifactId(), new GeneratedArtifactRepository.ObjectiveOrigin(
+                prior.generatedArtifactId(), OBJECTIVE_ID, UUID.randomUUID(), USER_ID));
+        assertThatThrownBy(() -> execute(action(LearningActionType.RETRY, LearningDifficulty.APPLIED, false)))
+                .isInstanceOf(ActivityMaterializationException.class)
+                .extracting(error -> ((ActivityMaterializationException) error).reason())
+                .isEqualTo(ActivityMaterializationException.Reason.INVALID_ARTIFACT);
+        assertThat(missions.saveCalls).isZero();
+        assertThat(ai.calls).isZero();
+    }
+
+    @Test
     void reduceDifficultyUsesActionDifficultyAndPreservesArtifactAndSources() {
         LearningActivity prior = completedActivity(
                 LearningActivityType.APPLY, LearningActionType.APPLY,
@@ -352,22 +458,75 @@ class MaterializeLearningActivityUseCaseTests {
 
     @Test
     void foreignAndWrongObjectiveReuseIdsFailClosed() {
-        LearningActivity wrongObjective = new LearningActivity(
-                UUID.randomUUID(), null, LearningActivityType.UNDERSTAND,
+        UUID otherObjectiveId = UUID.randomUUID();
+        var current = completedActivity(LearningActivityType.UNDERSTAND, LearningActionType.UNDERSTAND,
+                LearningDifficulty.FOUNDATIONAL, UUID.randomUUID());
+        var wrongObjective = new LearningActivity(
+                UUID.randomUUID(), otherObjectiveId, LearningActivityType.UNDERSTAND,
                 LearningActionType.UNDERSTAND, null, null, "COMPLETED",
-                LearningDifficulty.FOUNDATIONAL, 1, UUID.randomUUID(), true,
+                LearningDifficulty.FOUNDATIONAL, 2, UUID.randomUUID(), true,
                 NOW.minusSeconds(40), NOW.minusSeconds(20), NOW.minusSeconds(50), Set.of(SOURCE_ID));
         artifacts.putExisting(wrongObjective.generatedArtifactId());
-        missions.replace(activeMission(List.of(wrongObjective), wrongObjective.id()));
+        var objectives = new ArrayList<>(activeMission(List.of(), null).objectives());
+        objectives.add(new LearningObjective(otherObjectiveId, "Other objective", "other", "Other",
+                2, LearningObjectiveStatus.ACTIVE, NOW.minusSeconds(300)));
+        missions.replace(activeMission(List.of(current, wrongObjective), current.id(), objectives));
+        var before = missions.current;
 
-        assertThatThrownBy(() -> execute(reuseAction(UUID.randomUUID())))
+        // Both objectives exist in the mission; the request targets OBJECTIVE_ID, not the selected activity's objective.
+        for (UUID selectedId : List.of(UUID.randomUUID(), wrongObjective.id())) {
+            var existingArtifacts = List.copyOf(artifacts.saved);
+            var existingLinks = Map.copyOf(artifacts.links);
+            assertThatThrownBy(() -> execute(reuseAction(selectedId)))
+                    .isInstanceOf(ActivityMaterializationException.class)
+                    .extracting(failure -> ((ActivityMaterializationException) failure).reason())
+                    .isEqualTo(ActivityMaterializationException.Reason.COMPATIBLE_ACTIVITY_NOT_FOUND);
+            assertThat(missions.current).isSameAs(before);
+            assertThat(artifacts.saved).containsExactlyElementsOf(existingArtifacts);
+            assertThat(artifacts.links).isEqualTo(existingLinks);
+            assertThat(artifacts.saveCalls).isZero();
+            assertThat(artifacts.addSourcesCalls).isZero();
+            assertThat(missions.saveCalls).isZero();
+            assertThat(evidence.calls).isZero();
+            assertThat(ai.calls).isZero();
+        }
+    }
+
+    @Test
+    void missingOrNonMissionObjectiveBindingCannotAcquireAvailabilityOrGenerateContent() {
+        // Null activity bindings can enter this boundary; non-member nonnull bindings cannot pass StudyMission.
+        var invalid = new LearningActivity(UUID.randomUUID(), null, LearningActivityType.UNDERSTAND,
+                LearningActionType.UNDERSTAND, null, null, "COMPLETED", LearningDifficulty.FOUNDATIONAL,
+                1, UUID.randomUUID(), true, NOW.minusSeconds(40), NOW.minusSeconds(20),
+                NOW.minusSeconds(50), Set.of(SOURCE_ID));
+        var valid = new LearningActivity(UUID.randomUUID(), OBJECTIVE_ID, LearningActivityType.UNDERSTAND,
+                LearningActionType.UNDERSTAND, null, null, "COMPLETED", LearningDifficulty.FOUNDATIONAL,
+                2, UUID.randomUUID(), true, NOW.minusSeconds(40), NOW.minusSeconds(20),
+                NOW.minusSeconds(50), Set.of(SOURCE_ID));
+        for (var current : List.of(invalid, valid)) {
+            missions.replace(activeMission(List.of(invalid, valid), current.id()));
+            var before = missions.current;
+            assertThatThrownBy(() -> execute(action(LearningActionType.UNDERSTAND, LearningDifficulty.FOUNDATIONAL, true)))
+                    .isInstanceOf(ActivityMaterializationException.class)
+                    .extracting(failure -> ((ActivityMaterializationException) failure).reason())
+                    .isEqualTo(ActivityMaterializationException.Reason.OBJECTIVE_NOT_IN_MISSION);
+            assertThat(missions.current).isSameAs(before);
+        }
+        missions.replace(activeMission(List.of(valid), valid.id()));
+        var before = missions.current;
+        var allowedShape = reuseAction(valid.id());
+        var unknownObjectiveRequest = new NextLearningAction(allowedShape.actionType(), UUID.randomUUID(),
+                allowedShape.conceptKey(), allowedShape.difficulty(), allowedShape.rationaleCode(),
+                allowedShape.aiTaskRequired(), allowedShape.constraints(), allowedShape.reuseLearningActivityId());
+        assertThatThrownBy(() -> execute(unknownObjectiveRequest))
                 .isInstanceOf(ActivityMaterializationException.class)
                 .extracting(failure -> ((ActivityMaterializationException) failure).reason())
-                .isEqualTo(ActivityMaterializationException.Reason.COMPATIBLE_ACTIVITY_NOT_FOUND);
-        assertThatThrownBy(() -> execute(reuseAction(wrongObjective.id())))
-                .isInstanceOf(ActivityMaterializationException.class)
-                .extracting(failure -> ((ActivityMaterializationException) failure).reason())
-                .isEqualTo(ActivityMaterializationException.Reason.COMPATIBLE_ACTIVITY_NOT_FOUND);
+                .isEqualTo(ActivityMaterializationException.Reason.OBJECTIVE_NOT_IN_MISSION);
+        assertThat(missions.current).isSameAs(before);
+        assertThat(evidence.calls).isZero();
+        assertThat(ai.calls).isZero();
+        assertThat(artifacts.saved).isEmpty();
+        assertThat(missions.saveCalls).isZero();
     }
 
     @Test
@@ -472,6 +631,7 @@ class MaterializeLearningActivityUseCaseTests {
 
     @Test
     void missingCompatiblePriorActivityFailsExplicitly() {
+        missions.replace(activeMission(List.of(), null));
         assertThatThrownBy(() -> execute(action(LearningActionType.RETRY, null, false)))
                 .isInstanceOf(ActivityMaterializationException.class)
                 .extracting(failure -> ((ActivityMaterializationException) failure).reason())
@@ -486,12 +646,22 @@ class MaterializeLearningActivityUseCaseTests {
                 LearningDifficulty.FOUNDATIONAL, artifactId);
         artifacts.putExisting(artifactId, UUID.randomUUID());
         missions.replace(activeMission(List.of(prior), prior.id()));
+        var before = missions.current;
+        var existingArtifacts = List.copyOf(artifacts.saved);
+        var existingLinks = Map.copyOf(artifacts.links);
 
         assertThatThrownBy(() -> execute(reuseAction(prior.id())))
                 .isInstanceOf(ActivityMaterializationException.class)
                 .extracting(failure -> ((ActivityMaterializationException) failure).reason())
                 .isEqualTo(ActivityMaterializationException.Reason.INVALID_ARTIFACT);
         assertThat(missions.saveCalls).isZero();
+        assertThat(missions.current).isSameAs(before);
+        assertThat(artifacts.saved).containsExactlyElementsOf(existingArtifacts);
+        assertThat(artifacts.links).isEqualTo(existingLinks);
+        assertThat(artifacts.saveCalls).isZero();
+        assertThat(artifacts.addSourcesCalls).isZero();
+        assertThat(evidence.calls).isZero();
+        assertThat(ai.calls).isZero();
     }
 
     private MaterializeLearningActivityUseCase.Result execute(NextLearningAction action) {
@@ -529,14 +699,19 @@ class MaterializeLearningActivityUseCaseTests {
     }
 
     private static StudyMission activeMission(List<LearningActivity> activities, UUID currentActivityId) {
+        return activeMission(activities, currentActivityId, List.of(new LearningObjective(
+                OBJECTIVE_ID, "Explain cardiac output", "cardiac-output", "Cardiac output",
+                1, LearningObjectiveStatus.ACTIVE, NOW.minusSeconds(300))));
+    }
+
+    private static StudyMission activeMission(List<LearningActivity> activities, UUID currentActivityId,
+            List<LearningObjective> objectives) {
         return new StudyMission(
                 MISSION_ID, USER_ID, TOPIC_ID, null, StudyMissionStatus.ACTIVE,
                 LearningStage.UNDERSTANDING, StudyMissionGroundingMode.STRICT_SOURCE, 30,
                 NOW.minusSeconds(300), null, null, currentActivityId,
                 List.of(new MissionMaterial(UUID.randomUUID(), MATERIAL_ID, VERSION_ID, null)),
-                List.of(new LearningObjective(
-                        OBJECTIVE_ID, "Explain cardiac output", "cardiac-output", "Cardiac output",
-                        1, LearningObjectiveStatus.ACTIVE, NOW.minusSeconds(300))),
+                objectives,
                 activities, NOW.minusSeconds(300), NOW.minusSeconds(60));
     }
 
@@ -651,6 +826,9 @@ class MaterializeLearningActivityUseCaseTests {
     private static final class InMemoryArtifactRepository implements GeneratedArtifactRepository {
         private final List<GeneratedArtifact> saved = new ArrayList<>();
         private final Map<UUID, Set<UUID>> links = new LinkedHashMap<>();
+        private final Map<UUID, ObjectiveOrigin> origins = new LinkedHashMap<>();
+        private int saveCalls;
+        private int addSourcesCalls;
 
         void putExisting(UUID artifactId) {
             putExisting(artifactId, USER_ID);
@@ -672,16 +850,19 @@ class MaterializeLearningActivityUseCaseTests {
                     groundingMode, "SOURCE_GROUNDED_GENERATED", "EXPLANATION_V1", "1",
                     "GEMINI", "test-model", null, validationStatus, reusable, NOW.minusSeconds(100)));
             links.put(artifactId, Set.copyOf(sourceIds));
+            origins.put(artifactId, new ObjectiveOrigin(artifactId, OBJECTIVE_ID, MISSION_ID, ownerId));
         }
 
         @Override
         public GeneratedArtifact save(GeneratedArtifact artifact) {
+            saveCalls++;
             saved.add(artifact);
             return artifact;
         }
 
         @Override
         public void addSources(UUID artifactId, Set<UUID> sourceReferenceIds) {
+            addSourcesCalls++;
             links.put(artifactId, Set.copyOf(sourceReferenceIds));
         }
 
@@ -693,6 +874,15 @@ class MaterializeLearningActivityUseCaseTests {
         @Override
         public Set<UUID> findSourceReferenceIds(UUID artifactId) {
             return links.getOrDefault(artifactId, Set.of());
+        }
+
+        @Override public void bindObjectiveOrigin(ObjectiveOrigin origin) {
+            if (origins.putIfAbsent(origin.artifactId(), origin) != null)
+                throw new IllegalStateException("origin already bound");
+        }
+
+        @Override public Optional<ObjectiveOrigin> findObjectiveOrigin(UUID artifactId, UUID ownerId) {
+            return Optional.ofNullable(origins.get(artifactId)).filter(origin -> ownerId.equals(origin.userId()));
         }
     }
 }
