@@ -10,6 +10,11 @@ import java.time.ZoneOffset;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -90,6 +95,71 @@ class ActivityResponseEvidencePersistenceIntegrationTests extends PostgresIntegr
             assertMappedAttempt(context, fixture, LearningActivityType.VISUAL,
                     LearningActionType.UNDERSTANDING_CHECK,
                     "UNDERSTANDING_ATTEMPT", "UNDERSTANDING", 8);
+        }
+    }
+
+    @Test
+    void blankConceptKeysUseObjectiveTextForBothEventAndProjectionIdentity() throws Exception {
+        try (var context = startApplicationWithFlyway()) {
+            Fixture fixture = insertOwnerAndTopic();
+            int second = 1;
+            for (String rawConceptKey : List.of("", " \t ")) {
+                MissionFixture mission = insertMission(
+                        fixture, LearningActivityType.RETRIEVE, LearningActionType.RETRIEVE, "blank-concept");
+                try (var connection = openPostgresConnection();
+                        var statement = connection.prepareStatement("""
+                                UPDATE learning_objectives SET concept_key = ?
+                                WHERE study_mission_id = ?
+                                """)) {
+                    statement.setString(1, rawConceptKey);
+                    statement.setObject(2, mission.missionId());
+                    assertThat(statement.executeUpdate()).isOne();
+                }
+                persist(context, mission, fixture, "CORRECT", second++);
+                assertMissionTransition(mission);
+            }
+
+            assertThat(count("student_attempts")).isEqualTo(2);
+            assertThat(count("evidence_events")).isEqualTo(2);
+            assertThat(count("learning_evidence")).isOne();
+            assertProjection("RETRIEVAL", "STRONG", 2, "Explain cardiac output");
+            try (var connection = openPostgresConnection();
+                    var statement = connection.createStatement();
+                    var result = statement.executeQuery("SELECT DISTINCT concept_key FROM evidence_events")) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString(1)).isEqualTo("Explain cardiac output");
+                assertThat(result.next()).isFalse();
+            }
+        }
+    }
+
+    @Test
+    void simultaneousMissionsUpdateOneProjectionWithoutLosingAnEvent() throws Exception {
+        try (var context = startApplicationWithFlyway(ConcurrentProjectionConfiguration.class)) {
+            Fixture fixture = insertOwnerAndTopic();
+            MissionFixture first = insertMission(
+                    fixture, LearningActivityType.RETRIEVE, LearningActionType.RETRIEVE, "parallel-first");
+            MissionFixture second = insertMission(
+                    fixture, LearningActivityType.RETRIEVE, LearningActionType.RETRIEVE, "parallel-second");
+            PersistActivityResponse persistence = context.getBean(PersistActivityResponse.class);
+            assertThat(AopUtils.isAopProxy(persistence)).isTrue();
+            StudyMissionRepository missions = context.getBean(StudyMissionRepository.class);
+
+            try (var workers = Executors.newFixedThreadPool(2)) {
+                var firstResult = workers.submit(() -> persist(
+                        persistence, missions, fixture, first, "CORRECT", 1));
+                var secondResult = workers.submit(() -> persist(
+                        persistence, missions, fixture, second, "CORRECT", 2));
+                firstResult.get(30, TimeUnit.SECONDS);
+                secondResult.get(30, TimeUnit.SECONDS);
+            }
+
+            assertThat(count("student_attempts")).isEqualTo(2);
+            assertThat(count("evidence_events")).isEqualTo(2);
+            assertThat(count("learning_evidence")).isOne();
+            assertProjection("RETRIEVAL", "STRONG", 2);
+            assertMissionTransition(first);
+            assertMissionTransition(second);
         }
     }
 
@@ -339,6 +409,11 @@ class ActivityResponseEvidencePersistenceIntegrationTests extends PostgresIntegr
     }
 
     private static void assertProjection(String dimension, String state, int count) throws SQLException {
+        assertProjection(dimension, state, count, "cardiac-output");
+    }
+
+    private static void assertProjection(
+            String dimension, String state, int count, String expectedConceptKey) throws SQLException {
         try (var connection = openPostgresConnection(); var statement = connection.prepareStatement("""
                 SELECT state, supporting_event_count, concept_key
                 FROM learning_evidence WHERE evidence_dimension = ?
@@ -348,7 +423,7 @@ class ActivityResponseEvidencePersistenceIntegrationTests extends PostgresIntegr
                 assertThat(result.next()).isTrue();
                 assertThat(result.getString("state")).isEqualTo(state);
                 assertThat(result.getInt("supporting_event_count")).isEqualTo(count);
-                assertThat(result.getString("concept_key")).isEqualTo("cardiac-output");
+                assertThat(result.getString("concept_key")).isEqualTo(expectedConceptKey);
                 assertThat(result.next()).isFalse();
             }
         }
@@ -395,6 +470,40 @@ class ActivityResponseEvidencePersistenceIntegrationTests extends PostgresIntegr
                 var result = statement.executeQuery("SELECT COUNT(*) FROM " + table)) {
             assertThat(result.next()).isTrue();
             return result.getInt(1);
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class ConcurrentProjectionConfiguration {
+        @Bean
+        PersistActivityResponse persistActivityResponse(
+                StudyMissionRepository missions,
+                StudentAttemptRepository attempts,
+                EvidenceEventRepository evidenceEvents,
+                LearningEvidenceRepository delegate,
+                EvidenceProjector projector) {
+            var bothAtProjection = new CyclicBarrier(2);
+            LearningEvidenceRepository concurrent = new LearningEvidenceRepository() {
+                @Override
+                public LearningEvidence lockOrCreate(
+                        EvidenceProjectionKey projectionKey, UUID initialId, Instant persistedAt) {
+                    try {
+                        bothAtProjection.await(15, TimeUnit.SECONDS);
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException("concurrent projection test interrupted", exception);
+                    } catch (BrokenBarrierException | TimeoutException exception) {
+                        throw new IllegalStateException("both missions did not reach projection lock", exception);
+                    }
+                    return delegate.lockOrCreate(projectionKey, initialId, persistedAt);
+                }
+
+                @Override
+                public LearningEvidence save(LearningEvidence evidence) {
+                    return delegate.save(evidence);
+                }
+            };
+            return new PersistActivityResponse(missions, attempts, evidenceEvents, concurrent, projector);
         }
     }
 

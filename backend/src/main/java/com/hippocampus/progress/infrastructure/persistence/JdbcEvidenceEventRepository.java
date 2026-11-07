@@ -30,7 +30,7 @@ public class JdbcEvidenceEventRepository implements EvidenceEventRepository {
                 occurred_at, created_at
             )
             SELECT :id, mission.user_id, mission.topic_id, mission.subtopic_id,
-                   COALESCE(NULLIF(objective.concept_key, ''), objective.objective_text),
+                   CASE WHEN objective.concept_key IS NULL OR objective.concept_key ~ '^[[:space:]]*$' THEN objective.objective_text ELSE objective.concept_key END,
                    attempt.id, activity.id, :eventType, :outcome, :difficulty, :confidence,
                    attempt.submitted_at, :createdAt
             FROM student_attempts attempt
@@ -47,7 +47,7 @@ public class JdbcEvidenceEventRepository implements EvidenceEventRepository {
               AND mission.user_id = :userId
               AND mission.topic_id = :topicId
               AND mission.subtopic_id IS NOT DISTINCT FROM :subtopicId
-              AND COALESCE(NULLIF(objective.concept_key, ''), objective.objective_text) = :conceptKey
+              AND CASE WHEN objective.concept_key IS NULL OR objective.concept_key ~ '^[[:space:]]*$' THEN objective.objective_text ELSE objective.concept_key END = :conceptKey
             RETURNING id, user_id, topic_id, subtopic_id, concept_key, student_attempt_id,
                       learning_activity_id, event_type, outcome, difficulty, confidence,
                       occurred_at, created_at
