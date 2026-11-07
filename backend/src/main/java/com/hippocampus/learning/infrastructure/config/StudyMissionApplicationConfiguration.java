@@ -37,6 +37,9 @@ import com.hippocampus.learning.port.StudyMissionSourcePresentationRepository;
 import com.hippocampus.learning.port.SubtopicRepository;
 import com.hippocampus.learning.port.TopicRepository;
 import com.hippocampus.progress.port.StudentAttemptRepository;
+import com.hippocampus.progress.domain.EvidenceProjector;
+import com.hippocampus.progress.port.EvidenceEventRepository;
+import com.hippocampus.progress.port.LearningEvidenceRepository;
 
 @AutoConfiguration(afterName =
         "com.hippocampus.materials.infrastructure.config.SourceReferenceConfiguration")
@@ -83,6 +86,12 @@ public class StudyMissionApplicationConfiguration {
     @ConditionalOnMissingBean
     StudyMissionLearningStateAssembler studyMissionLearningStateAssembler() {
         return new StudyMissionLearningStateAssembler();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    EvidenceProjector evidenceProjector() {
+        return new EvidenceProjector();
     }
 
     @Bean
@@ -135,11 +144,16 @@ public class StudyMissionApplicationConfiguration {
     @Bean
     @Lazy
     @ConditionalOnMissingBean
-    @ConditionalOnBean(StudentAttemptRepository.class)
+    @ConditionalOnBean({StudentAttemptRepository.class, EvidenceEventRepository.class,
+            LearningEvidenceRepository.class})
     PersistActivityResponse persistActivityResponse(
             StudyMissionRepository missions,
-            StudentAttemptRepository attempts) {
-        return new PersistActivityResponse(missions, attempts);
+            StudentAttemptRepository attempts,
+            EvidenceEventRepository evidenceEvents,
+            LearningEvidenceRepository learningEvidence,
+            EvidenceProjector evidenceProjector) {
+        return new PersistActivityResponse(
+                missions, attempts, evidenceEvents, learningEvidence, evidenceProjector);
     }
 
     @Bean

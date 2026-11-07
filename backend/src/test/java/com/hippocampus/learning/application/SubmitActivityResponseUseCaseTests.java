@@ -34,6 +34,13 @@ import com.hippocampus.learning.port.ActivityResponseContractRepository;
 import com.hippocampus.learning.port.ResponseEvaluationPort;
 import com.hippocampus.learning.port.StudyMissionRepository;
 import com.hippocampus.progress.domain.StudentAttempt;
+import com.hippocampus.progress.domain.EvidenceEvent;
+import com.hippocampus.progress.domain.EvidenceProjectionKey;
+import com.hippocampus.progress.domain.EvidenceProjector;
+import com.hippocampus.progress.domain.EvidenceState;
+import com.hippocampus.progress.domain.LearningEvidence;
+import com.hippocampus.progress.port.EvidenceEventRepository;
+import com.hippocampus.progress.port.LearningEvidenceRepository;
 import com.hippocampus.progress.port.StudentAttemptRepository;
 import com.hippocampus.shared.application.error.ApplicationNotFoundException;
 
@@ -48,6 +55,8 @@ class SubmitActivityResponseUseCaseTests {
 
     private InMemoryMissions missions;
     private InMemoryAttempts attempts;
+    private InMemoryEvidenceEvents evidenceEvents;
+    private InMemoryLearningEvidence learningEvidence;
     private StubContracts contracts;
     private StubEvaluation evaluation;
     private SubmitActivityResponseUseCase useCase;
@@ -56,9 +65,12 @@ class SubmitActivityResponseUseCaseTests {
     void setUp() {
         missions = new InMemoryMissions(mission(StudyMissionStatus.ACTIVE, "ACTIVE", ACTIVITY_ID));
         attempts = new InMemoryAttempts();
+        evidenceEvents = new InMemoryEvidenceEvents();
+        learningEvidence = new InMemoryLearningEvidence();
         contracts = new StubContracts();
         evaluation = new StubEvaluation();
-        var persistence = new PersistActivityResponse(missions, attempts);
+        var persistence = new PersistActivityResponse(
+                missions, attempts, evidenceEvents, learningEvidence, new EvidenceProjector());
         useCase = new SubmitActivityResponseUseCase(
                 () -> new AuthenticatedUser(USER_ID), missions, attempts, contracts, evaluation,
                 engine(), new StudyMissionLearningStateAssembler(), persistence,
@@ -134,6 +146,8 @@ class SubmitActivityResponseUseCaseTests {
 
         assertReason(() -> execute(" ", null), ActivityResponseException.Reason.INVALID_RESPONSE);
         assertThat(attempts.appended).isEmpty();
+        assertThat(evidenceEvents.appended).isEmpty();
+        assertThat(learningEvidence.mutations).isZero();
         assertThat(missions.saveCalls).isZero();
     }
 
@@ -146,6 +160,8 @@ class SubmitActivityResponseUseCaseTests {
                 () -> execute("answer", null),
                 ActivityResponseException.Reason.EXTERNAL_EVALUATION_FAILED);
         assertThat(attempts.appended).isEmpty();
+        assertThat(evidenceEvents.appended).isEmpty();
+        assertThat(learningEvidence.mutations).isZero();
         assertThat(missions.saveCalls).isZero();
 
         evaluation.failure = null;
@@ -157,6 +173,8 @@ class SubmitActivityResponseUseCaseTests {
                 () -> execute("answer", null),
                 ActivityResponseException.Reason.INVALID_EVALUATION);
         assertThat(attempts.appended).isEmpty();
+        assertThat(evidenceEvents.appended).isEmpty();
+        assertThat(learningEvidence.mutations).isZero();
         assertThat(missions.saveCalls).isZero();
     }
 
@@ -356,6 +374,52 @@ class SubmitActivityResponseUseCaseTests {
                     .filter(attempt -> attempt.learningActivityId().equals(activityId))
                     .filter(attempt -> attempt.userId().equals(ownerId))
                     .toList();
+        }
+    }
+
+    private static final class InMemoryEvidenceEvents implements EvidenceEventRepository {
+        private final List<EvidenceEvent> appended = new ArrayList<>();
+
+        @Override
+        public EvidenceEvent append(EvidenceEvent event) {
+            appended.add(event);
+            return event;
+        }
+
+        @Override
+        public List<EvidenceEvent> findByProjectionKey(EvidenceProjectionKey projectionKey) {
+            return appended.stream()
+                    .filter(event -> event.userId().equals(projectionKey.userId()))
+                    .filter(event -> event.topicId().equals(projectionKey.topicId()))
+                    .filter(event -> java.util.Objects.equals(
+                            event.subtopicId(), projectionKey.subtopicId()))
+                    .filter(event -> java.util.Objects.equals(
+                            event.conceptKey(), projectionKey.conceptKey()))
+                    .toList();
+        }
+    }
+
+    private static final class InMemoryLearningEvidence implements LearningEvidenceRepository {
+        private LearningEvidence current;
+        private int mutations;
+
+        @Override
+        public LearningEvidence lockOrCreate(
+                EvidenceProjectionKey projectionKey, UUID initialId, Instant persistedAt) {
+            mutations++;
+            if (current == null) {
+                current = new LearningEvidence(
+                        initialId, projectionKey, EvidenceState.INSUFFICIENT_EVIDENCE,
+                        0, null, persistedAt);
+            }
+            return current;
+        }
+
+        @Override
+        public LearningEvidence save(LearningEvidence evidence) {
+            mutations++;
+            current = evidence;
+            return evidence;
         }
     }
 
